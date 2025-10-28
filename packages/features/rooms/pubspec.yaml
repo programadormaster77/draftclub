@@ -1,0 +1,8 @@
+name: rooms
+description: Módulo de salas y partidos de DraftClub.
+publish_to: "none"
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+dependencies:
+  flutter:
+    sdk: flutter

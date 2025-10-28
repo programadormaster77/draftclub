@@ -1,0 +1,8 @@
+name: referees
+description: Módulo de árbitros y validaciones oficiales de DraftClub.
+publish_to: "none"
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+dependencies:
+  flutter:
+    sdk: flutter

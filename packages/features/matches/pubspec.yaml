@@ -1,0 +1,8 @@
+name: matches
+description: Módulo de gestión de partidos y resultados oficiales.
+publish_to: "none"
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+dependencies:
+  flutter:
+    sdk: flutter

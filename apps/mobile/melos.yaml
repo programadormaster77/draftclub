@@ -1,0 +1,11 @@
+name: draftclub
+packages:
+  - apps/*
+  - packages/**
+command:
+  bootstrap:
+    runPubGetInParallel: true
+scripts:
+  analyze: flutter analyze .
+  test: flutter test
+  format: dart format .

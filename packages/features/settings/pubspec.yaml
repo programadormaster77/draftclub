@@ -1,0 +1,8 @@
+name: settings
+description: Módulo de configuración, idioma y privacidad.
+publish_to: "none"
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+dependencies:
+  flutter:
+    sdk: flutter

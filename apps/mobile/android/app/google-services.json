@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "254258185653",
+    "project_id": "draftclub-a00ea",
+    "storage_bucket": "draftclub-a00ea.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:254258185653:android:5ae96d8587e4baa31105fc",
+        "android_client_info": {
+          "package_name": "com.example.draftclub_mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "254258185653-nvj028012kfeh1f9omhhsmmv5qml4p7h.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCiihgaG-5kGn5IrA_xe483B3OfwHG0Ews"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "254258185653-nvj028012kfeh1f9omhhsmmv5qml4p7h.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "254258185653-cn5tmg0a1mlor7qtu1r1krfvlo7c03o9.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.draftclubMobile"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
