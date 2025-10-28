@@ -11,13 +11,17 @@ import '../core/location/place_service.dart';
 /// ===========================================================
 class CityPickerFormField extends FormField<City?> {
   CityPickerFormField({
-    super.key,
-    super.initialValue,
-    super.onSaved,
-    super.validator,
+    Key? key,
+    City? initialValue,
+    FormFieldSetter<City?>? onSaved,
+    FormFieldValidator<City?>? validator,
     required void Function(City?) onChanged,
     String label = 'Ciudad y país',
   }) : super(
+          key: key,
+          initialValue: initialValue,
+          onSaved: onSaved,
+          validator: validator,
           builder: (state) {
             final controller =
                 TextEditingController(text: state.value?.display ?? '');
@@ -140,15 +144,15 @@ class _CitySearchSheetState extends State<_CitySearchSheet> {
             controller: _queryCtrl,
             onChanged: _fetch,
             style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               hintText: 'Escribe tu ciudad...',
-              hintStyle: TextStyle(color: Colors.white54),
-              prefixIcon: Icon(Icons.search, color: Colors.white70),
+              hintStyle: const TextStyle(color: Colors.white54),
+              prefixIcon: const Icon(Icons.search, color: Colors.white70),
               filled: true,
-              fillColor: Color(0xFF171717),
-              enabledBorder: OutlineInputBorder(
+              fillColor: const Color(0xFF171717),
+              enabledBorder: const OutlineInputBorder(
                   borderSide: BorderSide(color: Colors.white24)),
-              focusedBorder: OutlineInputBorder(
+              focusedBorder: const OutlineInputBorder(
                   borderSide: BorderSide(color: Colors.blueAccent)),
             ),
           ),
