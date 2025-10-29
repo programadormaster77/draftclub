@@ -13,17 +13,16 @@ dependencies:
   flutter_typeahead: ^5.2.0
   http: ^1.5.0
 
-
   # Estado y navegación
   flutter_riverpod: ^3.0.0-dev.3
-  go_router: ^14.0.1
+  go_router: ^14.2.0
   provider: ^6.1.2
 
   # Firebase Core
   firebase_core: ^3.5.0
   firebase_auth: ^5.3.0
   cloud_firestore: ^5.4.4
-  firebase_storage: ^12.2.0
+  firebase_storage: ^12.3.1       # ⬆️ actualizado
   firebase_messaging: ^15.0.3
   firebase_crashlytics: ^4.1.0
   firebase_analytics: ^11.1.0
@@ -32,15 +31,21 @@ dependencies:
 
   # UI / Multimedia
   cached_network_image: ^3.4.0
-  video_player: ^2.9.1
+  video_player: ^2.9.2             # ⬆️ actualizado
   chewie: ^1.7.5
   lottie: ^3.1.0
   flutter_svg: ^2.0.10+1
   google_fonts: ^6.2.1
+  image_picker: ^1.2.0             # ya presente
+  flutter_animate: ^4.5.2
+
+  # Nuevo para videos / thumbnails / paths
+  video_thumbnail: ^0.5.3
+  path: ^1.9.0
 
   # Utilidades
   intl: ^0.19.0
-  uuid: ^4.5.0
+  uuid: ^4.5.0                     # ya correcto
   dio: ^5.7.0
   geolocator: ^12.0.0
   geocoding: ^3.0.0
@@ -73,20 +78,12 @@ dependencies:
   settings:
     path: ../../packages/features/settings
 
-  # Imágenes y animaciones
-  image_picker: ^1.2.0
-  flutter_animate: ^4.5.2
-
- 
-# 🔗 Nuevo sistema de enlaces profundos (reemplazo de uni_links)
+  # 🔗 Sistema de enlaces profundos (Deep Links)
   app_links: ^3.4.2
 
-
-    # ⚙️ Dependencias base del fork local
-  
+  # ⚙️ Dependencias base del fork local
   plugin_platform_interface: ^2.1.4
   flutter_launcher_icons: ^0.14.4
-
 
 dev_dependencies:
   flutter_test:
@@ -103,6 +100,6 @@ flutter:
 flutter_icons:
   android: true
   ios: true
-  image_path: "assets/icons/draftclub_logo.png" # <--- pon aquí el nombre real del archivo
-  adaptive_icon_background: "#000000"           # Fondo negro elegante
+  image_path: "assets/icons/draftclub_logo.png" # <--- asegúrate de que exista
+  adaptive_icon_background: "#000000"
   adaptive_icon_foreground: "assets/icons/draftclub_logo.png"

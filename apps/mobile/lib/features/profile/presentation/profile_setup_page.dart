@@ -190,7 +190,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
 
                 // ===================== SEXO (nuevo campo obligatorio) =====================
                 DropdownButtonFormField<String>(
-                  value: _sex,
+                  initialValue: _sex,
                   dropdownColor: const Color(0xFF1A1A1A),
                   decoration: const InputDecoration(
                     labelText: 'Sexo',

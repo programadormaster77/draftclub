@@ -337,7 +337,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
               // 🔹 Nuevo campo: Selección de sexo
               DropdownButtonFormField<String>(
-                value: _sex,
+                initialValue: _sex,
                 dropdownColor: const Color(0xFF1A1A1A),
                 decoration: const InputDecoration(
                   labelText: 'Sexo',
@@ -531,7 +531,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   Widget _buildFootSelector() {
     return DropdownButtonFormField<String>(
-      value: _preferredFoot,
+      initialValue: _preferredFoot,
       dropdownColor: const Color(0xFF1A1A1A),
       items: _pies
           .map((p) => DropdownMenuItem(

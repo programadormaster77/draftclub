@@ -1,7 +1,7 @@
 // lib/widgets/city_picker_form_field.dart
 import 'package:flutter/material.dart';
-import '../core/location/city.dart';
-import '../core/location/place_service.dart';
+import 'city.dart';
+import 'place_service.dart';
 
 /// ===========================================================
 /// 🌍 CityPickerFormField
@@ -11,17 +11,13 @@ import '../core/location/place_service.dart';
 /// ===========================================================
 class CityPickerFormField extends FormField<City?> {
   CityPickerFormField({
-    Key? key,
-    City? initialValue,
-    FormFieldSetter<City?>? onSaved,
-    FormFieldValidator<City?>? validator,
+    super.key,
+    super.initialValue,
+    super.onSaved,
+    super.validator,
     required void Function(City?) onChanged,
     String label = 'Ciudad y país',
   }) : super(
-          key: key,
-          initialValue: initialValue,
-          onSaved: onSaved,
-          validator: validator,
           builder: (state) {
             final controller =
                 TextEditingController(text: state.value?.display ?? '');
@@ -144,15 +140,15 @@ class _CitySearchSheetState extends State<_CitySearchSheet> {
             controller: _queryCtrl,
             onChanged: _fetch,
             style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               hintText: 'Escribe tu ciudad...',
-              hintStyle: const TextStyle(color: Colors.white54),
-              prefixIcon: const Icon(Icons.search, color: Colors.white70),
+              hintStyle: TextStyle(color: Colors.white54),
+              prefixIcon: Icon(Icons.search, color: Colors.white70),
               filled: true,
-              fillColor: const Color(0xFF171717),
-              enabledBorder: const OutlineInputBorder(
+              fillColor: Color(0xFF171717),
+              enabledBorder: OutlineInputBorder(
                   borderSide: BorderSide(color: Colors.white24)),
-              focusedBorder: const OutlineInputBorder(
+              focusedBorder: OutlineInputBorder(
                   borderSide: BorderSide(color: Colors.blueAccent)),
             ),
           ),

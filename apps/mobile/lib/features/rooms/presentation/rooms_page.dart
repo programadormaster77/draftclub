@@ -575,6 +575,9 @@ class _RoomsPageState extends State<RoomsPage>
                 _filterCityLng = null;
                 _filterCountryCode = null;
               });
+              // ⚡ Limpieza visual inmediata
+              Future.delayed(
+                  const Duration(milliseconds: 50), () => setState(() {}));
             },
             onClearDate: () => setState(() => _filterDate = null),
           ),
@@ -582,6 +585,9 @@ class _RoomsPageState extends State<RoomsPage>
         const SizedBox(height: 6),
         Expanded(
           child: StreamBuilder<List<Room>>(
+            // ✅ Clave única para forzar reconstrucción cuando cambian filtros
+            key: ValueKey(
+                '${_filterCityName}_${_useNearby}_${_filterDate ?? ''}'),
             stream: _publicRoomsBaseStream(),
             builder: (context, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
