@@ -1,16 +1,16 @@
-// 🌍 Servicio para obtener ciudades con autocompletado (Google Places)
+// 🌍 Servicio para obtener ciudades o direcciones con autocompletado (Google Places)
 // ===============================================================
-// Este archivo usa la API de Google Places para sugerir nombres de ciudades
-// mientras el usuario escribe (por ejemplo: "Bogotá", "Madrid", "Buenos Aires").
+// Este archivo usa la API de Google Places para sugerir nombres de
+// ciudades o direcciones mientras el usuario escribe.
+// Ejemplo: "Bogotá", "Madrid", "Calle 45 #12-30, Medellín".
 //
 // ⚙️ Requisitos:
 // 1️⃣ Habilitar la API "Places API" en Google Cloud.
-// 2️⃣ Crear una clave de API y reemplazarla en la variable _googleApiKey.
+// 2️⃣ Crear una clave de API y reemplazarla en _googleApiKey.
 // 3️⃣ Agregar el paquete http en pubspec.yaml:
 //
 // dependencies:
 //   http: ^1.2.2
-//
 // ===============================================================
 
 import 'dart:convert';
@@ -41,66 +41,164 @@ class CitySuggestion {
 class PlaceService {
   static const String _baseUrl = 'https://maps.googleapis.com/maps/api/place';
 
-  /// Obtiene una lista de ciudades sugeridas a partir del texto ingresado.
+  // ===============================================================
+  // 🌆 Sugerencias de CIUDADES
+  // ===============================================================
   static Future<List<CitySuggestion>> fetchCitySuggestions(String input) async {
     if (input.isEmpty) return [];
 
     final url =
         '$_baseUrl/autocomplete/json?input=$input&types=(cities)&language=es&key=$_googleApiKey';
 
-    final response = await http.get(Uri.parse(url));
+    try {
+      final response = await http.get(Uri.parse(url));
 
-    if (response.statusCode != 200) {
-      throw Exception('Error al obtener sugerencias (${response.statusCode})');
-    }
+      if (response.statusCode != 200) {
+        throw Exception(
+            'Error al obtener sugerencias (${response.statusCode})');
+      }
 
-    final data = json.decode(response.body);
+      final data = json.decode(response.body);
+      if (data['status'] != 'OK' || data['predictions'] == null) return [];
 
-    if (data['status'] != 'OK') {
+      final predictions = data['predictions'] as List;
+      return predictions
+          .map((p) => CitySuggestion(
+                description: (p['description'] ?? '') as String,
+                placeId: (p['place_id'] ?? '') as String,
+              ))
+          .where((p) => p.placeId.isNotEmpty)
+          .toList();
+    } catch (e) {
+      print('⚠️ Error en fetchCitySuggestions: $e');
       return [];
     }
-
-    final predictions = data['predictions'] as List;
-    return predictions
-        .map((p) => CitySuggestion(
-              description: p['description'],
-              placeId: p['place_id'],
-            ))
-        .toList();
-  }
-
-  /// Obtiene las coordenadas (lat, lng) de una ciudad seleccionada.
-  static Future<CitySuggestion?> getCityDetails(String placeId) async {
-    final url = '$_baseUrl/details/json?place_id=$placeId&key=$_googleApiKey';
-    final response = await http.get(Uri.parse(url));
-
-    if (response.statusCode != 200) {
-      throw Exception('Error al obtener detalles (${response.statusCode})');
-    }
-
-    final data = json.decode(response.body);
-    final result = data['result'];
-
-    if (result == null ||
-        result['geometry'] == null ||
-        result['geometry']['location'] == null) {
-      return null;
-    }
-
-    final location = result['geometry']['location'];
-    final lat = (location['lat'] as num).toDouble();
-    final lng = (location['lng'] as num).toDouble();
-
-    return CitySuggestion(
-      description: result['formatted_address'] ?? '',
-      placeId: placeId,
-      lat: lat,
-      lng: lng,
-    );
   }
 
   // ===============================================================
-  // ✅ NUEVO MÉTODO COMPATIBLE CON create_room_page Y edit_profile_page
+  // 📍 Detalles de una CIUDAD seleccionada
+  // ===============================================================
+  static Future<CitySuggestion?> getCityDetails(String placeId) async {
+    if (placeId.isEmpty) return null;
+
+    final url =
+        '$_baseUrl/details/json?place_id=$placeId&language=es&key=$_googleApiKey';
+
+    try {
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode != 200) {
+        throw Exception('Error al obtener detalles (${response.statusCode})');
+      }
+
+      final data = json.decode(response.body);
+      final result = data['result'];
+      if (result == null ||
+          result['geometry'] == null ||
+          result['geometry']['location'] == null) {
+        return null;
+      }
+
+      final location = result['geometry']['location'];
+      final lat = (location['lat'] as num?)?.toDouble();
+      final lng = (location['lng'] as num?)?.toDouble();
+
+      return CitySuggestion(
+        description:
+            (result['formatted_address'] ?? result['name'] ?? '') as String,
+        placeId: placeId,
+        lat: lat,
+        lng: lng,
+      );
+    } catch (e) {
+      print('⚠️ Error en getCityDetails: $e');
+      return null;
+    }
+  }
+
+  // ===============================================================
+  // 🏠 Sugerencias de DIRECCIONES EXACTAS
+  // ===============================================================
+  static Future<List<Map<String, dynamic>>> fetchAddressSuggestions(
+      String input) async {
+    if (input.isEmpty) return [];
+
+    // 🔄 Se usa 'geocode' en lugar de 'address' para mayor compatibilidad
+    final url =
+        '$_baseUrl/autocomplete/json?input=$input&types=geocode&language=es&key=$_googleApiKey';
+
+    try {
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+            'Error al obtener direcciones (${response.statusCode})');
+      }
+
+      final data = json.decode(response.body);
+      if (data['status'] != 'OK' || data['predictions'] == null) return [];
+
+      final predictions = data['predictions'] as List;
+      final List<Map<String, dynamic>> addresses = [];
+
+      for (final p in predictions) {
+        final placeId = (p['place_id'] ?? '') as String;
+        if (placeId.isEmpty) continue;
+
+        final details = await getAddressDetails(placeId);
+        if (details != null) addresses.add(details);
+      }
+
+      return addresses;
+    } catch (e) {
+      print('⚠️ Error en fetchAddressSuggestions: $e');
+      return [];
+    }
+  }
+
+  // ===============================================================
+  // 🧭 Detalles de una DIRECCIÓN (coordenadas y texto completo)
+  // ===============================================================
+  static Future<Map<String, dynamic>?> getAddressDetails(String placeId) async {
+    if (placeId.isEmpty) return null;
+
+    final url =
+        '$_baseUrl/details/json?place_id=$placeId&language=es&key=$_googleApiKey';
+
+    try {
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode != 200) {
+        throw Exception('Error al obtener detalles (${response.statusCode})');
+      }
+
+      final data = json.decode(response.body);
+      final result = data['result'];
+
+      if (result == null ||
+          result['geometry'] == null ||
+          result['geometry']['location'] == null) {
+        return null;
+      }
+
+      final location = result['geometry']['location'];
+      final lat = (location['lat'] as num?)?.toDouble();
+      final lng = (location['lng'] as num?)?.toDouble();
+
+      return {
+        'address':
+            (result['formatted_address'] ?? result['name'] ?? '') as String,
+        'lat': lat,
+        'lng': lng,
+      };
+    } catch (e) {
+      print('⚠️ Error en getAddressDetails: $e');
+      return null;
+    }
+  }
+
+  // ===============================================================
+  // 🔄 Método compatible con formularios antiguos
   // ===============================================================
   Future<List<Map<String, dynamic>>> searchPlaces(String query) async {
     final suggestions = await fetchCitySuggestions(query);

@@ -3,11 +3,15 @@ import 'package:share_plus/share_plus.dart';
 import 'package:draftclub_mobile/core/location/place_service.dart';
 import '../data/room_service.dart';
 
+// 🔽 NUEVO: para autocompletar el género del partido desde el perfil (users/<uid>.sex)
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 /// ====================================================================
 /// ⚽ CreateRoomPage — Crear y compartir nuevas salas
 /// ====================================================================
-/// 🔹 Integra Google Places para seleccionar ciudad con precisión.
-/// 🔹 Guarda nombre, coordenadas y país.
+/// 🔹 Integra Google Places para seleccionar ciudad y dirección exacta.
+/// 🔹 Guarda nombre, coordenadas, país y género del partido.
 /// 🔹 Crea la sala y permite compartir el enlace dinámico.
 /// ====================================================================
 class CreateRoomPage extends StatefulWidget {
@@ -21,6 +25,7 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _cityCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController();
   DateTime? _eventAt;
   int _teams = 2;
   int _players = 5;
@@ -28,10 +33,44 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
   bool _isPublic = true;
   bool _loading = false;
   bool _searchingCity = false;
+  bool _searchingAddress = false;
+  String _sex = 'Masculino'; // 🧩 Campo (Masculino / Femenino / Mixto)
   String? _lastCreatedRoomId;
 
-  // Datos de la ciudad seleccionada
+  // Datos de ciudad y dirección seleccionadas
   Map<String, dynamic>? _selectedCityData;
+  Map<String, dynamic>? _selectedAddressData;
+
+  @override
+  void initState() {
+    super.initState();
+    _prefillSexFromProfile(); // 🔹 Autocompleta el “Género del partido” según users/<uid>.sex
+  }
+
+  // ===========================================================
+  // 👤 Autocompletar “Género del partido” desde el perfil
+  // ===========================================================
+  Future<void> _prefillSexFromProfile() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      final snap =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final sex = (snap.data() ?? const {})['sex'];
+      if (sex is String && sex.isNotEmpty) {
+        if (!mounted) return;
+        // Normalizamos a nuestras opciones
+        final normalized = sex.toLowerCase().startsWith('f')
+            ? 'Femenino'
+            : sex.toLowerCase().startsWith('m')
+                ? 'Masculino'
+                : 'Mixto';
+        setState(() => _sex = normalized);
+      }
+    } catch (_) {
+      // silencioso; si no hay perfil, usamos el default 'Masculino'
+    }
+  }
 
   // ===========================================================
   // 🧱 Crear la sala
@@ -46,6 +85,7 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
     try {
       final service = RoomService();
       final cityData = _selectedCityData;
+      final addressData = _selectedAddressData;
 
       final roomId = await service.createRoom(
         name: _nameCtrl.text.trim(),
@@ -54,14 +94,15 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
         substitutes: _subs,
         isPublic: _isPublic,
         manualCity: cityData?['cityName'] ?? _cityCtrl.text.trim(),
+        exactAddress: addressData?['address'] ?? _addressCtrl.text.trim(),
         eventAt: _eventAt,
-        cityLat: cityData?['lat'],
-        cityLng: cityData?['lng'],
+        cityLat: addressData?['lat'] ?? cityData?['lat'],
+        cityLng: addressData?['lng'] ?? cityData?['lng'],
         countryCode: cityData?['countryCode'],
+        sex: _sex, // ✅ Guardamos el género del partido
       );
 
       if (!mounted) return;
-
       setState(() => _lastCreatedRoomId = roomId);
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -154,136 +195,224 @@ $link
               setSheet(() => suggestions = []);
               return;
             }
-
             setSheet(() => _searchingCity = true);
             final results = await PlaceService.fetchCitySuggestions(query);
             setSheet(() {
               suggestions = results
-                  .map((r) => {
-                        'name': r.description,
-                        'placeId': r.placeId,
-                      })
+                  .map((r) => {'name': r.description, 'placeId': r.placeId})
                   .toList();
               _searchingCity = false;
             });
           }
 
-          return Padding(
-            padding: MediaQuery.of(context).viewInsets,
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              height: 500,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Center(
-                    child: Text(
-                      'Buscar ciudad o país',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: searchCtrl,
-                    onChanged: search,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'Ejemplo: Bogotá, Madrid...',
-                      hintStyle: const TextStyle(color: Colors.white54),
-                      prefixIcon: const Icon(Icons.location_on,
-                          color: Colors.blueAccent),
-                      filled: true,
-                      fillColor: const Color(0xFF111111),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                            const BorderSide(color: Colors.white24, width: 1),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                            color: Colors.blueAccent, width: 1),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (_searchingCity)
-                    const Center(
-                      child: CircularProgressIndicator(
-                        color: Colors.blueAccent,
-                        strokeWidth: 2.5,
-                      ),
-                    )
-                  else if (suggestions.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 20),
-                      child: Center(
-                        child: Text(
-                          'Escribe para buscar ciudades',
-                          style: TextStyle(color: Colors.white38, fontSize: 14),
-                        ),
-                      ),
-                    )
-                  else
-                    Expanded(
-                      child: ListView.separated(
-                        itemCount: suggestions.length,
-                        separatorBuilder: (_, __) =>
-                            const Divider(color: Colors.white12),
-                        itemBuilder: (context, i) {
-                          final s = suggestions[i];
-                          return ListTile(
-                            leading: const Icon(Icons.location_city,
-                                color: Colors.blueAccent),
-                            title: Text(
-                              s['name'],
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                            onTap: () async {
-                              final details = await PlaceService.getCityDetails(
-                                  s['placeId']);
-                              if (details != null) {
-                                Navigator.pop(context, {
-                                  'cityName': details.description,
-                                  'lat': details.lat,
-                                  'lng': details.lng,
-                                  'countryCode': details.description
-                                      .split(',')
-                                      .last
-                                      .trim(),
-                                });
-                              } else {
-                                Navigator.pop(context, s);
-                              }
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                ],
-              ),
-            ),
+          return _placeSheetUI(
+            title: 'Buscar ciudad o país',
+            searchCtrl: searchCtrl,
+            searching: _searchingCity,
+            suggestions: suggestions,
+            onSearch: search,
+            onSelect: (s) async {
+              // 🔧 Obtenemos detalles para lat/lng y country
+              final details = await PlaceService.getCityDetails(s['placeId']);
+              final data = details != null
+                  ? {
+                      'cityName': details.description,
+                      'lat': details.lat,
+                      'lng': details.lng,
+                      'countryCode':
+                          (details.description.split(',').last).trim(),
+                    }
+                  : {
+                      'cityName': s['name'],
+                      'lat': null,
+                      'lng': null,
+                      'countryCode': null,
+                    };
+              if (!mounted) return;
+              setState(() {
+                _selectedCityData = data;
+                _cityCtrl.text = data['cityName'] ?? s['name'] ?? '';
+              });
+            },
+            getDetails: PlaceService.getCityDetails,
+            labelField: 'name',
           );
         });
       },
-    ).then((result) {
-      if (result != null) {
-        setState(() {
-          _selectedCityData = result;
-          _cityCtrl.text = result['cityName'] ?? result['name'];
+    );
+  }
+
+  // ===========================================================
+  // 🏠 Selector de dirección exacta (Google Places)
+  // ===========================================================
+  Future<void> _openAddressPicker() async {
+    TextEditingController searchCtrl = TextEditingController();
+    List<Map<String, dynamic>> suggestions = [];
+
+    await showModalBottomSheet<Map<String, dynamic>>(
+      backgroundColor: const Color(0xFF1A1A1A),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(builder: (context, setSheet) {
+          Future<void> search(String query) async {
+            if (query.isEmpty) {
+              setSheet(() => suggestions = []);
+              return;
+            }
+            setSheet(() => _searchingAddress = true);
+            final results = await PlaceService.fetchAddressSuggestions(query);
+            setSheet(() {
+              suggestions = results
+                  .map((r) => {
+                        'address': r['address'],
+                        'lat': r['lat'],
+                        'lng': r['lng']
+                      })
+                  .toList();
+              _searchingAddress = false;
+            });
+          }
+
+          return _placeSheetUI(
+            title: 'Buscar dirección exacta',
+            searchCtrl: searchCtrl,
+            searching: _searchingAddress,
+            suggestions: suggestions,
+            onSearch: search,
+            onSelect: (s) {
+              // ✅ Corregido: al seleccionar, llenamos el campo y guardamos lat/lng
+              setState(() {
+                _selectedAddressData = {
+                  'address': s['address'],
+                  'lat': s['lat'],
+                  'lng': s['lng'],
+                };
+                _addressCtrl.text = s['address'] ?? '';
+              });
+            },
+            getDetails: null,
+            labelField: 'address',
+          );
         });
-      }
-    });
+      },
+    );
+  }
+
+  // ===========================================================
+  // 🧭 UI del bottom sheet reutilizable
+  //  - Corregido: ejecuta onSelect(s) y luego cierra el sheet
+  // ===========================================================
+  Widget _placeSheetUI({
+    required String title,
+    required TextEditingController searchCtrl,
+    required bool searching,
+    required List<Map<String, dynamic>> suggestions,
+    required Future<void> Function(String) onSearch,
+    required void Function(Map<String, dynamic>) onSelect,
+    required String labelField,
+    Future<dynamic> Function(String)? getDetails,
+  }) {
+    return Padding(
+      padding: MediaQuery.of(context).viewInsets,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          height: 500,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: searchCtrl,
+                onChanged: onSearch,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Escribe aquí...',
+                  hintStyle: const TextStyle(color: Colors.white54),
+                  prefixIcon:
+                      const Icon(Icons.location_on, color: Colors.blueAccent),
+                  filled: true,
+                  fillColor: const Color(0xFF111111),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: Colors.white24, width: 1),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: Colors.blueAccent, width: 1),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (searching)
+                const Center(
+                  child: CircularProgressIndicator(
+                    color: Colors.blueAccent,
+                    strokeWidth: 2.5,
+                  ),
+                )
+              else if (suggestions.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 20),
+                  child: Center(
+                    child: Text(
+                      'Escribe para buscar...',
+                      style: TextStyle(color: Colors.white38, fontSize: 14),
+                    ),
+                  ),
+                )
+              else
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: suggestions.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(color: Colors.white12),
+                    itemBuilder: (context, i) {
+                      final s = suggestions[i];
+                      return ListTile(
+                        leading: const Icon(Icons.location_city,
+                            color: Colors.blueAccent),
+                        title: Text(
+                          '${s[labelField]}',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        onTap: () {
+                          onSelect(s); // ✅ aplica selección
+                          Navigator.pop(context); // ✅ cierra el sheet
+                        },
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
     _cityCtrl.dispose();
+    _addressCtrl.dispose();
     super.dispose();
   }
 
@@ -327,9 +456,8 @@ $link
                   child: TextFormField(
                     controller: _cityCtrl,
                     style: const TextStyle(color: Colors.white),
-                    decoration: _inputDecoration(
-                      'Ciudad (opcional, detectada si se deja vacía)',
-                    ).copyWith(
+                    decoration:
+                        _inputDecoration('Ciudad donde se jugará').copyWith(
                       prefixIcon: const Icon(Icons.location_on,
                           color: Colors.blueAccent),
                     ),
@@ -337,6 +465,33 @@ $link
                 ),
               ),
               const SizedBox(height: 20),
+
+              // 🔹 Dirección exacta
+              GestureDetector(
+                onTap: _openAddressPicker,
+                child: AbsorbPointer(
+                  child: TextFormField(
+                    controller: _addressCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _inputDecoration('Dirección exacta (opcional)')
+                        .copyWith(
+                      prefixIcon:
+                          const Icon(Icons.home_work, color: Colors.blueAccent),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // 🔹 Género del partido
+              _buildDropdown<String>(
+                label: 'Género del partido',
+                value: _sex,
+                items: const ['Masculino', 'Femenino', 'Mixto'],
+                onChanged: (v) => setState(() => _sex = v ?? 'Masculino'),
+              ),
+
+              const SizedBox(height: 10),
 
               // 🔹 Fecha y hora
               ListTile(
@@ -472,7 +627,7 @@ $link
       padding: const EdgeInsets.only(bottom: 16),
       child: DropdownButtonFormField<T>(
         dropdownColor: const Color(0xFF1C1C1C),
-        initialValue: value,
+        value: value,
         decoration: _inputDecoration(label),
         items: items
             .map((n) => DropdownMenuItem(

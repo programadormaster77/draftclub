@@ -3,10 +3,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// ====================================================================
 /// 🧩 Room Model — Representa una sala (pública o privada)
 /// ====================================================================
-/// 🔹 Totalmente compatible con Firestore.
+/// 🔹 Compatible con Firestore.
 /// 🔹 Incluye ubicación completa (ciudad, país, coordenadas, dirección exacta).
-/// 🔹 Compatible con filtros inteligentes de cercanía, país y fecha.
-/// 🔹 Ideal para integración con RoomService y RoomDetailPage.
+/// 🔹 Añadido campo `sex` (Masculino / Femenino / Mixto).
+/// 🔹 Ahora incluye soporte para `lat/lng` exactos y `updatedAt`.
+/// 🔹 Ideal para integración con RoomService, CreateRoomPage y RoomDetailPage.
 /// ====================================================================
 class Room {
   final String id;
@@ -17,13 +18,22 @@ class Room {
   final bool isPublic;
   final String creatorId;
   final String city;
-  final double? cityLat; // 🌍 Latitud de la ciudad
-  final double? cityLng; // 🌍 Longitud de la ciudad
+
+  // 🌍 Coordenadas de la ciudad
+  final double? cityLat;
+  final double? cityLng;
+
+  // 📍 Coordenadas exactas (nueva compatibilidad)
+  final double? lat;
+  final double? lng;
+
   final String? countryCode; // 🇨🇴 Código ISO del país
   final String? exactAddress; // 📍 Dirección exacta del partido
+  final String? sex; // 🚻 Tipo de partido (Masculino / Femenino / Mixto)
   final DateTime createdAt;
+  final DateTime? updatedAt; // 🕒 Nueva marca opcional
   final DateTime? eventAt; // 📅 Fecha/hora del partido
-  final List<String> players; // 👥 Lista de jugadores en la sala
+  final List<String> players; // 👥 Lista de jugadores
 
   Room({
     required this.id,
@@ -37,9 +47,13 @@ class Room {
     required this.createdAt,
     this.cityLat,
     this.cityLng,
+    this.lat,
+    this.lng,
     this.countryCode,
     this.exactAddress,
+    this.sex,
     this.eventAt,
+    this.updatedAt,
     this.players = const [],
   });
 
@@ -58,10 +72,14 @@ class Room {
       'city': city,
       if (cityLat != null) 'cityLat': cityLat,
       if (cityLng != null) 'cityLng': cityLng,
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
       if (countryCode != null) 'countryCode': countryCode,
       if (exactAddress != null && exactAddress!.isNotEmpty)
         'exactAddress': exactAddress,
+      if (sex != null && sex!.isNotEmpty) 'sex': sex,
       'createdAt': Timestamp.fromDate(createdAt),
+      if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
       if (eventAt != null) 'eventAt': Timestamp.fromDate(eventAt!),
       'players': players,
     };
@@ -73,13 +91,20 @@ class Room {
   factory Room.fromMap(Map<String, dynamic> map) {
     DateTime createdAt;
     final createdField = map['createdAt'];
-
     if (createdField is Timestamp) {
       createdAt = createdField.toDate();
     } else if (createdField is String) {
       createdAt = DateTime.tryParse(createdField) ?? DateTime.now();
     } else {
       createdAt = DateTime.now();
+    }
+
+    DateTime? updatedAt;
+    final updatedField = map['updatedAt'];
+    if (updatedField is Timestamp) {
+      updatedAt = updatedField.toDate();
+    } else if (updatedField is String) {
+      updatedAt = DateTime.tryParse(updatedField);
     }
 
     DateTime? eventAt;
@@ -116,9 +141,13 @@ class Room {
       city: map['city'] ?? 'Desconocido',
       cityLat: parseDouble(map['cityLat']),
       cityLng: parseDouble(map['cityLng']),
+      lat: parseDouble(map['lat']),
+      lng: parseDouble(map['lng']),
       countryCode: map['countryCode'],
       exactAddress: map['exactAddress'],
+      sex: map['sex'] ?? 'Masculino',
       createdAt: createdAt,
+      updatedAt: updatedAt,
       eventAt: eventAt,
       players: List<String>.from(map['players'] ?? []),
     );
@@ -138,9 +167,13 @@ class Room {
     String? city,
     double? cityLat,
     double? cityLng,
+    double? lat,
+    double? lng,
     String? countryCode,
     String? exactAddress,
+    String? sex,
     DateTime? createdAt,
+    DateTime? updatedAt,
     DateTime? eventAt,
     List<String>? players,
   }) {
@@ -155,9 +188,13 @@ class Room {
       city: city ?? this.city,
       cityLat: cityLat ?? this.cityLat,
       cityLng: cityLng ?? this.cityLng,
+      lat: lat ?? this.lat,
+      lng: lng ?? this.lng,
       countryCode: countryCode ?? this.countryCode,
       exactAddress: exactAddress ?? this.exactAddress,
+      sex: sex ?? this.sex,
       createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
       eventAt: eventAt ?? this.eventAt,
       players: players ?? this.players,
     );
@@ -178,5 +215,10 @@ class Room {
   }
 
   /// Retorna `true` si tiene coordenadas válidas
-  bool get hasLocation => cityLat != null && cityLng != null;
+  bool get hasLocation =>
+      (lat != null && lng != null) || (cityLat != null && cityLng != null);
+
+  @override
+  String toString() =>
+      'Room($name, ciudad: $city, sexo: $sex, pública: $isPublic)';
 }

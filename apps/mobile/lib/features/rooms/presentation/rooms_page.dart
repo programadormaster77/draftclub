@@ -1,9 +1,11 @@
+// lib/features/rooms/presentation/rooms_page.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import '../data/room_service.dart';
 
 import '../models/room_model.dart';
 import 'room_detail_page.dart';
@@ -17,8 +19,9 @@ import 'package:draftclub_mobile/core/location/place_service.dart';
 /// ✅ Cercanía (40 km) usando geolocalización del usuario
 /// ✅ Filtro por ciudad con buscador (Google Places)
 /// ✅ Filtro por fecha (mismo día)
+/// ✅ Filtro automático por sexo del usuario (Masculino/Femenino/Mixto)
 /// ✅ Bloqueo si se busca en país distinto al actual
-/// ✅ Fallback: si no hay cercanas, muestra por ciudad
+/// ✅ Fallback controlado y sin parpadeos
 /// ====================================================================
 class RoomsPage extends StatefulWidget {
   const RoomsPage({super.key});
@@ -39,6 +42,9 @@ class _RoomsPageState extends State<RoomsPage>
   String? _myCity;
   String? _myCountryCode;
 
+  // ------- Sexo del usuario (para filtro automático) -------
+  String? _userSex; // "masculino" | "femenino" | null (sin dato)
+
   // ------- Filtros seleccionados por el usuario -------
   bool _useNearby = true; // por defecto: buscar cerca (40 km)
   static const double _nearbyKm = 40.0;
@@ -58,6 +64,27 @@ class _RoomsPageState extends State<RoomsPage>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _ensureLocation();
+    _loadUserSex();
+  }
+
+  // ==========================================================
+  // 👤 Cargar sexo del usuario (una vez) para filtro automático
+  // ==========================================================
+  Future<void> _loadUserSex() async {
+    try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) return;
+      final doc = await _db.collection('users').doc(uid).get();
+      if (!mounted) return;
+      if (doc.exists && doc.data() != null) {
+        final val = (doc['sex'] ?? '').toString().trim().toLowerCase();
+        if (val.isNotEmpty) {
+          setState(() => _userSex = val); // setState aquí no causa bucles
+        }
+      }
+    } catch (_) {
+      // silencioso
+    }
   }
 
   // ==========================================================
@@ -94,10 +121,8 @@ class _RoomsPageState extends State<RoomsPage>
         _myCountryCode = p.isoCountryCode;
         _loadingLoc = false;
 
-        // Si no hay una ciudad objetivo aún, usa la del usuario
+        // Si no hay una ciudad objetivo aún, usa la del usuario (solo etiqueta)
         _filterCityName ??= _myCity;
-        // Nota: _filterCityLat/Lng se calcularán solo si el usuario
-        // elige explícitamente una ciudad en el buscador (para precisión).
       });
     } catch (e) {
       setState(() => _loadingLoc = false);
@@ -105,15 +130,26 @@ class _RoomsPageState extends State<RoomsPage>
   }
 
   // ==========================================================
-  // 🔎 Stream base de salas públicas
-  // (filtrado fino se hace en cliente para soportar distancia/fecha)
-  // ==========================================================
+// 🔎 Stream base de salas públicas (ya acotado por país)
+// ==========================================================
   Stream<List<Room>> _publicRoomsBaseStream() {
-    return _db
-        .collection('rooms')
-        .where('isPublic', isEqualTo: true)
-        .orderBy('createdAt', descending: true)
-        .limit(200)
+    // Nota: cuando _myCountryCode esté listo (tras _ensureLocation()),
+    // la consulta se re-crea y suscribe de nuevo.
+    final col = _db.collection('rooms');
+    final hasCountry = (_myCountryCode != null && _myCountryCode!.isNotEmpty);
+
+    final query = hasCountry
+        ? col
+            .where('isPublic', isEqualTo: true)
+            .where('countryCode', isEqualTo: _myCountryCode) // 🔒 mismo país
+            .orderBy('createdAt', descending: true)
+            .limit(200)
+        : col
+            .where('isPublic', isEqualTo: true)
+            .orderBy('createdAt', descending: true)
+            .limit(200);
+
+    return query
         .snapshots()
         .map((snap) => snap.docs.map((d) => Room.fromMap(d.data())).toList());
   }
@@ -136,131 +172,209 @@ class _RoomsPageState extends State<RoomsPage>
 
   double _deg2rad(double deg) => deg * (math.pi / 180);
 
-  // ==========================================================
-  // 🧮 Aplicar filtros (distancia, ciudad, fecha, país)
-  // ==========================================================
+// ==========================================================
+// 🔠 Normalizador universal (quita tildes, comas, puntos, espacios extras)
+// ==========================================================
+  String _normalizeCity(String s) {
+    const Map<String, String> accents = {
+      'á': 'a',
+      'à': 'a',
+      'ä': 'a',
+      'â': 'a',
+      'Á': 'a',
+      'À': 'a',
+      'Ä': 'a',
+      'Â': 'a',
+      'é': 'e',
+      'è': 'e',
+      'ë': 'e',
+      'ê': 'e',
+      'É': 'e',
+      'È': 'e',
+      'Ë': 'e',
+      'Ê': 'e',
+      'í': 'i',
+      'ì': 'i',
+      'ï': 'i',
+      'î': 'i',
+      'Í': 'i',
+      'Ì': 'i',
+      'Ï': 'i',
+      'Î': 'i',
+      'ó': 'o',
+      'ò': 'o',
+      'ö': 'o',
+      'ô': 'o',
+      'Ó': 'o',
+      'Ò': 'o',
+      'Ö': 'o',
+      'Ô': 'o',
+      'ú': 'u',
+      'ù': 'u',
+      'ü': 'u',
+      'û': 'u',
+      'Ú': 'u',
+      'Ù': 'u',
+      'Ü': 'u',
+      'Û': 'u',
+      'ñ': 'n',
+      'Ñ': 'n'
+    };
+
+    return s
+        .toLowerCase()
+        .trim()
+        .split('')
+        .map((c) => accents[c] ?? c)
+        .join()
+        .replaceAll(
+            RegExp(r'[^a-z0-9 ]'), ' ') // elimina comas, puntos, símbolos, etc.
+        .replaceAll(RegExp(r'\s+'), ' '); // colapsa espacios
+  }
+
+// ==========================================================
+// 🧮 Aplicar filtros (país, fecha, sexo, ciudad/40km)
+// ==========================================================
   List<Room> _applyFilters(List<Room> rooms) {
-    // 1) Bloqueo por país cuando se selecciona ciudad objetivo
-    if (_filterCountryCode != null &&
-        _myCountryCode != null &&
-        _filterCountryCode!.toUpperCase() != _myCountryCode!.toUpperCase()) {
-      _showBlockedCountryDialog();
-      // No mostramos nada cuando está bloqueado
-      return const [];
+    Iterable<Room> base = rooms;
+
+    // 1️⃣ País (solo si hay coincidencia clara)
+    if (_myCountryCode != null && _myCountryCode!.isNotEmpty) {
+      final userCountry = _normalizeCity(_myCountryCode!);
+      base = base.where((r) {
+        final rc = _normalizeCity(r.countryCode ?? '');
+        if (userCountry.isEmpty || rc.isEmpty) return true;
+        return rc.contains(userCountry) || userCountry.contains(rc);
+      });
     }
 
-    // 2) Filtro por fecha (si se seleccionó)
-    final DateTime? dayStart;
-    final DateTime? dayEnd;
+    // 2️⃣ Fecha (opcional)
+    DateTime? dayStart, dayEnd;
     if (_filterDate != null) {
       dayStart =
           DateTime(_filterDate!.year, _filterDate!.month, _filterDate!.day);
-      dayEnd = dayStart.add(const Duration(days: 1)).subtract(
-            const Duration(milliseconds: 1),
-          );
-    } else {
-      dayStart = null;
-      dayEnd = null;
+      dayEnd = dayStart
+          .add(const Duration(days: 1))
+          .subtract(const Duration(milliseconds: 1));
+      base = base.where((r) {
+        final e = r.eventAt;
+        return e != null && !e.isBefore(dayStart!) && !e.isAfter(dayEnd!);
+      });
     }
 
-    List<Room> filtered = rooms.where((r) {
-      // País: si la sala tiene countryCode y yo lo tengo, deben coincidir
-      if (r.countryCode != null &&
-          _myCountryCode != null &&
-          _filterCityName == null) {
-        // Búsqueda "cerca de mí" o "mi ciudad": exigir mismo país del usuario
-        if (r.countryCode!.toUpperCase() != _myCountryCode!.toUpperCase()) {
-          return false;
-        }
+    // 3️⃣ Sexo (automático)
+    if (_userSex != null && _userSex!.isNotEmpty) {
+      final u = _userSex!.toLowerCase();
+      base = base.where((r) {
+        final s = (r.sex ?? 'mixto').toLowerCase();
+        return s == 'mixto' || s == u;
+      });
+    }
+
+    // 4️⃣ Ciudad seleccionada manualmente → prioridad total
+    if (_filterCityName != null && _filterCityName!.trim().isNotEmpty) {
+      final nameLc = _normalizeCity(_filterCityName!);
+      if (_filterCityLat != null && _filterCityLng != null) {
+        const cityTightKm = 10.0;
+        base = base.where((r) {
+          final lat = r.lat ?? r.cityLat;
+          final lng = r.lng ?? r.cityLng;
+          if (lat == null || lng == null) {
+            return _normalizeCity(r.city) == nameLc;
+          }
+          final d = _distanceKm(_filterCityLat!, _filterCityLng!, lat, lng);
+          return d <= cityTightKm;
+        });
+      } else {
+        base = base.where((r) => _normalizeCity(r.city) == nameLc);
       }
 
-      // Fecha (opcional)
-      if (dayStart != null) {
-        if (r.eventAt == null) return false;
-        if (r.eventAt!.isBefore(dayStart) || r.eventAt!.isAfter(dayEnd!)) {
-          return false;
-        }
-      }
+      return _sortRooms(base);
+    }
 
-      return true;
-    }).toList();
+    // 5️⃣ Sin ciudad seleccionada → usar ciudad del perfil o radio 50 km
+    if (_myCity != null && _myCity!.trim().isNotEmpty) {
+      final myCityNorm = _normalizeCity(_myCity!);
 
-    // 3) Cercanía (si está activo y tengo mi lat/lng)
-    List<Room> nearby = [];
-    if (_useNearby && _myLat != null && _myLng != null) {
-      nearby = filtered.where((r) {
-        if (r.cityLat != null && r.cityLng != null) {
-          final d = _distanceKm(_myLat!, _myLng!, r.cityLat!, r.cityLng!);
-          return d <= _nearbyKm;
-        }
-        // Fallback: si no hay coordenadas, usa ciudad textual
-        if (_myCity != null && r.city.toLowerCase() == _myCity!.toLowerCase()) {
+      base = base.where((r) {
+        final roomCity = (r.city ?? '').toString();
+        final roomCityNorm = _normalizeCity(roomCity);
+
+        // Coincidencia flexible
+        if (roomCityNorm.contains(myCityNorm) ||
+            myCityNorm.contains(roomCityNorm)) {
           return true;
         }
+
+        // Distancia (50 km)
+        final lat = r.lat ?? r.cityLat;
+        final lng = r.lng ?? r.cityLng;
+        if (_myLat != null && _myLng != null && lat != null && lng != null) {
+          final d = _distanceKm(_myLat!, _myLng!, lat, lng);
+          if (d <= 50.0) return true;
+        }
+
         return false;
-      }).toList();
-
-      if (nearby.isNotEmpty) {
-        // Ordenar por distancia (si es posible), sino por fecha
-        nearby.sort((a, b) {
-          double da = 1e9, db = 1e9;
-          if (a.cityLat != null && a.cityLng != null) {
-            da = _distanceKm(_myLat!, _myLng!, a.cityLat!, a.cityLng!);
-          }
-          if (b.cityLat != null && b.cityLng != null) {
-            db = _distanceKm(_myLat!, _myLng!, b.cityLat!, b.cityLng!);
-          }
-          if (da != db) return da.compareTo(db);
-          // empate → más reciente primero
-          return (b.createdAt).compareTo(a.createdAt);
+      });
+    } else {
+      // Sin ciudad → usar solo cercanía si hay ubicación
+      if (_myLat != null && _myLng != null) {
+        base = base.where((r) {
+          final lat = r.lat ?? r.cityLat;
+          final lng = r.lng ?? r.cityLng;
+          if (lat == null || lng == null) return false;
+          final d = _distanceKm(_myLat!, _myLng!, lat, lng);
+          return d <= 50.0;
         });
-        return nearby;
-      }
-      // Si no hubo cercanas, cae a filtro de ciudad abajo
-    }
-
-    // 4) Filtro por ciudad elegida (si la hay)
-    if (_filterCityName != null && _filterCityName!.trim().isNotEmpty) {
-      final nameLc = _filterCityName!.toLowerCase();
-      // Si tengo coordenadas exactas de la ciudad buscada, ordenar por distancia a esa ciudad
-      if (_filterCityLat != null && _filterCityLng != null) {
-        final inCity = filtered.where((r) {
-          if (r.cityLat != null && r.cityLng != null) {
-            final d = _distanceKm(
-                _filterCityLat!, _filterCityLng!, r.cityLat!, r.cityLng!);
-            // dentro de ~30 km del centro de la ciudad buscada (radio generoso)
-            return d <= 30;
-          }
-          return r.city.toLowerCase() == nameLc;
-        }).toList();
-
-        inCity.sort((a, b) {
-          double da = 1e9, db = 1e9;
-          if (a.cityLat != null && a.cityLng != null) {
-            da = _distanceKm(
-                _filterCityLat!, _filterCityLng!, a.cityLat!, a.cityLng!);
-          }
-          if (b.cityLat != null && b.cityLng != null) {
-            db = _distanceKm(
-                _filterCityLat!, _filterCityLng!, b.cityLat!, b.cityLng!);
-          }
-          if (da != db) return da.compareTo(db);
-          return (b.createdAt).compareTo(a.createdAt);
-        });
-
-        return inCity;
       } else {
-        // Sin lat/lng de la ciudad buscada → match por nombre
-        final inCity =
-            filtered.where((r) => r.city.toLowerCase() == nameLc).toList();
-        inCity.sort((a, b) => (b.createdAt).compareTo(a.createdAt));
-        return inCity;
+        base = const Iterable<Room>.empty();
       }
     }
 
-    // 5) Sin filtros de ciudad/cercanía → ordenar por recientes
-    filtered.sort((a, b) => (b.createdAt).compareTo(a.createdAt));
-    return filtered;
+    return _sortRooms(base);
+  }
+
+// ==========================================================
+// 🔄 Función auxiliar para ordenar por cercanía y fecha
+// ==========================================================
+  List<Room> _sortRooms(Iterable<Room> base) {
+    final list = base.toList();
+    if (_myLat != null && _myLng != null) {
+      list.sort((a, b) {
+        double da = 1e9, db = 1e9;
+        final aLat = a.lat ?? a.cityLat, aLng = a.lng ?? a.cityLng;
+        final bLat = b.lat ?? b.cityLat, bLng = b.lng ?? b.cityLng;
+        if (aLat != null && aLng != null) {
+          da = _distanceKm(_myLat!, _myLng!, aLat, aLng);
+        }
+        if (bLat != null && bLng != null) {
+          db = _distanceKm(_myLat!, _myLng!, bLat, bLng);
+        }
+        if (da != db) return da.compareTo(db);
+        return b.createdAt.compareTo(a.createdAt);
+      });
+    } else {
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }
+    return list;
+  }
+
+  String _norm(String s) {
+    const accents = {
+      'á': 'a',
+      'é': 'e',
+      'í': 'i',
+      'ó': 'o',
+      'ú': 'u',
+      'ü': 'u',
+      'ñ': 'n'
+    };
+    return s
+        .toLowerCase()
+        .replaceAllMapped(RegExp('[áéíóúüñ]'), (m) => accents[m.group(0)] ?? '')
+        .replaceAll(RegExp('[^a-z0-9 ]'), ' ') // elimina símbolos como , .
+        .replaceAll(RegExp(' +'), ' ') // colapsa espacios
+        .trim();
   }
 
   // ==========================================================
@@ -309,7 +423,6 @@ class _RoomsPageState extends State<RoomsPage>
                     ),
                     onPressed: () {
                       Navigator.of(context).pop();
-                      // Limpia ciudad objetivo para volver al estado válido
                       setState(() {
                         _filterCityName = null;
                         _filterCityLat = null;
@@ -575,9 +688,6 @@ class _RoomsPageState extends State<RoomsPage>
                 _filterCityLng = null;
                 _filterCountryCode = null;
               });
-              // ⚡ Limpieza visual inmediata
-              Future.delayed(
-                  const Duration(milliseconds: 50), () => setState(() {}));
             },
             onClearDate: () => setState(() => _filterDate = null),
           ),
@@ -585,9 +695,9 @@ class _RoomsPageState extends State<RoomsPage>
         const SizedBox(height: 6),
         Expanded(
           child: StreamBuilder<List<Room>>(
-            // ✅ Clave única para forzar reconstrucción cuando cambian filtros
             key: ValueKey(
-                '${_filterCityName}_${_useNearby}_${_filterDate ?? ''}'),
+              'pub_${_filterCityName}_${_filterDate?.millisecondsSinceEpoch ?? ''}_${_userSex ?? ''}_${_myCountryCode ?? ''}_${_myCity ?? ''}',
+            ),
             stream: _publicRoomsBaseStream(),
             builder: (context, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
@@ -605,9 +715,9 @@ class _RoomsPageState extends State<RoomsPage>
 
               if (rooms.isEmpty) {
                 return _EmptyState(
-                  title: 'No hay salas públicas cerca',
+                  title: 'No hay salas públicas según tus filtros',
                   message:
-                      'No encontramos partidos dentro del radio o filtros seleccionados.\n\u2022 Prueba otra fecha\n\u2022 Cambia la ciudad\n\u2022 O crea tu propia sala',
+                      'Prueba otra fecha, cambia la ciudad o crea tu propia sala.',
                   actionText: 'Crear una sala',
                   onAction: () {
                     Navigator.push(
@@ -663,7 +773,16 @@ class _RoomsPageState extends State<RoomsPage>
                   style: const TextStyle(color: Colors.redAccent)));
         }
 
-        final rooms = snap.data ?? [];
+        // Filtro de sexo aplicado también a "Mis salas"
+        List<Room> rooms = (snap.data ?? []);
+        if (_userSex != null && _userSex!.isNotEmpty) {
+          rooms = rooms.where((r) {
+            final roomSex = (r.sex ?? 'mixto').toLowerCase();
+            if (roomSex == 'mixto') return true;
+            return roomSex == _userSex;
+          }).toList();
+        }
+
         if (rooms.isEmpty) {
           return const Center(
               child: Text('Aún no te has unido ni has creado salas.',
@@ -687,9 +806,11 @@ class _RoomsPageState extends State<RoomsPage>
     String? distLabel;
     if (_myLat != null &&
         _myLng != null &&
-        room.cityLat != null &&
-        room.cityLng != null) {
-      final d = _distanceKm(_myLat!, _myLng!, room.cityLat!, room.cityLng!);
+        (room.lat != null || room.cityLat != null) &&
+        (room.lng != null || room.cityLng != null)) {
+      final lat = room.lat ?? room.cityLat!;
+      final lng = room.lng ?? room.cityLng!;
+      final d = _distanceKm(_myLat!, _myLng!, lat, lng);
       distLabel = '${d.toStringAsFixed(1)} km';
     }
 
