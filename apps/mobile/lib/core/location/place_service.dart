@@ -1,73 +1,77 @@
-// 🌍 Servicio para obtener ciudades o direcciones con autocompletado (Google Places)
+// 🌍 Servicio global de autocompletado de ciudades y direcciones (Google Places)
 // ===============================================================
-// Este archivo usa la API de Google Places para sugerir nombres de
-// ciudades o direcciones mientras el usuario escribe.
-// Ejemplo: "Bogotá", "Madrid", "Calle 45 #12-30, Medellín".
+// Proporciona sugerencias de CIUDADES y DIRECCIONES con coordenadas
+// y país ISO-2 (p. ej. "CO", "ES", "US"), para que DraftClub
+// funcione correctamente en TODO EL MUNDO.
 //
 // ⚙️ Requisitos:
-// 1️⃣ Habilitar la API "Places API" en Google Cloud.
-// 2️⃣ Crear una clave de API y reemplazarla en _googleApiKey.
+// 1️⃣ Habilitar "Places API" en Google Cloud.
+// 2️⃣ Crear una API Key y reemplazarla en [_apiKey].
 // 3️⃣ Agregar el paquete http en pubspec.yaml:
-//
-// dependencies:
-//   http: ^1.2.2
+//     dependencies:
+//       http: ^1.2.2
 // ===============================================================
 
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-/// Clave de la API de Google (⚠️ reemplaza por la tuya)
-const String _googleApiKey = "AIzaSyCV9KM9k8rv3rOaG2uPXTCaRlwK2PebtlM";
+/// ===============================================================
+/// 🔑 Clave API (reemplázala por la tuya propia)
+/// ===============================================================
+const String _apiKey = "AIzaSyCV9KM9k8rv3rOaG2uPXTCaRlwK2PebtlM";
 
-/// Clase auxiliar para representar una ciudad sugerida.
+/// ===============================================================
+/// 🧩 MODELOS
+/// ===============================================================
 class CitySuggestion {
-  final String description; // Ej: "Bogotá, Colombia"
+  final String description; // Ej: "Barcelona, Cataluña, España"
   final String placeId;
-  final double? lat;
-  final double? lng;
 
-  CitySuggestion({
-    required this.description,
-    required this.placeId,
-    this.lat,
-    this.lng,
-  });
-
-  @override
-  String toString() => description;
+  CitySuggestion({required this.description, required this.placeId});
 }
 
-/// Servicio para interactuar con la API de Google Places.
+class CityDetails {
+  final String description; // Texto completo ("Barcelona, España")
+  final double lat;
+  final double lng;
+  final String countryCode; // ISO-2: "ES", "CO", "US"...
+
+  CityDetails({
+    required this.description,
+    required this.lat,
+    required this.lng,
+    required this.countryCode,
+  });
+}
+
+/// ===============================================================
+/// 🧠 Clase principal
+/// ===============================================================
 class PlaceService {
   static const String _baseUrl = 'https://maps.googleapis.com/maps/api/place';
+  static const String _language = 'es';
 
   // ===============================================================
-  // 🌆 Sugerencias de CIUDADES
+  // 🌆 1️⃣ Autocompletar CIUDADES
   // ===============================================================
-  static Future<List<CitySuggestion>> fetchCitySuggestions(String input) async {
-    if (input.isEmpty) return [];
+  static Future<List<CitySuggestion>> fetchCitySuggestions(String query) async {
+    if (query.trim().isEmpty) return [];
 
-    final url =
-        '$_baseUrl/autocomplete/json?input=$input&types=(cities)&language=es&key=$_googleApiKey';
+    final uri = Uri.parse(
+        '$_baseUrl/autocomplete/json?input=$query&types=(cities)&language=$_language&key=$_apiKey');
 
     try {
-      final response = await http.get(Uri.parse(url));
+      final res = await http.get(uri);
+      if (res.statusCode != 200) return [];
 
-      if (response.statusCode != 200) {
-        throw Exception(
-            'Error al obtener sugerencias (${response.statusCode})');
-      }
-
-      final data = json.decode(response.body);
-      if (data['status'] != 'OK' || data['predictions'] == null) return [];
-
-      final predictions = data['predictions'] as List;
-      return predictions
+      final data = json.decode(res.body);
+      final preds = (data['predictions'] as List? ?? []);
+      return preds
           .map((p) => CitySuggestion(
-                description: (p['description'] ?? '') as String,
-                placeId: (p['place_id'] ?? '') as String,
+                description: (p['description'] ?? '').toString(),
+                placeId: (p['place_id'] ?? '').toString(),
               ))
-          .where((p) => p.placeId.isNotEmpty)
+          .where((c) => c.description.isNotEmpty && c.placeId.isNotEmpty)
           .toList();
     } catch (e) {
       print('⚠️ Error en fetchCitySuggestions: $e');
@@ -76,39 +80,46 @@ class PlaceService {
   }
 
   // ===============================================================
-  // 📍 Detalles de una CIUDAD seleccionada
+  // 📍 2️⃣ Detalles de una CIUDAD seleccionada
   // ===============================================================
-  static Future<CitySuggestion?> getCityDetails(String placeId) async {
-    if (placeId.isEmpty) return null;
+  static Future<CityDetails?> getCityDetails(String placeId) async {
+    if (placeId.trim().isEmpty) return null;
 
-    final url =
-        '$_baseUrl/details/json?place_id=$placeId&language=es&key=$_googleApiKey';
+    final uri = Uri.parse(
+        '$_baseUrl/details/json?place_id=$placeId&fields=address_component,geometry/location,formatted_address&language=$_language&key=$_apiKey');
 
     try {
-      final response = await http.get(Uri.parse(url));
+      final res = await http.get(uri);
+      if (res.statusCode != 200) return null;
 
-      if (response.statusCode != 200) {
-        throw Exception('Error al obtener detalles (${response.statusCode})');
-      }
-
-      final data = json.decode(response.body);
+      final data = json.decode(res.body);
       final result = data['result'];
-      if (result == null ||
-          result['geometry'] == null ||
-          result['geometry']['location'] == null) {
-        return null;
+      if (result == null) return null;
+
+      final formatted = (result['formatted_address'] ?? '').toString();
+      final loc = (result['geometry']?['location']) as Map<String, dynamic>?;
+      if (loc == null) return null;
+
+      final lat = (loc['lat'] as num?)?.toDouble() ?? 0.0;
+      final lng = (loc['lng'] as num?)?.toDouble() ?? 0.0;
+
+      // 🔹 Buscar el código de país ISO-2 real
+      final comps = (result['address_components'] as List? ?? [])
+          .cast<Map<String, dynamic>>();
+      String countryCode = 'XX';
+      for (final c in comps) {
+        final types = (c['types'] as List? ?? []).cast<String>();
+        if (types.contains('country')) {
+          countryCode = (c['short_name'] ?? '').toString().toUpperCase();
+          break;
+        }
       }
 
-      final location = result['geometry']['location'];
-      final lat = (location['lat'] as num?)?.toDouble();
-      final lng = (location['lng'] as num?)?.toDouble();
-
-      return CitySuggestion(
-        description:
-            (result['formatted_address'] ?? result['name'] ?? '') as String,
-        placeId: placeId,
+      return CityDetails(
+        description: formatted.isNotEmpty ? formatted : 'Desconocido',
         lat: lat,
         lng: lng,
+        countryCode: countryCode,
       );
     } catch (e) {
       print('⚠️ Error en getCityDetails: $e');
@@ -117,35 +128,29 @@ class PlaceService {
   }
 
   // ===============================================================
-  // 🏠 Sugerencias de DIRECCIONES EXACTAS
+  // 🏠 3️⃣ Autocompletar DIRECCIONES
   // ===============================================================
   static Future<List<Map<String, dynamic>>> fetchAddressSuggestions(
-      String input) async {
-    if (input.isEmpty) return [];
+      String query) async {
+    if (query.trim().isEmpty) return [];
 
-    // 🔄 Se usa 'geocode' en lugar de 'address' para mayor compatibilidad
-    final url =
-        '$_baseUrl/autocomplete/json?input=$input&types=geocode&language=es&key=$_googleApiKey';
+    final uri = Uri.parse(
+        '$_baseUrl/autocomplete/json?input=$query&types=geocode&language=$_language&key=$_apiKey');
 
     try {
-      final response = await http.get(Uri.parse(url));
+      final res = await http.get(uri);
+      if (res.statusCode != 200) return [];
 
-      if (response.statusCode != 200) {
-        throw Exception(
-            'Error al obtener direcciones (${response.statusCode})');
-      }
+      final data = json.decode(res.body);
+      final preds = (data['predictions'] as List? ?? []);
 
-      final data = json.decode(response.body);
-      if (data['status'] != 'OK' || data['predictions'] == null) return [];
-
-      final predictions = data['predictions'] as List;
       final List<Map<String, dynamic>> addresses = [];
+      for (final p in preds.take(8)) {
+        final pid = (p['place_id'] ?? '').toString();
+        final desc = (p['description'] ?? '').toString();
+        if (pid.isEmpty || desc.isEmpty) continue;
 
-      for (final p in predictions) {
-        final placeId = (p['place_id'] ?? '') as String;
-        if (placeId.isEmpty) continue;
-
-        final details = await getAddressDetails(placeId);
+        final details = await getAddressDetails(pid);
         if (details != null) addresses.add(details);
       }
 
@@ -157,40 +162,28 @@ class PlaceService {
   }
 
   // ===============================================================
-  // 🧭 Detalles de una DIRECCIÓN (coordenadas y texto completo)
+  // 🧭 4️⃣ Detalles de una DIRECCIÓN (lat/lng + texto completo)
   // ===============================================================
   static Future<Map<String, dynamic>?> getAddressDetails(String placeId) async {
-    if (placeId.isEmpty) return null;
+    if (placeId.trim().isEmpty) return null;
 
-    final url =
-        '$_baseUrl/details/json?place_id=$placeId&language=es&key=$_googleApiKey';
+    final uri = Uri.parse(
+        '$_baseUrl/details/json?place_id=$placeId&fields=geometry/location,formatted_address&language=$_language&key=$_apiKey');
 
     try {
-      final response = await http.get(Uri.parse(url));
+      final res = await http.get(uri);
+      if (res.statusCode != 200) return null;
 
-      if (response.statusCode != 200) {
-        throw Exception('Error al obtener detalles (${response.statusCode})');
-      }
-
-      final data = json.decode(response.body);
+      final data = json.decode(res.body);
       final result = data['result'];
+      if (result == null) return null;
 
-      if (result == null ||
-          result['geometry'] == null ||
-          result['geometry']['location'] == null) {
-        return null;
-      }
+      final address = (result['formatted_address'] ?? '').toString();
+      final loc = (result['geometry']?['location']) as Map<String, dynamic>?;
+      final lat = (loc?['lat'] as num?)?.toDouble() ?? 0.0;
+      final lng = (loc?['lng'] as num?)?.toDouble() ?? 0.0;
 
-      final location = result['geometry']['location'];
-      final lat = (location['lat'] as num?)?.toDouble();
-      final lng = (location['lng'] as num?)?.toDouble();
-
-      return {
-        'address':
-            (result['formatted_address'] ?? result['name'] ?? '') as String,
-        'lat': lat,
-        'lng': lng,
-      };
+      return {'address': address, 'lat': lat, 'lng': lng};
     } catch (e) {
       print('⚠️ Error en getAddressDetails: $e');
       return null;
@@ -198,7 +191,7 @@ class PlaceService {
   }
 
   // ===============================================================
-  // 🔄 Método compatible con formularios antiguos
+  // 🔄 5️⃣ Método auxiliar compatible con formularios antiguos
   // ===============================================================
   Future<List<Map<String, dynamic>>> searchPlaces(String query) async {
     final suggestions = await fetchCitySuggestions(query);
@@ -206,11 +199,13 @@ class PlaceService {
 
     for (final s in suggestions) {
       final details = await getCityDetails(s.placeId);
+      if (details == null) continue;
       results.add({
         'name': s.description,
         'placeId': s.placeId,
-        'lat': details?.lat,
-        'lng': details?.lng,
+        'lat': details.lat,
+        'lng': details.lng,
+        'countryCode': details.countryCode,
       });
     }
 

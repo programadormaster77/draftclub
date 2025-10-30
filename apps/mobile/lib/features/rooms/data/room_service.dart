@@ -44,9 +44,6 @@ class RoomService {
 
     final roomId = const Uuid().v4();
 
-    // ================================================================
-    // 🔧 Normalización de datos base
-    // ================================================================
     String city = (manualCity ?? '').trim();
     if (city.contains(',')) city = city.split(',').first.trim();
     if (city.isEmpty) city = 'Desconocido';
@@ -57,14 +54,10 @@ class RoomService {
     String finalSex = (sex ?? '').trim().toLowerCase();
     if (finalSex.isEmpty) finalSex = 'mixto';
 
-    // ================================================================
-    // 👤 Intentar obtener datos del perfil del usuario
-    // ================================================================
     try {
       final userDoc = await _firestore.collection('users').doc(uid).get();
       if (userDoc.exists) {
         final data = userDoc.data()!;
-
         finalSex = (data['sex'] ?? finalSex).toString().toLowerCase();
 
         if (manualCity == null || manualCity.isEmpty) {
@@ -80,9 +73,6 @@ class RoomService {
       }
     } catch (_) {}
 
-    // ================================================================
-    // 🌍 Intento de ubicación automática si no se proporcionó manualmente
-    // ================================================================
     if ((manualCity == null || manualCity.isEmpty) ||
         (finalLat == null || finalLng == null)) {
       try {
@@ -108,9 +98,6 @@ class RoomService {
       } catch (_) {}
     }
 
-    // ================================================================
-    // 🧱 Crear objeto Room
-    // ================================================================
     final room = Room(
       id: roomId,
       name: name.trim(),
@@ -131,9 +118,6 @@ class RoomService {
       sex: finalSex,
     );
 
-    // ================================================================
-    // 💾 Guardar en Firestore
-    // ================================================================
     await _firestore.collection('rooms').doc(roomId).set({
       ...room.toMap(),
       'players': [uid],
@@ -151,9 +135,6 @@ class RoomService {
       'sex': finalSex,
     });
 
-    // ================================================================
-    // ✅ Crear equipos predeterminados
-    // ================================================================
     final teamService = TeamService();
     await teamService.initDefaultTeams(
       roomId: roomId,
@@ -283,16 +264,19 @@ class RoomService {
   }
 
   /// ================================================================
-  /// 📍 Obtener salas públicas filtradas (global, tolerante)
+  /// 📍 Obtener salas públicas filtradas (GLOBAL + Estricto)
   /// ================================================================
   Future<List<Room>> getFilteredPublicRooms({
     String? cityName,
+    double? cityLat,
+    double? cityLng,
     double? userLat,
     double? userLng,
     String? userCountryCode,
     String? userSex,
     double radiusKm = 40,
     DateTime? targetDate,
+    String? cityCountryCode,
   }) async {
     try {
       final snap = await _firestore
@@ -301,46 +285,63 @@ class RoomService {
           .orderBy('createdAt', descending: true)
           .limit(200)
           .get();
+
       List<Room> rooms =
           snap.docs.map((doc) => Room.fromMap(doc.data())).toList();
 
-      // 🌍 Filtro país tolerante ISO/nombre
-      if (userCountryCode != null && userCountryCode.isNotEmpty) {
-        final userIso = _toIsoFromName(userCountryCode);
-        rooms = rooms.where((r) {
-          final rc = _toIsoFromName(r.countryCode ?? '');
-          if (rc == null || rc.isEmpty) return true;
-          return rc.toUpperCase() == (userIso ?? '').toUpperCase();
-        }).toList();
-      }
-
-      // 📅 Filtro de fecha
+      // 📅 Filtrar por fecha
       if (targetDate != null) {
         final start =
             DateTime(targetDate.year, targetDate.month, targetDate.day);
         final end = start.add(const Duration(days: 1));
+        rooms = rooms
+            .where((r) =>
+                r.eventAt != null &&
+                r.eventAt!.isAfter(start) &&
+                r.eventAt!.isBefore(end))
+            .toList();
+      }
+
+      // 🌍 Filtrar país (por ciudad seleccionada o usuario)
+      String? isoForFilter;
+      if ((cityName != null && cityName.trim().isNotEmpty) &&
+          (cityCountryCode != null && cityCountryCode.isNotEmpty)) {
+        isoForFilter = _toIsoFromName(cityCountryCode);
+      } else if (cityName == null || cityName.trim().isEmpty) {
+        isoForFilter = _toIsoFromName(userCountryCode);
+      }
+
+      if (isoForFilter != null && isoForFilter.isNotEmpty) {
+        final iso = isoForFilter.toUpperCase();
         rooms = rooms.where((r) {
-          final e = r.eventAt;
-          return e != null && e.isAfter(start) && e.isBefore(end);
+          final rc = _toIsoFromName(r.countryCode ?? '');
+          if (rc == null || rc.isEmpty) return true;
+          return rc.toUpperCase() == iso;
         }).toList();
       }
 
-      // 🏙️ Filtro ciudad + cercanía
+      // 🏙️ Ciudad + cercanía (modo estricto)
       if (cityName != null && cityName.trim().isNotEmpty) {
         final wanted = _norm(cityName.split(',').first);
         rooms = rooms.where((r) {
           final roomCity = _norm(r.city.split(',').first);
-          final nameMatch = roomCity == wanted ||
-              roomCity.contains(wanted) ||
-              wanted.contains(roomCity);
-          final nearCity = (r.cityLat != null &&
-                  r.cityLng != null &&
-                  userLat != null &&
-                  userLng != null)
-              ? _distanceKm(userLat, userLng, r.cityLat!, r.cityLng!) <=
+          final sameCity = roomCity == wanted;
+
+          final hasCoords = (r.cityLat != null &&
+              r.cityLng != null &&
+              cityLat != null &&
+              cityLng != null);
+
+          final nearby = hasCoords
+              ? _distanceKm(cityLat!, cityLng!, r.cityLat!, r.cityLng!) <=
                   radiusKm
               : false;
-          return nameMatch || nearCity;
+
+          final sameCountry = (cityCountryCode != null && r.countryCode != null)
+              ? r.countryCode!.toUpperCase() == cityCountryCode!.toUpperCase()
+              : true;
+
+          return sameCountry && (sameCity || nearby);
         }).toList();
       } else if (userLat != null && userLng != null) {
         rooms = rooms.where((r) {
@@ -351,7 +352,7 @@ class RoomService {
         }).toList();
       }
 
-      // 🚻 Filtro sexo
+      // 🚻 Filtrar por sexo
       if (userSex != null && userSex.isNotEmpty) {
         final u = userSex.toLowerCase();
         rooms = rooms.where((r) {
@@ -360,14 +361,15 @@ class RoomService {
         }).toList();
       }
 
-      // 🧭 Orden final
+      // 🧭 Ordenar resultados
       if (userLat != null && userLng != null) {
         rooms.sort((a, b) {
           final da = _distanceKm(userLat, userLng, a.lat ?? a.cityLat ?? 0,
               a.lng ?? a.cityLng ?? 0);
           final db = _distanceKm(userLat, userLng, b.lat ?? b.cityLat ?? 0,
               b.lng ?? b.cityLng ?? 0);
-          return da.compareTo(db);
+          if (da != db) return da.compareTo(db);
+          return b.createdAt.compareTo(a.createdAt);
         });
       } else {
         rooms.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -467,6 +469,7 @@ class RoomService {
     if (name == null) return null;
     final n = _norm(name);
     if (n.length == 2) return n.toUpperCase();
+
     const map = {
       'colom': 'CO',
       'mex': 'MX',
@@ -481,6 +484,7 @@ class RoomService {
       'venez': 'VE',
       'bra': 'BR',
       'us': 'US',
+      'eeuu': 'US',
       'canad': 'CA',
       'ingl': 'GB',
       'reino unido': 'GB',
@@ -500,6 +504,7 @@ class RoomService {
       'arab': 'SA',
       'sudaf': 'ZA',
     };
+
     for (final key in map.keys) {
       if (n.contains(key)) return map[key];
     }

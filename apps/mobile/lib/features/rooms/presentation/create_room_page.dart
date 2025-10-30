@@ -26,6 +26,36 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
   final _nameCtrl = TextEditingController();
   final _cityCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
+  // ===========================================================
+// 🌍 Extrae y normaliza el código ISO de país desde el texto
+// ===========================================================
+  String _extractCountryCode(String description) {
+    final lower = description.toLowerCase();
+
+    if (lower.contains('colom')) return 'CO';
+    if (lower.contains('mex')) return 'MX';
+    if (lower.contains('arg')) return 'AR';
+    if (lower.contains('esp') || lower.contains('espa')) return 'ES';
+    if (lower.contains('chi')) return 'CL';
+    if (lower.contains('per')) return 'PE';
+    if (lower.contains('ecuad')) return 'EC';
+    if (lower.contains('bra')) return 'BR';
+    if (lower.contains('venez')) return 'VE';
+    if (lower.contains('us') || lower.contains('eeuu')) return 'US';
+    if (lower.contains('fran')) return 'FR';
+    if (lower.contains('ita')) return 'IT';
+    if (lower.contains('ale')) return 'DE';
+    if (lower.contains('jap')) return 'JP';
+    if (lower.contains('canad')) return 'CA';
+    if (lower.contains('por')) return 'PT';
+    if (lower.contains('turq')) return 'TR';
+    if (lower.contains('rusi')) return 'RU';
+    if (lower.contains('india')) return 'IN';
+    if (lower.contains('corea')) return 'KR';
+    if (lower.contains('chin')) return 'CN';
+    if (lower.contains('austral')) return 'AU';
+    return 'XX'; // fallback universal
+  }
 
   DateTime? _eventAt;
   int _teams = 2;
@@ -252,13 +282,14 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
               final details = await PlaceService.getCityDetails(s['placeId']);
               final data = details != null
                   ? {
-                      'cityName': details.description,
+                      'cityName': details.description.split(',').first.trim(),
                       'lat': details.lat,
                       'lng': details.lng,
-                      'countryCode':
-                          (details.description.split(',').last).trim(),
+                      // 🔹 Normalizar país real
+                      'countryCode': _extractCountryCode(details.description),
                     }
                   : {'cityName': s['name']};
+
               if (!mounted) return;
               setState(() {
                 _selectedCityData = data;

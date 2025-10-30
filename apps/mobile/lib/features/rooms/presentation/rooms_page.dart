@@ -137,7 +137,7 @@ class _RoomsPageState extends State<RoomsPage>
     }
   }
 
-  // 2) Define filtros por defecto con 40 km y ciudad/sexo del usuario
+// 2) Define filtros por defecto con 40 km y ciudad/sexo del usuario
   void _rebuildFiltersDefaults() {
     _filters = RoomFilters(
       cityName: _myCity,
@@ -150,32 +150,36 @@ class _RoomsPageState extends State<RoomsPage>
     );
   }
 
-  // 3) Pide al service las salas con los filtros actuales
+// 3) Pide al service las salas con los filtros actuales
   Future<List<Room>> _fetchRooms() async {
-    // Global-ready: NO restringimos por país en la UI. El service puede
-    // usar countryCode para sharding/optimización, pero no bloqueamos países.
+    // ✅ Determinar el centro de búsqueda:
+    // Si hay ciudad seleccionada, usamos sus coords; si no, las del usuario.
+    final centerLat = _filters.cityLat ?? _filters.userLat;
+    final centerLng = _filters.cityLng ?? _filters.userLng;
+
     final rooms = await _service.getFilteredPublicRooms(
       cityName: _filters.cityName,
       userLat: _filters.userLat,
       userLng: _filters.userLng,
-      userCountryCode: _filters.userCountryCode, // opcional, no restrictivo
+      userCountryCode: _filters.userCountryCode,
       userSex: _filters.userSex,
       radiusKm: _useNearby ? _filters.radiusKm : 50.0,
       targetDate: _filters.date,
+      cityCountryCode: _filters.cityCountryCode, // 👈 nuevo
     );
 
-    // Orden final: cercanía (si hay coords) y luego createdAt
-    if (_filters.userLat != null && _filters.userLng != null) {
+    // 🔹 Orden final: por distancia al centro activo, luego por fecha de creación
+    if (centerLat != null && centerLng != null) {
       rooms.sort((a, b) {
         final da = _distanceKm(
-          _filters.userLat!,
-          _filters.userLng!,
+          centerLat,
+          centerLng,
           a.lat ?? a.cityLat ?? 0,
           a.lng ?? a.cityLng ?? 0,
         );
         final db = _distanceKm(
-          _filters.userLat!,
-          _filters.userLng!,
+          centerLat,
+          centerLng,
           b.lat ?? b.cityLat ?? 0,
           b.lng ?? b.cityLng ?? 0,
         );
@@ -189,7 +193,7 @@ class _RoomsPageState extends State<RoomsPage>
     return rooms;
   }
 
-  // ----------------- Utilidades -----------------
+// ----------------- Utilidades -----------------
   double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
     const R = 6371.0;
     final dLat = _deg2rad(lat2 - lat1);
@@ -214,7 +218,7 @@ class _RoomsPageState extends State<RoomsPage>
     return 'mixto';
   }
 
-  // ----------------- Acciones UI -----------------
+// ----------------- Acciones UI -----------------
   Future<void> _onRefresh() async {
     setState(() {
       _roomsFuture = _fetchRooms();
@@ -226,7 +230,6 @@ class _RoomsPageState extends State<RoomsPage>
     TextEditingController searchCtrl = TextEditingController();
     List<CitySuggestion> suggestions = [];
     bool searching = false;
-
     CitySuggestion? chosen;
 
     await showModalBottomSheet(
@@ -253,14 +256,11 @@ class _RoomsPageState extends State<RoomsPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Center(
-                    child: Text(
-                      'Buscar ciudad',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: Text('Buscar ciudad',
+                        style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600)),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -289,20 +289,13 @@ class _RoomsPageState extends State<RoomsPage>
                   const SizedBox(height: 14),
                   if (searching)
                     const Center(
-                      child: CircularProgressIndicator(
-                        color: Colors.blueAccent,
-                        strokeWidth: 2.5,
-                      ),
-                    )
+                        child: CircularProgressIndicator(
+                            color: Colors.blueAccent, strokeWidth: 2.5))
                   else if (suggestions.isEmpty)
                     const Expanded(
-                      child: Center(
-                        child: Text(
-                          'Escribe para buscar ciudades',
-                          style: TextStyle(color: Colors.white38),
-                        ),
-                      ),
-                    )
+                        child: Center(
+                            child: Text('Escribe para buscar ciudades',
+                                style: TextStyle(color: Colors.white38))))
                   else
                     Expanded(
                       child: ListView.separated(
@@ -314,10 +307,8 @@ class _RoomsPageState extends State<RoomsPage>
                           return ListTile(
                             leading: const Icon(Icons.location_city,
                                 color: Colors.blueAccent),
-                            title: Text(
-                              s.description,
-                              style: const TextStyle(color: Colors.white),
-                            ),
+                            title: Text(s.description,
+                                style: const TextStyle(color: Colors.white)),
                             onTap: () {
                               chosen = s;
                               Navigator.pop(context);
@@ -336,7 +327,7 @@ class _RoomsPageState extends State<RoomsPage>
 
     if (chosen == null) return;
 
-    // Detalles con lat/lng (GLOBAL: sin bloqueo por país)
+    // Obtén lat/lng + país ISO-2 de la CIUDAD seleccionada
     final details = await PlaceService.getCityDetails(chosen!.placeId);
     if (details == null) return;
 
@@ -345,6 +336,7 @@ class _RoomsPageState extends State<RoomsPage>
         cityName: details.description,
         cityLat: details.lat,
         cityLng: details.lng,
+        cityCountryCode: details.countryCode, // 👈 clave
       );
       _roomsFuture = _fetchRooms();
     });
@@ -371,8 +363,12 @@ class _RoomsPageState extends State<RoomsPage>
 
   void _clearCity() {
     setState(() {
-      _filters =
-          _filters.copyWith(cityName: _myCity, cityLat: null, cityLng: null);
+      _filters = _filters.copyWith(
+        cityName: _myCity,
+        cityLat: null,
+        cityLng: null,
+        cityCountryCode: null, // 👈 importante
+      );
       _roomsFuture = _fetchRooms();
     });
   }

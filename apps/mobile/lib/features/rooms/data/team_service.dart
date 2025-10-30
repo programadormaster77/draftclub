@@ -203,4 +203,96 @@ class TeamService {
     ];
     return palette[(i - 1) % palette.length];
   }
+
+// ------------------------------------------------------------------
+// 🎮 ACCIONES ADMINISTRATIVAS (solo para el dueño de la sala)
+// ------------------------------------------------------------------
+
+  /// ✅ Mover jugador a TITULAR
+  Future<String> promoteToStarter({
+    required String roomId,
+    required String teamId,
+    required String uid,
+  }) async {
+    try {
+      final teamRef = _teamsCol(roomId).doc(teamId);
+      final teamSnap = await teamRef.get();
+      if (!teamSnap.exists) return 'Equipo no encontrado.';
+
+      final team = Team.fromMap(teamSnap.data()!);
+
+      // Si ya es titular, no hacer nada
+      if (team.roles[uid] == 'titular') return 'Ya es titular.';
+
+      // Revisar si hay espacio disponible
+      final titulares = team.roles.values.where((r) => r == 'titular').length;
+      if (titulares >= team.maxPlayers) {
+        return 'El equipo ya tiene todos los titulares.';
+      }
+
+      await teamRef.update({'roles.$uid': 'titular'});
+      await _registerSystemLog(
+        roomId: roomId,
+        message: 'El jugador $uid fue promovido a TITULAR en ${team.name}.',
+      );
+
+      return 'Jugador promovido a TITULAR.';
+    } catch (e) {
+      return 'Error al promover: $e';
+    }
+  }
+
+  /// 🔄 Mover jugador a SUPLENTE
+  Future<String> demoteToBench({
+    required String roomId,
+    required String teamId,
+    required String uid,
+  }) async {
+    try {
+      final teamRef = _teamsCol(roomId).doc(teamId);
+      final teamSnap = await teamRef.get();
+      if (!teamSnap.exists) return 'Equipo no encontrado.';
+
+      final team = Team.fromMap(teamSnap.data()!);
+
+      if (team.roles[uid] == 'suplente') return 'Ya es suplente.';
+
+      await teamRef.update({'roles.$uid': 'suplente'});
+      await _registerSystemLog(
+        roomId: roomId,
+        message: 'El jugador $uid fue movido a SUPLENTE en ${team.name}.',
+      );
+
+      return 'Jugador movido a SUPLENTE.';
+    } catch (e) {
+      return 'Error al mover: $e';
+    }
+  }
+
+  /// ❌ Expulsar jugador del equipo
+  Future<String> removePlayerFromTeam({
+    required String roomId,
+    required String teamId,
+    required String uid,
+  }) async {
+    try {
+      final teamRef = _teamsCol(roomId).doc(teamId);
+      final teamSnap = await teamRef.get();
+      if (!teamSnap.exists) return 'Equipo no encontrado.';
+
+      await teamRef.update({
+        'players': FieldValue.arrayRemove([uid]),
+        'roles.$uid': FieldValue.delete(),
+      });
+
+      await _registerSystemLog(
+        roomId: roomId,
+        message: 'El jugador $uid fue expulsado del equipo.',
+      );
+
+      return 'Jugador expulsado del equipo.';
+    } catch (e) {
+      return 'Error al expulsar: $e';
+    }
+  }
 }

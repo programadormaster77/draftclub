@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// ====================================================================
 /// 👥 Team Model — Representa un equipo dentro de una sala (Room)
 /// ====================================================================
-/// Este modelo está optimizado para:
+/// Optimizado para:
 /// - Compatibilidad total con Firestore.
 /// - Manejo de roles dinámicos (titular/suplente).
 /// - Preparación para visualización en cancha (FieldPitch).
@@ -66,6 +66,7 @@ class Team {
   factory Team.fromMap(Map<String, dynamic> map) {
     DateTime created;
     final c = map['createdAt'];
+
     if (c is Timestamp) {
       created = c.toDate();
     } else if (c is String) {
@@ -157,4 +158,33 @@ class Team {
   @override
   String toString() =>
       'Team($name | ${titulares.length} titulares + ${suplentes.length} suplentes | color: $color)';
+
+  // ===============================================================
+  // ⚡ Extensiones funcionales adicionales (para administración)
+  // ===============================================================
+
+  /// 📤 Promueve a titular un jugador específico (si hay espacio)
+  Team promoteToStarter(String uid) {
+    if (!roles.containsKey(uid)) return this;
+    final newRoles = Map<String, String>.from(roles);
+    if (titulares.length < maxPlayers) {
+      newRoles[uid] = 'titular';
+    }
+    return copyWith(roles: newRoles);
+  }
+
+  /// 🪑 Mueve a suplente un jugador
+  Team demoteToBench(String uid) {
+    if (!roles.containsKey(uid)) return this;
+    final newRoles = Map<String, String>.from(roles);
+    newRoles[uid] = 'suplente';
+    return copyWith(roles: newRoles);
+  }
+
+  /// ❌ Expulsa completamente un jugador del equipo
+  Team removePlayer(String uid) {
+    final newPlayers = List<String>.from(players)..remove(uid);
+    final newRoles = Map<String, String>.from(roles)..remove(uid);
+    return copyWith(players: newPlayers, roles: newRoles);
+  }
 }

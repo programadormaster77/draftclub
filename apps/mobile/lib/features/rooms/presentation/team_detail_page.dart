@@ -306,6 +306,7 @@ class _TeamDetailPageState extends State<TeamDetailPage> {
                                     suplentes: suplentes,
                                     accent: teamColor,
                                     roomId: widget.room.id,
+                                    teamId: widget.team.id,
                                     isWide: isWide,
                                   ),
                                 ),
@@ -324,6 +325,7 @@ class _TeamDetailPageState extends State<TeamDetailPage> {
                                     suplentes: suplentes,
                                     accent: teamColor,
                                     roomId: widget.room.id,
+                                    teamId: widget.team.id, // 👈 agrega esto
                                     isWide: isWide,
                                   ),
                                 ],

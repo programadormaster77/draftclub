@@ -46,17 +46,31 @@ class _TeamListPageState extends State<TeamListPage> {
   }
 
   /// ================================================================
-  /// 🔹 Permite unirse o cambiar de equipo
+  /// 🔹 Permite unirse o cambiar de equipo (con redirección automática)
   /// ================================================================
   Future<void> _join(Team t) async {
     if (_loadingJoin) return;
     setState(() => _loadingJoin = true);
 
     try {
-      final msg = await _service.joinTeam(roomId: widget.room.id, teamId: t.id);
+      final msg = await _service.joinTeam(
+        roomId: widget.room.id,
+        teamId: t.id,
+      );
+
       await _loadMyTeam();
 
-      if (mounted) {
+      if (!mounted) return;
+
+      if (msg.toLowerCase().contains('te uniste')) {
+        // ✅ Si se unió correctamente, lo redirige al panel del equipo
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => TeamDetailPage(room: widget.room, team: t),
+          ),
+        );
+      } else {
+        // ⚠️ Si no fue unión exitosa, muestra el mensaje
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg), backgroundColor: Colors.blueAccent),
         );
