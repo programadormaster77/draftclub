@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../models/room_model.dart';
 import '../models/team_model.dart';
 import '../data/team_service.dart';
 import 'chat/chat_team_page.dart';
+import '../../../core/ui/field_pitch_widget.dart';
+import 'widgets/roster_side_panel.dart';
 
 /// ====================================================================
-/// 🧩 TeamDetailPage — Vista avanzada del equipo
+/// 🧩 TeamDetailPage — Vista avanzada del equipo (Arena Pro)
 /// ====================================================================
-/// 🔹 Muestra información del equipo.
-/// 🔹 Lista jugadores reales con nombre, avatar y rango.
-/// 🔹 Permite salir del equipo.
-/// 🔹 Permite editar nombre del equipo (si es creador/admin).
-/// 🔹 Enlace directo al chat del equipo.
+/// 🔹 Muestra info completa y visual del equipo.
+/// 🔹 Integra fotos, nombres y rangos reales en el campo.
+/// 🔹 Añade barra lateral de plantilla (RosterSidePanel).
+/// 🔹 Diseño moderno, adaptable y profesional.
 /// ====================================================================
 class TeamDetailPage extends StatefulWidget {
   final Room room;
@@ -43,7 +45,9 @@ class _TeamDetailPageState extends State<TeamDetailPage> {
     _nameCtrl.text = widget.team.name;
   }
 
-  /// 🔹 Actualiza el nombre del equipo en Firestore
+  // ================================================================
+  // ✏️ Actualiza el nombre del equipo
+  // ================================================================
   Future<void> _updateTeamName() async {
     try {
       await _firestore
@@ -55,7 +59,7 @@ class _TeamDetailPageState extends State<TeamDetailPage> {
       setState(() => _editingName = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Nombre del equipo actualizado.'),
+          content: Text('Nombre del equipo actualizado correctamente.'),
           backgroundColor: Colors.blueAccent,
         ),
       );
@@ -66,7 +70,9 @@ class _TeamDetailPageState extends State<TeamDetailPage> {
     }
   }
 
-  /// 🔹 Salir del equipo actual
+  // ================================================================
+  // 🚪 Salir del equipo
+  // ================================================================
   Future<void> _leaveTeam() async {
     await _service.leaveCurrentTeam(widget.room.id);
     if (mounted) {
@@ -78,6 +84,55 @@ class _TeamDetailPageState extends State<TeamDetailPage> {
         ),
       );
     }
+  }
+
+  // ================================================================
+  // 🧠 Genera posiciones tácticas automáticas
+  // ================================================================
+  List<Map<String, double>> _generateLayout(int count) {
+    final formations = <int, List<Map<String, double>>>{
+      5: [
+        {'x': 0.5, 'y': 0.1},
+        {'x': 0.3, 'y': 0.35},
+        {'x': 0.7, 'y': 0.35},
+        {'x': 0.35, 'y': 0.75},
+        {'x': 0.65, 'y': 0.75},
+      ],
+      7: [
+        {'x': 0.5, 'y': 0.1},
+        {'x': 0.3, 'y': 0.25},
+        {'x': 0.7, 'y': 0.25},
+        {'x': 0.2, 'y': 0.5},
+        {'x': 0.8, 'y': 0.5},
+        {'x': 0.35, 'y': 0.8},
+        {'x': 0.65, 'y': 0.8},
+      ],
+      9: [
+        {'x': 0.5, 'y': 0.08},
+        {'x': 0.25, 'y': 0.25},
+        {'x': 0.75, 'y': 0.25},
+        {'x': 0.15, 'y': 0.45},
+        {'x': 0.85, 'y': 0.45},
+        {'x': 0.3, 'y': 0.65},
+        {'x': 0.7, 'y': 0.65},
+        {'x': 0.4, 'y': 0.85},
+        {'x': 0.6, 'y': 0.85},
+      ],
+      11: [
+        {'x': 0.5, 'y': 0.08},
+        {'x': 0.25, 'y': 0.18},
+        {'x': 0.75, 'y': 0.18},
+        {'x': 0.15, 'y': 0.35},
+        {'x': 0.85, 'y': 0.35},
+        {'x': 0.3, 'y': 0.55},
+        {'x': 0.7, 'y': 0.55},
+        {'x': 0.2, 'y': 0.75},
+        {'x': 0.8, 'y': 0.75},
+        {'x': 0.4, 'y': 0.9},
+        {'x': 0.6, 'y': 0.9},
+      ],
+    };
+    return formations[count] ?? formations[5]!;
   }
 
   @override
@@ -143,189 +198,154 @@ class _TeamDetailPageState extends State<TeamDetailPage> {
             );
           }
 
-          final teamData = teamSnap.data!.data() as Map<String, dynamic>;
+          final teamData = teamSnap.data!.data() as Map<String, dynamic>? ?? {};
+          final team = Team.fromMap(teamData);
+          final colorHex = team.color;
+          final Color teamColor = _parseColor(colorHex);
           final players = List<String>.from(teamData['players'] ?? []);
-          final creatorId = teamData['creatorId'];
-          final isCreator = currentUid == creatorId;
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ================== CABECERA DEL EQUIPO ==================
-              Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A1A),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade800, width: 0.8),
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: Colors.blueAccent.withOpacity(0.2),
-                      child: const Icon(Icons.groups, color: Colors.white),
+          final isWide = MediaQuery.of(context).size.width >= 720;
+
+          return StreamBuilder<QuerySnapshot>(
+            stream: players.isEmpty
+                ? const Stream.empty()
+                : _firestore
+                    .collection('users')
+                    .where(FieldPath.documentId, whereIn: players)
+                    .snapshots(),
+            builder: (context, userSnap) {
+              if (!userSnap.hasData) {
+                return const Center(
+                  child: CircularProgressIndicator(color: Colors.blueAccent),
+                );
+              }
+
+              final users = userSnap.data!.docs;
+              final layout = _generateLayout(users.length);
+
+              final playerData = List.generate(users.length, (i) {
+                final u = users[i].data() as Map<String, dynamic>;
+                return {
+                  'uid': users[i].id,
+                  'name': u['name'] ?? 'Jugador',
+                  'avatar': u['avatar'] ?? '',
+                  'rank': u['rank'] ?? 'Bronce',
+                  'number': i + 1,
+                  'x': layout[i % layout.length]['x'],
+                  'y': layout[i % layout.length]['y'],
+                };
+              });
+
+              final titulares = players; // simplificado, luego se separarán
+              final suplentes = <String>[];
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ================== CABECERA ==================
+                  Container(
+                    margin: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1A1A),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: teamColor.withOpacity(0.3), width: 1),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Text(
-                        _nameCtrl.text,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 28,
+                          backgroundColor: teamColor.withOpacity(0.3),
+                          child:
+                              const Icon(Icons.groups, color: Colors.white70),
                         ),
-                      ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Text(
+                            _nameCtrl.text,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: teamColor,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.exit_to_app,
+                              color: Colors.redAccent),
+                          tooltip: 'Salir del equipo',
+                          onPressed: _leaveTeam,
+                        ),
+                      ],
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.exit_to_app,
-                          color: Colors.redAccent),
-                      tooltip: 'Salir del equipo',
-                      onPressed: _leaveTeam,
-                    ),
-                  ],
-                ),
-              ),
-
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Text(
-                  'Jugadores en este equipo',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
                   ),
-                ),
-              ),
 
-              // ================== LISTA DE JUGADORES ==================
-              Expanded(
-                child: players.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'Aún no hay jugadores en este equipo.',
-                          style: TextStyle(color: Colors.white70),
-                        ),
-                      )
-                    : StreamBuilder<QuerySnapshot>(
-                        stream: _firestore
-                            .collection('users')
-                            .where(FieldPath.documentId, whereIn: players)
-                            .snapshots(),
-                        builder: (context, userSnap) {
-                          if (!userSnap.hasData) {
-                            return const Center(
-                              child: CircularProgressIndicator(
-                                  color: Colors.blueAccent),
-                            );
-                          }
-
-                          final users = userSnap.data!.docs;
-
-                          return ListView.separated(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            separatorBuilder: (_, __) =>
-                                const Divider(color: Colors.white12),
-                            itemCount: users.length,
-                            itemBuilder: (_, i) {
-                              final u = users[i].data() as Map<String, dynamic>;
-                              final isMe = users[i].id == currentUid;
-                              final name = u['name'] ?? 'Jugador';
-                              final avatarUrl = u['avatar'] ?? '';
-                              final rank = u['rank'] ?? 'Rango 1';
-
-                              return ListTile(
-                                leading: CircleAvatar(
-                                  backgroundImage: avatarUrl.isNotEmpty
-                                      ? NetworkImage(avatarUrl)
-                                      : null,
-                                  backgroundColor:
-                                      Colors.blueAccent.withOpacity(0.2),
-                                  child: avatarUrl.isEmpty
-                                      ? const Icon(Icons.person,
-                                          color: Colors.white)
-                                      : null,
-                                ),
-
-                                // ================== NOMBRE + RANGO ==================
-                                title: Wrap(
-                                  spacing: 8,
-                                  runSpacing: 4,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    Text(
-                                      isMe ? '$name (Tú)' : name,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            Colors.blueAccent.withOpacity(0.2),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        rank,
-                                        style: const TextStyle(
-                                            color: Colors.blueAccent,
-                                            fontSize: 12),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-
-                                subtitle: Text(
-                                  users[i].id,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white54,
-                                    fontSize: 12,
+                  // ================== CANCHA + PANEL ==================
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: isWide
+                          ? Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: FieldPitchWidget(
+                                    teamColor: teamColor,
+                                    players: playerData,
                                   ),
                                 ),
-
-                                // ================== ACCIONES DERECHA ==================
-                                trailing: Wrap(
-                                  spacing: 4,
-                                  children: [
-                                    if (!isMe)
-                                      IconButton(
-                                        icon: const Icon(Icons.person_add_alt_1,
-                                            color: Colors.white70, size: 20),
-                                        tooltip:
-                                            'Seguir jugador (próximamente)',
-                                        onPressed: () {
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                  'Pronto podrás seguir a $name'),
-                                              backgroundColor:
-                                                  Colors.blueAccent,
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                  ],
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  flex: 2,
+                                  child: RosterSidePanel(
+                                    titulares: titulares,
+                                    suplentes: suplentes,
+                                    accent: teamColor,
+                                    roomId: widget.room.id,
+                                    isWide: isWide,
+                                  ),
                                 ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-              ),
-            ],
+                              ],
+                            )
+                          : SingleChildScrollView(
+                              child: Column(
+                                children: [
+                                  FieldPitchWidget(
+                                    teamColor: teamColor,
+                                    players: playerData,
+                                  ),
+                                  const SizedBox(height: 20),
+                                  RosterSidePanel(
+                                    titulares: titulares,
+                                    suplentes: suplentes,
+                                    accent: teamColor,
+                                    roomId: widget.room.id,
+                                    isWide: isWide,
+                                  ),
+                                ],
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
     );
+  }
+
+  // ================================================================
+  // 🎨 Convierte código HEX a Color
+  // ================================================================
+  Color _parseColor(String hex) {
+    hex = hex.replaceAll('#', '');
+    if (hex.length == 6) hex = 'FF$hex';
+    return Color(int.parse(hex, radix: 16));
   }
 }

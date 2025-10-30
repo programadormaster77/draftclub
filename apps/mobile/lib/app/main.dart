@@ -9,8 +9,8 @@ import 'package:flutter/services.dart';
 // 🌐 Configuración de Firebase
 import '../firebase_options.dart';
 
-// 🎨 Tema visual global
-import 'theme.dart';
+// 🎨 Tema visual global (nuevo Arena Pro)
+import 'package:draftclub_mobile/core/ui/ui_theme.dart';
 
 // 🧩 Páginas del flujo
 import '../features/auth/presentation/login_page.dart';
@@ -19,11 +19,11 @@ import '../features/feed/presentation/dashboard_page.dart';
 import '../features/rooms/presentation/room_detail_page.dart';
 import 'package:draftclub_mobile/features/rooms/models/room_model.dart';
 
-// 🔗 Nuevo sistema de enlaces (reemplazo de uni_links)
+// 🔗 Sistema de enlaces (deep links)
 import 'package:app_links/app_links.dart';
 
 /// ============================================================================
-/// 🚀 PUNTO DE ENTRADA PRINCIPAL DE LA APLICACIÓN (App)
+/// 🚀 PUNTO DE ENTRADA PRINCIPAL DE LA APLICACIÓN
 /// ============================================================================
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,20 +53,18 @@ class _DraftClubAppState extends State<DraftClubApp> {
     _initAppLinks();
   }
 
-  // ============================================================
   // 🔗 Inicializa el sistema de enlaces "draftclub://room/<ID>"
-  // ============================================================
   Future<void> _initAppLinks() async {
     try {
       _appLinks = AppLinks();
 
-      // 🔹 Si la app se abrió desde un enlace (app cerrada)
+      // Si la app se abrió desde un enlace (app cerrada)
       final initialUri = await _appLinks.getInitialAppLink();
       if (initialUri != null) {
         _handleIncomingLink(initialUri);
       }
 
-      // 🔹 Si la app ya está abierta y llega un nuevo enlace
+      // Si la app ya está abierta y llega un nuevo enlace
       _sub = _appLinks.uriLinkStream.listen((Uri uri) {
         _handleIncomingLink(uri);
       }, onError: (err) {
@@ -77,9 +75,7 @@ class _DraftClubAppState extends State<DraftClubApp> {
     }
   }
 
-  /// ============================================================
   /// 🧭 Maneja el enlace entrante y abre la sala real de Firestore
-  /// ============================================================
   Future<void> _handleIncomingLink(Uri uri) async {
     debugPrint('🔗 Enlace recibido: $uri');
 
@@ -88,7 +84,7 @@ class _DraftClubAppState extends State<DraftClubApp> {
           uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
 
       if (roomId != null && mounted) {
-        // 🔹 Mostrar pantalla de carga mientras obtenemos la sala
+        // Loader mientras obtenemos la sala
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -103,7 +99,7 @@ class _DraftClubAppState extends State<DraftClubApp> {
               .doc(roomId)
               .get();
 
-          Navigator.of(context).pop(); // cerrar el loader
+          Navigator.of(context).pop(); // Cierra loader
 
           if (!snap.exists) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -124,7 +120,7 @@ class _DraftClubAppState extends State<DraftClubApp> {
             ),
           );
         } catch (e) {
-          Navigator.of(context).pop(); // cerrar el loader si falla
+          Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Error al abrir la sala: $e'),
@@ -147,7 +143,7 @@ class _DraftClubAppState extends State<DraftClubApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'DraftClub ⚽',
-      theme: DraftClubTheme.darkTheme,
+      theme: AppTheme.darkTheme, // 🎨 Aplica el nuevo tema Arena Pro
       home: const AuthStateHandler(),
     );
   }
@@ -205,20 +201,16 @@ class _LoadingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.background,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CircularProgressIndicator(color: Colors.white),
+            const CircularProgressIndicator(color: AppColors.accentBlue),
             const SizedBox(height: 18),
             Text(
               text,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-              ),
+              style: AppTextStyles.subtitle,
             ),
           ],
         ),

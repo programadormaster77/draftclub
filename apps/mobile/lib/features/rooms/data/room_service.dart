@@ -9,12 +9,12 @@ import 'team_service.dart';
 import 'dart:math' as math;
 
 /// ====================================================================
-/// ⚙️ RoomService — Gestión central de salas en Firestore
+/// ⚙️ RoomService — Gestión central de salas en Firestore (GLOBAL)
 /// ====================================================================
-/// 🔹 Crear, actualizar, eliminar, unir y salir de salas.
-/// 🔹 Soporta ubicación completa (ciudad, país, coordenadas, dirección exacta).
-/// 🔹 Filtrado avanzado (cercanía, país, fecha, sexo, dirección).
-/// 🔹 Crea equipos automáticos al generar una sala.
+/// 🔹 Compatible con cualquier país y nombre de ciudad.
+/// 🔹 Normaliza códigos de país a formato ISO-2 universal.
+/// 🔹 Soporta ubicación, filtrado avanzado y equipos automáticos.
+/// 🔹 Resiliente ante perfiles incompletos o geolocalización fallida.
 /// ====================================================================
 class RoomService {
   final _firestore = FirebaseFirestore.instance;
@@ -29,52 +29,60 @@ class RoomService {
     required int playersPerTeam,
     required int substitutes,
     required bool isPublic,
-    String? manualCity, // Ciudad escrita o seleccionada
+    String? manualCity,
     double? cityLat,
     double? cityLng,
     double? lat,
     double? lng,
     String? countryCode,
     DateTime? eventAt,
-    String? exactAddress, // Dirección exacta del partido
-    String? sex, // 🚻 Tipo de partido (Masculino, Femenino, Mixto)
+    String? exactAddress,
+    String? sex,
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Usuario no autenticado');
 
     final roomId = const Uuid().v4();
 
-    String city = manualCity ?? 'Desconocido';
+    // ================================================================
+    // 🔧 Normalización de datos base
+    // ================================================================
+    String city = (manualCity ?? '').trim();
+    if (city.contains(',')) city = city.split(',').first.trim();
+    if (city.isEmpty) city = 'Desconocido';
+
     double? finalLat = lat ?? cityLat;
     double? finalLng = lng ?? cityLng;
-    String? country = countryCode;
-    String? finalSex = sex;
+    String? country = _toIsoFromName(countryCode);
+    String finalSex = (sex ?? '').trim().toLowerCase();
+    if (finalSex.isEmpty) finalSex = 'mixto';
 
+    // ================================================================
     // 👤 Intentar obtener datos del perfil del usuario
+    // ================================================================
     try {
       final userDoc = await _firestore.collection('users').doc(uid).get();
       if (userDoc.exists) {
         final data = userDoc.data()!;
-        // Si no se pasa sexo, tomarlo del perfil
-        finalSex ??= data['sex'] ?? 'Mixto';
-        // Si no se pasa ciudad, tomarla del perfil
-        if (manualCity == null || manualCity.isEmpty) {
-          city = data['city'] ?? city;
-        }
-        // Si no se pasa país, tomarlo del perfil
-        country ??= data['countryCode'];
-        // Si no se pasan coordenadas, usar las del perfil
-        finalLat ??=
-            (data['lat'] is num) ? (data['lat'] as num).toDouble() : null;
-        finalLng ??=
-            (data['lng'] is num) ? (data['lng'] as num).toDouble() : null;
-      }
-    } catch (e) {
-      // no bloquear creación
-      // print('⚠️ Error obteniendo perfil del usuario: $e');
-    }
 
+        finalSex = (data['sex'] ?? finalSex).toString().toLowerCase();
+
+        if (manualCity == null || manualCity.isEmpty) {
+          final userCity = data['city'] ?? data['ciudad'];
+          if (userCity != null && userCity.toString().isNotEmpty) {
+            city = userCity.toString().split(',').first.trim();
+          }
+        }
+
+        country ??= _toIsoFromName(data['countryCode']);
+        finalLat ??= (data['lat'] as num?)?.toDouble();
+        finalLng ??= (data['lng'] as num?)?.toDouble();
+      }
+    } catch (_) {}
+
+    // ================================================================
     // 🌍 Intento de ubicación automática si no se proporcionó manualmente
+    // ================================================================
     if ((manualCity == null || manualCity.isEmpty) ||
         (finalLat == null || finalLng == null)) {
       try {
@@ -86,25 +94,23 @@ class RoomService {
           }
           if (permission == LocationPermission.always ||
               permission == LocationPermission.whileInUse) {
-            final position = await Geolocator.getCurrentPosition(
+            final pos = await Geolocator.getCurrentPosition(
                 desiredAccuracy: LocationAccuracy.low);
-            final placemarks = await placemarkFromCoordinates(
-              position.latitude,
-              position.longitude,
-            );
+            final placemarks =
+                await placemarkFromCoordinates(pos.latitude, pos.longitude);
             final p = placemarks.first;
-            city = p.locality ?? 'Desconocido';
-            finalLat = position.latitude;
-            finalLng = position.longitude;
-            country ??= p.isoCountryCode;
+            city = p.locality ?? city;
+            finalLat = pos.latitude;
+            finalLng = pos.longitude;
+            country ??= _toIsoFromName(p.isoCountryCode);
           }
         }
-      } catch (e) {
-        // print('⚠️ Error al obtener ubicación automática: $e');
-      }
+      } catch (_) {}
     }
 
+    // ================================================================
     // 🧱 Crear objeto Room
+    // ================================================================
     final room = Room(
       id: roomId,
       name: name.trim(),
@@ -116,32 +122,38 @@ class RoomService {
       city: city,
       createdAt: DateTime.now(),
       eventAt: eventAt,
-      cityLat: cityLat,
-      cityLng: cityLng,
+      cityLat: cityLat ?? finalLat,
+      cityLng: cityLng ?? finalLng,
       lat: finalLat,
       lng: finalLng,
       countryCode: country,
       exactAddress: exactAddress,
-      sex: finalSex ?? 'Mixto',
+      sex: finalSex,
     );
 
+    // ================================================================
     // 💾 Guardar en Firestore
+    // ================================================================
     await _firestore.collection('rooms').doc(roomId).set({
       ...room.toMap(),
       'players': [uid],
+      'updatedAt': Timestamp.now(),
       if (eventAt != null) 'eventAt': Timestamp.fromDate(eventAt),
       if (exactAddress != null && exactAddress.isNotEmpty)
         'exactAddress': exactAddress,
       if (finalLat != null && finalLng != null) ...{
         'lat': finalLat,
         'lng': finalLng,
+        'cityLat': cityLat ?? finalLat,
+        'cityLng': cityLng ?? finalLng,
       },
-      if (country != null) 'countryCode': country,
-      if (finalSex != null) 'sex': finalSex,
-      'updatedAt': Timestamp.now(),
+      if (country != null && country.isNotEmpty) 'countryCode': country,
+      'sex': finalSex,
     });
 
+    // ================================================================
     // ✅ Crear equipos predeterminados
+    // ================================================================
     final teamService = TeamService();
     await teamService.initDefaultTeams(
       roomId: roomId,
@@ -166,41 +178,39 @@ class RoomService {
     }
   }
 
-  // ----------------------------------------------------------------
-  // 🔧 Utilidad interna: asegurar ciudad/país/coords del usuario
-  //    - Si faltan lat/lng en perfil, intenta Geolocator y actualiza.
-  // ----------------------------------------------------------------
+  // ================================================================
+  // 🔧 Asegurar ciudad/país/coords del usuario
+  // ================================================================
   Future<
       ({
         String? city,
         String? countryCode,
         double? lat,
         double? lng,
-        String? sex,
+        String? sex
       })> _ensureUserGeoProfile() async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Usuario no autenticado');
 
-    String? userCity;
-    String? userCountryCode;
-    double? userLat;
-    double? userLng;
-    String? userSex;
+    String? city;
+    String? country;
+    double? lat;
+    double? lng;
+    String? sex;
 
     try {
       final userDoc = await _firestore.collection('users').doc(uid).get();
       if (userDoc.exists) {
-        final data = userDoc.data()!;
-        userCity = data['city'];
-        userCountryCode = data['countryCode'];
-        userLat = (data['lat'] is num) ? (data['lat'] as num).toDouble() : null;
-        userLng = (data['lng'] is num) ? (data['lng'] as num).toDouble() : null;
-        userSex = data['sex'];
+        final d = userDoc.data()!;
+        city = d['city'] ?? d['ciudad'];
+        country = _toIsoFromName(d['countryCode']);
+        lat = (d['lat'] as num?)?.toDouble();
+        lng = (d['lng'] as num?)?.toDouble();
+        sex = (d['sex'] ?? 'mixto').toString().toLowerCase();
       }
     } catch (_) {}
 
-    // Si faltan coords, intentar geolocalizar
-    if (userLat == null || userLng == null) {
+    if (lat == null || lng == null) {
       try {
         final enabled = await Geolocator.isLocationServiceEnabled();
         if (enabled) {
@@ -212,41 +222,30 @@ class RoomService {
               perm == LocationPermission.whileInUse) {
             final pos = await Geolocator.getCurrentPosition(
                 desiredAccuracy: LocationAccuracy.low);
-            userLat = pos.latitude;
-            userLng = pos.longitude;
-
+            lat = pos.latitude;
+            lng = pos.longitude;
             try {
-              final ps = await placemarkFromCoordinates(userLat!, userLng!);
+              final ps = await placemarkFromCoordinates(lat!, lng!);
               final p = ps.first;
-              userCity ??= p.locality;
-              userCountryCode ??= p.isoCountryCode;
+              city ??= p.locality;
+              country ??= _toIsoFromName(p.isoCountryCode);
             } catch (_) {}
-
-            // guardar en perfil para próximas veces
-            try {
-              await _firestore.collection('users').doc(uid).update({
-                if (userCity != null) 'city': userCity,
-                if (userCountryCode != null) 'countryCode': userCountryCode,
-                'lat': userLat,
-                'lng': userLng,
-              });
-            } catch (_) {}
+            await _firestore.collection('users').doc(uid).update({
+              if (city != null) 'city': city,
+              if (country != null) 'countryCode': country,
+              'lat': lat,
+              'lng': lng,
+            });
           }
         }
       } catch (_) {}
     }
 
-    return (
-      city: userCity,
-      countryCode: userCountryCode,
-      lat: userLat,
-      lng: userLng,
-      sex: userSex
-    );
+    return (city: city, countryCode: country, lat: lat, lng: lng, sex: sex);
   }
 
   /// ================================================================
-  /// 📍 Obtener salas públicas filtradas automáticamente según ubicación real
+  /// 📍 Obtener salas públicas filtradas automáticamente
   /// ================================================================
   Future<List<Room>> getFilteredPublicRoomsAuto({
     double radiusKm = 40,
@@ -254,16 +253,9 @@ class RoomService {
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Usuario no autenticado');
-
     try {
       final profile = await _ensureUserGeoProfile();
-
-      // Si seguimos sin coords → no devolvemos todas; devolvemos vacío para evitar ruido
-      if (profile.lat == null || profile.lng == null) {
-        // print('⚠️ Usuario sin coordenadas — devolviendo lista vacía');
-        return [];
-      }
-
+      if (profile.lat == null || profile.lng == null) return [];
       final rooms = await getFilteredPublicRooms(
         cityName: profile.city,
         userLat: profile.lat,
@@ -273,44 +265,25 @@ class RoomService {
         radiusKm: radiusKm,
         targetDate: targetDate,
       );
-
-      // Orden final: distancia -> fecha -> createdAt
       rooms.sort((a, b) {
-        final da = (a.lat != null && a.lng != null)
-            ? _distanceKm(profile.lat!, profile.lng!, a.lat!, a.lng!)
-            : (a.cityLat != null && a.cityLng != null)
-                ? _distanceKm(
-                    profile.lat!, profile.lng!, a.cityLat!, a.cityLng!)
-                : 99999;
-        final db = (b.lat != null && b.lng != null)
-            ? _distanceKm(profile.lat!, profile.lng!, b.lat!, b.lng!)
-            : (b.cityLat != null && b.cityLng != null)
-                ? _distanceKm(
-                    profile.lat!, profile.lng!, b.cityLat!, b.cityLng!)
-                : 99999;
+        final da = _distanceKm(profile.lat!, profile.lng!,
+            a.lat ?? a.cityLat ?? 0, a.lng ?? a.cityLng ?? 0);
+        final db = _distanceKm(profile.lat!, profile.lng!,
+            b.lat ?? b.cityLat ?? 0, b.lng ?? b.cityLng ?? 0);
         if (da != db) return da.compareTo(db);
         if (a.eventAt != null && b.eventAt != null) {
           return a.eventAt!.compareTo(b.eventAt!);
         }
         return b.createdAt.compareTo(a.createdAt);
       });
-
       return rooms;
-    } catch (e) {
-      // print('⚠️ Error en getFilteredPublicRoomsAuto: $e');
+    } catch (_) {
       return [];
     }
   }
 
   /// ================================================================
-  /// 📍 Obtener salas públicas filtradas (modo manual/general)
-  ///    Regla importante:
-  ///    - Si NO hay ciudad seleccionada por el usuario:
-  ///        ➜ Filtrar SIEMPRE por proximidad (<= radiusKm) usando userLat/Lng.
-  ///        ➜ Además exigir mismo país cuando esté disponible.
-  ///    - Si HAY ciudad seleccionada:
-  ///        ➜ Aceptar salas de esa ciudad (o a ~radiusKm de sus coords)
-  ///          respetando país cuando esté disponible.
+  /// 📍 Obtener salas públicas filtradas (global, tolerante)
   /// ================================================================
   Future<List<Room>> getFilteredPublicRooms({
     String? cityName,
@@ -322,135 +295,86 @@ class RoomService {
     DateTime? targetDate,
   }) async {
     try {
-      final query = _firestore
+      final snap = await _firestore
           .collection('rooms')
           .where('isPublic', isEqualTo: true)
           .orderBy('createdAt', descending: true)
-          .limit(200);
-
-      final snap = await query.get();
+          .limit(200)
+          .get();
       List<Room> rooms =
           snap.docs.map((doc) => Room.fromMap(doc.data())).toList();
 
-      // 🌎 Filtro país (si el usuario tiene país, nunca mostrar de otro país)
+      // 🌍 Filtro país tolerante ISO/nombre
       if (userCountryCode != null && userCountryCode.isNotEmpty) {
+        final userIso = _toIsoFromName(userCountryCode);
         rooms = rooms.where((r) {
-          final rc = r.countryCode;
-          if (rc == null || rc.isEmpty) return true; // permitir si no se guardó
-          return rc.toUpperCase() == userCountryCode.toUpperCase();
+          final rc = _toIsoFromName(r.countryCode ?? '');
+          if (rc == null || rc.isEmpty) return true;
+          return rc.toUpperCase() == (userIso ?? '').toUpperCase();
         }).toList();
       }
 
-      // 📅 Filtro de fecha (mismo día)
+      // 📅 Filtro de fecha
       if (targetDate != null) {
         final start =
             DateTime(targetDate.year, targetDate.month, targetDate.day);
-        final end = start.add(const Duration(days: 1)).subtract(
-              const Duration(milliseconds: 1),
-            );
+        final end = start.add(const Duration(days: 1));
         rooms = rooms.where((r) {
-          if (r.eventAt == null) return false;
-          final e = r.eventAt!;
-          return (e.isAfter(start) || e.isAtSameMomentAs(start)) &&
-              (e.isBefore(end) || e.isAtSameMomentAs(end));
+          final e = r.eventAt;
+          return e != null && e.isAfter(start) && e.isBefore(end);
         }).toList();
       }
 
-      // 🏙️ Ciudad manual seleccionada
+      // 🏙️ Filtro ciudad + cercanía
       if (cityName != null && cityName.trim().isNotEmpty) {
-        final cityLc = cityName.trim().toLowerCase();
+        final wanted = _norm(cityName.split(',').first);
         rooms = rooms.where((r) {
-          // match por nombre de ciudad
-          final matchName = (r.city).toLowerCase() == cityLc;
-
-          // match por proximidad al centro de la ciudad guardado en la sala
-          final hasCoords = r.cityLat != null && r.cityLng != null;
-          final nearCity = (hasCoords && userLat != null && userLng != null)
+          final roomCity = _norm(r.city.split(',').first);
+          final nameMatch = roomCity == wanted ||
+              roomCity.contains(wanted) ||
+              wanted.contains(roomCity);
+          final nearCity = (r.cityLat != null &&
+                  r.cityLng != null &&
+                  userLat != null &&
+                  userLng != null)
               ? _distanceKm(userLat, userLng, r.cityLat!, r.cityLng!) <=
                   radiusKm
               : false;
-
-          // Si conocemos el país del usuario, respetarlo
-          final sameCountry = (userCountryCode == null ||
-              r.countryCode == null ||
-              r.countryCode!.toUpperCase() == userCountryCode.toUpperCase());
-
-          return sameCountry && (matchName || nearCity);
+          return nameMatch || nearCity;
         }).toList();
-      } else {
-        // 🚫 No hay ciudad seleccionada → SIEMPRE filtrar por cercanía real
-        //     (así evitamos que aparezcan salas de Barcelona cuando estás en Bogotá).
-        if (userLat != null && userLng != null) {
-          rooms = rooms.where((r) {
-            // Preferir lat/lng exactos; si no hay, usar cityLat/cityLng
-            final lat = r.lat ?? r.cityLat;
-            final lng = r.lng ?? r.cityLng;
-            if (lat == null || lng == null) {
-              // como fallback, permitir si coincide por texto de ciudad EXACTO
-              return r.city.trim().isNotEmpty &&
-                  // si el usuario no tiene ciudad text, no podemos comparar
-                  false;
-            }
-            final d = _distanceKm(userLat, userLng, lat, lng);
-            // país ya se filtró arriba
-            return d <= radiusKm;
-          }).toList();
-
-          // Si después de proximidad no queda nada, NO devolvemos todas;
-          // devolvemos vacío para forzar UX correcta (sin ruido de otras ciudades).
-        } else {
-          // Sin coords y sin ciudad → no devolver todo el mundo.
-          return [];
-        }
-      }
-
-      // 🚻 Filtro sexo (mixto o compatible con el usuario)
-      if (userSex != null && userSex.isNotEmpty) {
+      } else if (userLat != null && userLng != null) {
         rooms = rooms.where((r) {
-          final sex = (r.sex ?? 'mixto').toLowerCase();
-          if (sex == 'mixto') return true;
-          return sex == userSex.toLowerCase();
+          final lat = r.lat ?? r.cityLat;
+          final lng = r.lng ?? r.cityLng;
+          if (lat == null || lng == null) return false;
+          return _distanceKm(userLat, userLng, lat, lng) <= radiusKm;
         }).toList();
       }
 
-      // 🧭 Ordenar por distancia si tenemos coords; luego por fecha/creación
+      // 🚻 Filtro sexo
+      if (userSex != null && userSex.isNotEmpty) {
+        final u = userSex.toLowerCase();
+        rooms = rooms.where((r) {
+          final s = (r.sex ?? 'mixto').toLowerCase();
+          return s == 'mixto' || s == u;
+        }).toList();
+      }
+
+      // 🧭 Orden final
       if (userLat != null && userLng != null) {
         rooms.sort((a, b) {
-          double da;
-          {
-            final la = a.lat ?? a.cityLat;
-            final lo = a.lng ?? a.cityLng;
-            da = (la != null && lo != null)
-                ? _distanceKm(userLat, userLng, la, lo)
-                : 99999;
-          }
-          double db;
-          {
-            final lb = b.lat ?? b.cityLat;
-            final lo = b.lng ?? b.cityLng;
-            db = (lb != null && lo != null)
-                ? _distanceKm(userLat, userLng, lb, lo)
-                : 99999;
-          }
-          if (da != db) return da.compareTo(db);
-          if (a.eventAt != null && b.eventAt != null) {
-            return a.eventAt!.compareTo(b.eventAt!);
-          }
-          return b.createdAt.compareTo(a.createdAt);
+          final da = _distanceKm(userLat, userLng, a.lat ?? a.cityLat ?? 0,
+              a.lng ?? a.cityLng ?? 0);
+          final db = _distanceKm(userLat, userLng, b.lat ?? b.cityLat ?? 0,
+              b.lng ?? b.cityLng ?? 0);
+          return da.compareTo(db);
         });
       } else {
-        // Sin coords → ordenar por fecha/creación
-        rooms.sort((a, b) {
-          if (a.eventAt != null && b.eventAt != null) {
-            return a.eventAt!.compareTo(b.eventAt!);
-          }
-          return b.createdAt.compareTo(a.createdAt);
-        });
+        rooms.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       }
 
       return rooms;
-    } catch (e) {
-      // print('⚠️ Error al obtener salas filtradas: $e');
+    } catch (_) {
       return [];
     }
   }
@@ -467,8 +391,7 @@ class RoomService {
             math.cos(_deg2rad(lat2)) *
             math.sin(dLon / 2) *
             math.sin(dLon / 2);
-    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-    return R * c;
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
   }
 
   double _deg2rad(double deg) => deg * (math.pi / 180);
@@ -480,21 +403,17 @@ class RoomService {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Usuario no autenticado');
     final ref = _firestore.collection('rooms').doc(roomId);
-
     return _firestore.runTransaction((tx) async {
       final doc = await tx.get(ref);
       if (!doc.exists) throw Exception('La sala no existe');
-
       final data = doc.data()!;
       final players = List<String>.from(data['players'] ?? []);
       final teams = data['teams'] ?? 0;
       final playersPerTeam = data['playersPerTeam'] ?? 0;
       final substitutes = data['substitutes'] ?? 0;
       final maxPlayers = (teams * playersPerTeam) + substitutes;
-
       if (players.contains(uid)) return 'Ya estás en esta sala.';
       if (players.length >= maxPlayers) return 'La sala ya está llena.';
-
       players.add(uid);
       tx.update(ref, {'players': players, 'updatedAt': Timestamp.now()});
       return 'Te uniste correctamente.';
@@ -505,15 +424,12 @@ class RoomService {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Usuario no autenticado');
     final ref = _firestore.collection('rooms').doc(roomId);
-
     return _firestore.runTransaction((tx) async {
       final doc = await tx.get(ref);
       if (!doc.exists) throw Exception('La sala no existe');
       final data = doc.data()!;
       final players = List<String>.from(data['players'] ?? []);
-
       if (!players.contains(uid)) return 'No estás en esta sala.';
-
       players.remove(uid);
       tx.update(ref, {'players': players, 'updatedAt': Timestamp.now()});
       return 'Saliste correctamente de la sala.';
@@ -521,25 +437,15 @@ class RoomService {
   }
 
   Future<void> updateRoom(String roomId, Map<String, dynamic> updates) async {
-    try {
-      await _firestore
-          .collection('rooms')
-          .doc(roomId)
-          .update({...updates, 'updatedAt': Timestamp.now()});
-    } catch (e) {
-      throw Exception('Error al actualizar la sala: $e');
-    }
+    await _firestore
+        .collection('rooms')
+        .doc(roomId)
+        .update({...updates, 'updatedAt': Timestamp.now()});
   }
 
   Future<Room?> getRoomById(String roomId) async {
-    try {
-      final doc = await _firestore.collection('rooms').doc(roomId).get();
-      if (!doc.exists) return null;
-      return Room.fromMap(doc.data()!);
-    } catch (e) {
-      // print('⚠️ Error al obtener sala por ID: $e');
-      return null;
-    }
+    final doc = await _firestore.collection('rooms').doc(roomId).get();
+    return doc.exists ? Room.fromMap(doc.data()!) : null;
   }
 
   Future<void> deleteRoom(String roomId) async {
@@ -547,12 +453,91 @@ class RoomService {
     if (uid == null) throw Exception('Usuario no autenticado');
     final doc = await _firestore.collection('rooms').doc(roomId).get();
     if (!doc.exists) throw Exception('La sala no existe');
-
     final data = doc.data()!;
     if (data['creatorId'] != uid) {
       throw Exception('Solo el creador puede eliminar la sala.');
     }
-
     await _firestore.collection('rooms').doc(roomId).delete();
+  }
+
+  // ================================================================
+  // 🌎 Normalizadores universales
+  // ================================================================
+  String? _toIsoFromName(String? name) {
+    if (name == null) return null;
+    final n = _norm(name);
+    if (n.length == 2) return n.toUpperCase();
+    const map = {
+      'colom': 'CO',
+      'mex': 'MX',
+      'arg': 'AR',
+      'chile': 'CL',
+      'per': 'PE',
+      'esp': 'ES',
+      'ecuad': 'EC',
+      'boliv': 'BO',
+      'uru': 'UY',
+      'para': 'PY',
+      'venez': 'VE',
+      'bra': 'BR',
+      'us': 'US',
+      'canad': 'CA',
+      'ingl': 'GB',
+      'reino unido': 'GB',
+      'fran': 'FR',
+      'ital': 'IT',
+      'alem': 'DE',
+      'jap': 'JP',
+      'chin': 'CN',
+      'corea': 'KR',
+      'india': 'IN',
+      'austral': 'AU',
+      'nueva zel': 'NZ',
+      'portug': 'PT',
+      'sui': 'CH',
+      'turq': 'TR',
+      'rusi': 'RU',
+      'arab': 'SA',
+      'sudaf': 'ZA',
+    };
+    for (final key in map.keys) {
+      if (n.contains(key)) return map[key];
+    }
+    return name.toUpperCase();
+  }
+
+  // ---------------------------------------------------------------
+  // 🔠 Normalizador de texto: elimina tildes, minúsculas y ñ → n
+  // ---------------------------------------------------------------
+  String _norm(String s) {
+    const repl = {
+      'á': 'a',
+      'à': 'a',
+      'ä': 'a',
+      'â': 'a',
+      'é': 'e',
+      'è': 'e',
+      'ë': 'e',
+      'ê': 'e',
+      'í': 'i',
+      'ì': 'i',
+      'ï': 'i',
+      'î': 'i',
+      'ó': 'o',
+      'ò': 'o',
+      'ö': 'o',
+      'ô': 'o',
+      'ú': 'u',
+      'ù': 'u',
+      'ü': 'u',
+      'û': 'u',
+      'ñ': 'n',
+    };
+    final sb = StringBuffer();
+    for (final ch in s.trim().toLowerCase().runes) {
+      final c = String.fromCharCode(ch);
+      sb.write(repl[c] ?? c);
+    }
+    return sb.toString();
   }
 }

@@ -55,11 +55,8 @@ class ChatRoomPage extends StatelessWidget {
             ),
           ),
           MessageInput(
-            onSend: (text) async => _chat.sendRoomMessage(
-              roomId: room.id,
-              text: text,
-              senderName: _auth.currentUser?.displayName ?? 'Usuario',
-            ),
+            roomId: room.id,
+            senderName: _auth.currentUser?.displayName ?? 'Jugador',
           ),
         ],
       ),

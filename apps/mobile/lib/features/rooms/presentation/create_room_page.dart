@@ -2,20 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:draftclub_mobile/core/location/place_service.dart';
 import '../data/room_service.dart';
-
-// 🔽 NUEVO: para autocompletar el género del partido desde el perfil (users/<uid>.sex)
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// ====================================================================
 /// ⚽ CreateRoomPage — Crear y compartir nuevas salas
 /// ====================================================================
-/// 🔹 Integra Google Places para seleccionar ciudad y dirección exacta.
-/// 🔹 Guarda nombre, coordenadas, país y género del partido.
-/// 🔹 Crea la sala y permite compartir el enlace dinámico.
+/// 🔹 Compatible para crear o editar salas.
+/// 🔹 Evita errores de Dropdown (género duplicado o no coincidente).
+/// 🔹 Compatible con cualquier país (ciudad, país, coordenadas).
+/// 🔹 Corrige el bug cuando `sex` está vacío o con espacios.
 /// ====================================================================
 class CreateRoomPage extends StatefulWidget {
-  const CreateRoomPage({super.key});
+  final Map<String, dynamic>? existingRoom; // 👈 si llega, estamos editando
+  const CreateRoomPage({super.key, this.existingRoom});
 
   @override
   State<CreateRoomPage> createState() => _CreateRoomPageState();
@@ -26,6 +26,7 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
   final _nameCtrl = TextEditingController();
   final _cityCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
+
   DateTime? _eventAt;
   int _teams = 2;
   int _players = 5;
@@ -34,17 +35,51 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
   bool _loading = false;
   bool _searchingCity = false;
   bool _searchingAddress = false;
-  String _sex = 'Masculino'; // 🧩 Campo (Masculino / Femenino / Mixto)
+  String? _sex; // ahora puede ser null hasta cargar
   String? _lastCreatedRoomId;
 
-  // Datos de ciudad y dirección seleccionadas
   Map<String, dynamic>? _selectedCityData;
   Map<String, dynamic>? _selectedAddressData;
 
   @override
   void initState() {
     super.initState();
-    _prefillSexFromProfile(); // 🔹 Autocompleta el “Género del partido” según users/<uid>.sex
+    _initializeForm();
+  }
+
+  // ===========================================================
+  // 🔧 Normalizador seguro de género
+  // ===========================================================
+  String _normalizeSex(String? sex) {
+    if (sex == null || sex.trim().isEmpty) return 'mixto';
+    final s = sex.trim().toLowerCase();
+    if (['masculino', 'femenino', 'mixto'].contains(s)) return s;
+    return 'mixto';
+  }
+
+  // ===========================================================
+  // 🔄 Inicializar datos (crear o editar)
+  // ===========================================================
+  Future<void> _initializeForm() async {
+    final r = widget.existingRoom;
+    if (r != null) {
+      // 🧠 Editando sala existente
+      _nameCtrl.text = r['name'] ?? '';
+      _cityCtrl.text = r['city'] ?? '';
+      _addressCtrl.text = r['exactAddress'] ?? '';
+      _eventAt = (r['eventAt'] is Timestamp)
+          ? (r['eventAt'] as Timestamp).toDate()
+          : r['eventAt'];
+      _teams = (r['teams'] ?? 2);
+      _players = (r['playersPerTeam'] ?? 5);
+      _subs = (r['substitutes'] ?? 2);
+      _isPublic = (r['isPublic'] ?? true);
+      _sex = _normalizeSex(r['sex']);
+    } else {
+      // 🧠 Nuevo registro → prellenar sexo desde perfil
+      await _prefillSexFromProfile();
+    }
+    setState(() {});
   }
 
   // ===========================================================
@@ -57,70 +92,79 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
       final snap =
           await FirebaseFirestore.instance.collection('users').doc(uid).get();
       final sex = (snap.data() ?? const {})['sex'];
-      if (sex is String && sex.isNotEmpty) {
-        if (!mounted) return;
-        // Normalizamos a nuestras opciones
-        final normalized = sex.toLowerCase().startsWith('f')
-            ? 'Femenino'
-            : sex.toLowerCase().startsWith('m')
-                ? 'Masculino'
-                : 'Mixto';
-        setState(() => _sex = normalized);
-      }
+      _sex = _normalizeSex(sex);
     } catch (_) {
-      // silencioso; si no hay perfil, usamos el default 'Masculino'
+      _sex = 'mixto';
     }
   }
 
   // ===========================================================
-  // 🧱 Crear la sala
+  // 🧱 Crear o actualizar sala
   // ===========================================================
-  Future<void> _createRoom() async {
+  Future<void> _createOrUpdateRoom() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() {
-      _loading = true;
-      _lastCreatedRoomId = null;
-    });
+    setState(() => _loading = true);
 
     try {
       final service = RoomService();
       final cityData = _selectedCityData;
       final addressData = _selectedAddressData;
 
-      final roomId = await service.createRoom(
-        name: _nameCtrl.text.trim(),
-        teams: _teams,
-        playersPerTeam: _players,
-        substitutes: _subs,
-        isPublic: _isPublic,
-        manualCity: cityData?['cityName'] ?? _cityCtrl.text.trim(),
-        exactAddress: addressData?['address'] ?? _addressCtrl.text.trim(),
-        eventAt: _eventAt,
-        cityLat: addressData?['lat'] ?? cityData?['lat'],
-        cityLng: addressData?['lng'] ?? cityData?['lng'],
-        countryCode: cityData?['countryCode'],
-        sex: _sex, // ✅ Guardamos el género del partido
-      );
+      final payload = {
+        'name': _nameCtrl.text.trim(),
+        'teams': _teams,
+        'playersPerTeam': _players,
+        'substitutes': _subs,
+        'isPublic': _isPublic,
+        'manualCity': cityData?['cityName'] ?? _cityCtrl.text.trim(),
+        'exactAddress': addressData?['address'] ?? _addressCtrl.text.trim(),
+        'eventAt': _eventAt,
+        'cityLat': addressData?['lat'] ?? cityData?['lat'],
+        'cityLng': addressData?['lng'] ?? cityData?['lng'],
+        'countryCode': cityData?['countryCode'],
+        'sex': _normalizeSex(_sex),
+      };
+
+      String roomId;
+      if (widget.existingRoom != null) {
+        // 🟢 Editar sala existente
+        roomId = widget.existingRoom!['id'];
+        await service.updateRoom(roomId, payload);
+      } else {
+        // 🟢 Crear nueva sala
+        roomId = await service.createRoom(
+          name: payload['name'],
+          teams: payload['teams'],
+          playersPerTeam: payload['playersPerTeam'],
+          substitutes: payload['substitutes'],
+          isPublic: payload['isPublic'],
+          manualCity: payload['manualCity'],
+          exactAddress: payload['exactAddress'],
+          eventAt: payload['eventAt'],
+          cityLat: payload['cityLat'],
+          cityLng: payload['cityLng'],
+          countryCode: payload['countryCode'],
+          sex: payload['sex'],
+        );
+      }
 
       if (!mounted) return;
       setState(() => _lastCreatedRoomId = roomId);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.greenAccent.shade400,
-          content: Text(
-            '✅ Sala creada correctamente (ID: $roomId)',
-            style: const TextStyle(color: Colors.black),
-          ),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: Colors.greenAccent.shade400,
+        content: Text(
+          widget.existingRoom != null
+              ? '✅ Sala actualizada correctamente'
+              : '✅ Sala creada correctamente (ID: $roomId)',
+          style: const TextStyle(color: Colors.black),
         ),
-      );
+      ));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.redAccent.shade700,
-          content: Text('❌ Error al crear sala: $e'),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: Colors.redAccent.shade700,
+        content: Text('❌ Error: $e'),
+      ));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -131,18 +175,15 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
   // ===========================================================
   Future<void> _shareRoomLink() async {
     if (_lastCreatedRoomId == null) return;
-
     final link = 'draftclub://room/$_lastCreatedRoomId';
-    final message = '''
-⚽ ¡Únete a mi sala en DraftClub!
-Haz clic en el siguiente enlace para entrar directamente:
-$link
-''';
-    await Share.share(message, subject: 'Únete a mi sala en DraftClub ⚽');
+    await Share.share(
+      '⚽ ¡Únete a mi sala en DraftClub!\n$link',
+      subject: 'Únete a mi sala ⚽',
+    );
   }
 
   // ===========================================================
-  // 🗓️ Fecha y hora del partido
+  // 🗓️ Fecha y hora
   // ===========================================================
   Future<void> _selectDateTime() async {
     final pickedDate = await showDatePicker(
@@ -152,17 +193,13 @@ $link
       lastDate: DateTime.now().add(const Duration(days: 365)),
       builder: (context, child) => Theme(data: ThemeData.dark(), child: child!),
     );
-
     if (pickedDate == null) return;
-
     final pickedTime = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
       builder: (context, child) => Theme(data: ThemeData.dark(), child: child!),
     );
-
     if (pickedTime == null) return;
-
     setState(() {
       _eventAt = DateTime(
         pickedDate.year,
@@ -175,7 +212,7 @@ $link
   }
 
   // ===========================================================
-  // 📍 Selector de ciudad (Google Places)
+  // 📍 Selectores (ciudad / dirección)
   // ===========================================================
   Future<void> _openCityPicker() async {
     TextEditingController searchCtrl = TextEditingController();
@@ -212,7 +249,6 @@ $link
             suggestions: suggestions,
             onSearch: search,
             onSelect: (s) async {
-              // 🔧 Obtenemos detalles para lat/lng y country
               final details = await PlaceService.getCityDetails(s['placeId']);
               final data = details != null
                   ? {
@@ -222,19 +258,13 @@ $link
                       'countryCode':
                           (details.description.split(',').last).trim(),
                     }
-                  : {
-                      'cityName': s['name'],
-                      'lat': null,
-                      'lng': null,
-                      'countryCode': null,
-                    };
+                  : {'cityName': s['name']};
               if (!mounted) return;
               setState(() {
                 _selectedCityData = data;
-                _cityCtrl.text = data['cityName'] ?? s['name'] ?? '';
+                _cityCtrl.text = data['cityName'] ?? '';
               });
             },
-            getDetails: PlaceService.getCityDetails,
             labelField: 'name',
           );
         });
@@ -242,9 +272,6 @@ $link
     );
   }
 
-  // ===========================================================
-  // 🏠 Selector de dirección exacta (Google Places)
-  // ===========================================================
   Future<void> _openAddressPicker() async {
     TextEditingController searchCtrl = TextEditingController();
     List<Map<String, dynamic>> suggestions = [];
@@ -284,7 +311,6 @@ $link
             suggestions: suggestions,
             onSearch: search,
             onSelect: (s) {
-              // ✅ Corregido: al seleccionar, llenamos el campo y guardamos lat/lng
               setState(() {
                 _selectedAddressData = {
                   'address': s['address'],
@@ -294,7 +320,6 @@ $link
                 _addressCtrl.text = s['address'] ?? '';
               });
             },
-            getDetails: null,
             labelField: 'address',
           );
         });
@@ -302,10 +327,6 @@ $link
     );
   }
 
-  // ===========================================================
-  // 🧭 UI del bottom sheet reutilizable
-  //  - Corregido: ejecuta onSelect(s) y luego cierra el sheet
-  // ===========================================================
   Widget _placeSheetUI({
     required String title,
     required TextEditingController searchCtrl,
@@ -314,7 +335,6 @@ $link
     required Future<void> Function(String) onSearch,
     required void Function(Map<String, dynamic>) onSelect,
     required String labelField,
-    Future<dynamic> Function(String)? getDetails,
   }) {
     return Padding(
       padding: MediaQuery.of(context).viewInsets,
@@ -363,21 +383,14 @@ $link
               const SizedBox(height: 16),
               if (searching)
                 const Center(
-                  child: CircularProgressIndicator(
-                    color: Colors.blueAccent,
-                    strokeWidth: 2.5,
-                  ),
-                )
+                    child: CircularProgressIndicator(
+                        color: Colors.blueAccent, strokeWidth: 2.5))
               else if (suggestions.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(top: 20),
-                  child: Center(
-                    child: Text(
-                      'Escribe para buscar...',
-                      style: TextStyle(color: Colors.white38, fontSize: 14),
-                    ),
-                  ),
-                )
+                const Expanded(
+                    child: Center(
+                        child: Text('Escribe para buscar...',
+                            style: TextStyle(
+                                color: Colors.white38, fontSize: 14))))
               else
                 Expanded(
                   child: ListView.separated(
@@ -389,13 +402,11 @@ $link
                       return ListTile(
                         leading: const Icon(Icons.location_city,
                             color: Colors.blueAccent),
-                        title: Text(
-                          '${s[labelField]}',
-                          style: const TextStyle(color: Colors.white),
-                        ),
+                        title: Text('${s[labelField]}',
+                            style: const TextStyle(color: Colors.white)),
                         onTap: () {
-                          onSelect(s); // ✅ aplica selección
-                          Navigator.pop(context); // ✅ cierra el sheet
+                          onSelect(s);
+                          Navigator.pop(context);
                         },
                       );
                     },
@@ -417,7 +428,7 @@ $link
   }
 
   // ===========================================================
-  // 🖥️ INTERFAZ DE USUARIO
+  // 🖥️ UI PRINCIPAL
   // ===========================================================
   @override
   Widget build(BuildContext context) {
@@ -425,182 +436,170 @@ $link
       backgroundColor: const Color(0xFF0E0E0E),
       appBar: AppBar(
         backgroundColor: Colors.black,
-        title: const Text(
-          'Crear Sala',
-          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
-        ),
-        elevation: 2,
+        title: Text(widget.existingRoom != null ? 'Editar Sala' : 'Crear Sala'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            physics: const BouncingScrollPhysics(),
-            children: [
-              // 🔹 Nombre
-              TextFormField(
-                controller: _nameCtrl,
-                style: const TextStyle(color: Colors.white),
-                decoration: _inputDecoration('Nombre de la sala'),
-                validator: (v) => v == null || v.isEmpty
-                    ? 'Por favor, escribe un nombre'
-                    : null,
-              ),
-              const SizedBox(height: 20),
-
-              // 🔹 Selector de ciudad
-              GestureDetector(
-                onTap: _openCityPicker,
-                child: AbsorbPointer(
-                  child: TextFormField(
-                    controller: _cityCtrl,
-                    style: const TextStyle(color: Colors.white),
-                    decoration:
-                        _inputDecoration('Ciudad donde se jugará').copyWith(
-                      prefixIcon: const Icon(Icons.location_on,
-                          color: Colors.blueAccent),
+      body: _sex == null
+          ? const Center(
+              child: CircularProgressIndicator(color: Colors.blueAccent))
+          : Padding(
+              padding: const EdgeInsets.all(20),
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  physics: const BouncingScrollPhysics(),
+                  children: [
+                    TextFormField(
+                      controller: _nameCtrl,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _inputDecoration('Nombre de la sala'),
+                      validator: (v) => v == null || v.isEmpty
+                          ? 'Por favor, escribe un nombre'
+                          : null,
                     ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-              // 🔹 Dirección exacta
-              GestureDetector(
-                onTap: _openAddressPicker,
-                child: AbsorbPointer(
-                  child: TextFormField(
-                    controller: _addressCtrl,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: _inputDecoration('Dirección exacta (opcional)')
-                        .copyWith(
-                      prefixIcon:
-                          const Icon(Icons.home_work, color: Colors.blueAccent),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // 🔹 Género del partido
-              _buildDropdown<String>(
-                label: 'Género del partido',
-                value: _sex,
-                items: const ['Masculino', 'Femenino', 'Mixto'],
-                onChanged: (v) => setState(() => _sex = v ?? 'Masculino'),
-              ),
-
-              const SizedBox(height: 10),
-
-              // 🔹 Fecha y hora
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  _eventAt == null
-                      ? 'Seleccionar fecha y hora del partido (opcional)'
-                      : 'Fecha: ${_eventAt!.day}/${_eventAt!.month}/${_eventAt!.year}  ${_eventAt!.hour.toString().padLeft(2, '0')}:${_eventAt!.minute.toString().padLeft(2, '0')}',
-                  style: const TextStyle(color: Colors.white70),
-                ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.calendar_today,
-                      color: Colors.blueAccent),
-                  onPressed: _selectDateTime,
-                ),
-              ),
-              const Divider(color: Colors.white12, height: 10),
-
-              _buildDropdown<int>(
-                label: 'Número de equipos',
-                value: _teams,
-                items: [2, 4, 6, 8, 10],
-                onChanged: (v) => setState(() => _teams = v!),
-              ),
-              _buildDropdown<int>(
-                label: 'Jugadores por equipo',
-                value: _players,
-                items: [5, 7, 9, 11],
-                onChanged: (v) => setState(() => _players = v!),
-              ),
-              _buildDropdown<int>(
-                label: 'Cambios / Reemplazos',
-                value: _subs,
-                items: [0, 1, 2, 3, 5],
-                onChanged: (v) => setState(() => _subs = v!),
-              ),
-
-              const SizedBox(height: 10),
-
-              SwitchListTile.adaptive(
-                title: const Text('Sala pública',
-                    style: TextStyle(color: Colors.white)),
-                subtitle: const Text('Desactívalo para hacerla privada',
-                    style: TextStyle(color: Colors.white70)),
-                activeColor: Colors.blueAccent,
-                inactiveThumbColor: Colors.grey,
-                value: _isPublic,
-                onChanged: (v) => setState(() => _isPublic = v),
-              ),
-              const SizedBox(height: 30),
-
-              // 🔹 Botón Crear
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                onPressed: _loading ? null : _createRoom,
-                icon: const Icon(Icons.sports_soccer, color: Colors.white),
-                label: _loading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2.5, color: Colors.white),
-                      )
-                    : const Text(
-                        'Crear sala',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
+                    GestureDetector(
+                      onTap: _openCityPicker,
+                      child: AbsorbPointer(
+                        child: TextFormField(
+                          controller: _cityCtrl,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: _inputDecoration('Ciudad').copyWith(
+                              prefixIcon: const Icon(Icons.location_on,
+                                  color: Colors.blueAccent)),
                         ),
                       ),
-              ),
-              const SizedBox(height: 16),
+                    ),
+                    const SizedBox(height: 20),
 
-              if (_lastCreatedRoomId != null)
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.greenAccent.shade400,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                    GestureDetector(
+                      onTap: _openAddressPicker,
+                      child: AbsorbPointer(
+                        child: TextFormField(
+                          controller: _addressCtrl,
+                          style: const TextStyle(color: Colors.white),
+                          decoration:
+                              _inputDecoration('Dirección exacta (opcional)'),
+                        ),
+                      ),
                     ),
-                  ),
-                  onPressed: _shareRoomLink,
-                  icon: const Icon(Icons.share, color: Colors.black),
-                  label: const Text(
-                    'Compartir enlace de la sala',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
+                    const SizedBox(height: 20),
+
+                    // ✅ Dropdown universal seguro
+                    DropdownButtonFormField<String>(
+                      value: _normalizeSex(_sex),
+                      dropdownColor: const Color(0xFF1A1A1A),
+                      decoration: _inputDecoration('Género del partido'),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'masculino', child: Text('Masculino')),
+                        DropdownMenuItem(
+                            value: 'femenino', child: Text('Femenino')),
+                        DropdownMenuItem(value: 'mixto', child: Text('Mixto')),
+                      ],
+                      onChanged: (v) => setState(() => _sex = v),
+                      validator: (v) =>
+                          v == null ? 'Selecciona un género' : null,
                     ),
-                  ),
+
+                    const SizedBox(height: 20),
+
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        _eventAt == null
+                            ? 'Seleccionar fecha y hora'
+                            : 'Fecha: ${_eventAt!.day}/${_eventAt!.month}/${_eventAt!.year} ${_eventAt!.hour.toString().padLeft(2, '0')}:${_eventAt!.minute.toString().padLeft(2, '0')}',
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.calendar_today,
+                            color: Colors.blueAccent),
+                        onPressed: _selectDateTime,
+                      ),
+                    ),
+                    const Divider(color: Colors.white12, height: 10),
+
+                    _buildDropdown<int>(
+                        label: 'Número de equipos',
+                        value: _teams,
+                        items: [2, 4, 6, 8, 10],
+                        onChanged: (v) => setState(() => _teams = v!)),
+
+                    _buildDropdown<int>(
+                        label: 'Jugadores por equipo',
+                        value: _players,
+                        items: [5, 7, 9, 11],
+                        onChanged: (v) => setState(() => _players = v!)),
+
+                    _buildDropdown<int>(
+                        label: 'Cambios / Reemplazos',
+                        value: _subs,
+                        items: [0, 1, 2, 3, 5],
+                        onChanged: (v) => setState(() => _subs = v!)),
+
+                    SwitchListTile.adaptive(
+                      title: const Text('Sala pública',
+                          style: TextStyle(color: Colors.white)),
+                      subtitle: const Text('Desactívalo para hacerla privada',
+                          style: TextStyle(color: Colors.white70)),
+                      activeColor: Colors.blueAccent,
+                      value: _isPublic,
+                      onChanged: (v) => setState(() => _isPublic = v),
+                    ),
+
+                    const SizedBox(height: 30),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blueAccent,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14))),
+                      onPressed: _loading ? null : _createOrUpdateRoom,
+                      icon:
+                          const Icon(Icons.sports_soccer, color: Colors.white),
+                      label: _loading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2.5, color: Colors.white))
+                          : Text(
+                              widget.existingRoom != null
+                                  ? 'Guardar cambios'
+                                  : 'Crear sala',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    if (_lastCreatedRoomId != null)
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.greenAccent.shade400,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                        ),
+                        onPressed: _shareRoomLink,
+                        icon: const Icon(Icons.share, color: Colors.black),
+                        label: const Text(
+                          'Compartir enlace',
+                          style: TextStyle(
+                              color: Colors.black, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                  ],
                 ),
-            ],
-          ),
-        ),
-      ),
+              ),
+            ),
     );
   }
 
   // ===========================================================
-  // 🎨 Widgets auxiliares
+  // 🎨 Estilos
   // ===========================================================
   InputDecoration _inputDecoration(String label) {
     return InputDecoration(
@@ -631,10 +630,8 @@ $link
         decoration: _inputDecoration(label),
         items: items
             .map((n) => DropdownMenuItem(
-                  value: n,
-                  child:
-                      Text('$n', style: const TextStyle(color: Colors.white)),
-                ))
+                value: n,
+                child: Text('$n', style: const TextStyle(color: Colors.white))))
             .toList(),
         onChanged: onChanged,
       ),

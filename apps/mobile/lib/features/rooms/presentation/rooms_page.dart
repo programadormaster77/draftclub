@@ -1,28 +1,23 @@
 // lib/features/rooms/presentation/rooms_page.dart
+
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
-import '../data/room_service.dart';
 
+import '../data/room_service.dart';
 import '../models/room_model.dart';
-import 'room_detail_page.dart';
+import '../domain/room_filters.dart';
+
+import 'widgets/room_card.dart';
 import 'create_room_page.dart';
+import 'room_detail_page.dart';
 import 'find_room_page.dart';
+
 import 'package:draftclub_mobile/core/location/place_service.dart';
 
-/// ====================================================================
-/// 🏟️ RoomsPage — Panel principal de salas (con filtros inteligentes)
-/// ====================================================================
-/// ✅ Cercanía (40 km) usando geolocalización del usuario
-/// ✅ Filtro por ciudad con buscador (Google Places)
-/// ✅ Filtro por fecha (mismo día)
-/// ✅ Filtro automático por sexo del usuario (Masculino/Femenino/Mixto)
-/// ✅ Bloqueo si se busca en país distinto al actual
-/// ✅ Fallback controlado y sin parpadeos
-/// ====================================================================
 class RoomsPage extends StatefulWidget {
   const RoomsPage({super.key});
 
@@ -34,129 +29,167 @@ class _RoomsPageState extends State<RoomsPage>
     with SingleTickerProviderStateMixin {
   final _auth = FirebaseAuth.instance;
   final _db = FirebaseFirestore.instance;
+  final _service = RoomService();
+
   late TabController _tabController;
 
-  // ------- Estado de ubicación del usuario -------
+  // -------- Contexto del usuario ----------
   double? _myLat;
   double? _myLng;
   String? _myCity;
   String? _myCountryCode;
+  String? _userSex; // masculino | femenino | mixto
 
-  // ------- Sexo del usuario (para filtro automático) -------
-  String? _userSex; // "masculino" | "femenino" | null (sin dato)
-
-  // ------- Filtros seleccionados por el usuario -------
-  bool _useNearby = true; // por defecto: buscar cerca (40 km)
+  // -------- Filtros activos ---------------
+  RoomFilters _filters = const RoomFilters();
+  bool _useNearby = true; // toggle “Cerca de mí (40 km)”
   static const double _nearbyKm = 40.0;
 
-  String? _filterCityName;
-  double? _filterCityLat;
-  double? _filterCityLng;
-  String? _filterCountryCode;
-
-  DateTime? _filterDate; // mismo día (00:00–23:59)
-
-  // ------- UI -------
-  bool _loadingLoc = true;
+  // -------- Estado UI ---------------------
+  bool _bootstrapping = true;
+  late Future<List<Room>> _roomsFuture;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _ensureLocation();
-    _loadUserSex();
+    _roomsFuture = _bootstrapAndFetch();
   }
 
-  // ==========================================================
-  // 👤 Cargar sexo del usuario (una vez) para filtro automático
-  // ==========================================================
-  Future<void> _loadUserSex() async {
+  Future<List<Room>> _bootstrapAndFetch() async {
+    await _ensureUserContext();
+    _rebuildFiltersDefaults();
+    return _fetchRooms();
+  }
+
+  // 1) Carga ubicación, país y sexo del usuario
+  Future<void> _ensureUserContext() async {
     try {
+      // Sexo desde perfil
       final uid = _auth.currentUser?.uid;
-      if (uid == null) return;
-      final doc = await _db.collection('users').doc(uid).get();
-      if (!mounted) return;
-      if (doc.exists && doc.data() != null) {
-        final val = (doc['sex'] ?? '').toString().trim().toLowerCase();
-        if (val.isNotEmpty) {
-          setState(() => _userSex = val); // setState aquí no causa bucles
+      if (uid != null) {
+        final doc = await _db.collection('users').doc(uid).get();
+
+        if (doc.exists && doc.data() != null) {
+          final data = doc.data() as Map<String, dynamic>?;
+
+          // 🔹 Sexo
+          final rawSex = (data?['sex'] ?? '').toString().trim().toLowerCase();
+          _userSex = _normalizeSex(rawSex);
+
+          // 🔹 Ciudad (city o ciudad)
+          final city = (data?['city'] ?? data?['ciudad'])?.toString();
+          if (city != null && city.trim().isNotEmpty) {
+            _myCity = city.split(',').first.trim();
+          }
+
+          // 🔹 Código de país (maneja ambos: countryCode o country)
+          final ccode = data?['countryCode']?.toString() ?? '';
+          if (ccode.isNotEmpty) {
+            _myCountryCode = ccode;
+          } else if (data?['country'] != null) {
+            _myCountryCode = data!['country'].toString();
+          }
+
+          // 🔹 Coordenadas
+          final lat = (data?['lat'] as num?)?.toDouble();
+          final lng = (data?['lng'] as num?)?.toDouble();
+          if (lat != null && lng != null) {
+            _myLat = lat;
+            _myLng = lng;
+          }
         }
       }
-    } catch (_) {
-      // silencioso
-    }
-  }
 
-  // ==========================================================
-  // 📍 Obtener ubicación y país actual del usuario
-  // ==========================================================
-  Future<void> _ensureLocation() async {
-    try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        setState(() => _loadingLoc = false);
-        return;
-      }
-      var perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied) {
-        perm = await Geolocator.requestPermission();
-      }
-      if (perm == LocationPermission.deniedForever ||
-          perm == LocationPermission.denied) {
-        setState(() => _loadingLoc = false);
-        return;
-      }
+      // Si siguen faltando coords, intenta geolocalizar
+      if (_myLat == null || _myLng == null) {
+        final enabled = await Geolocator.isLocationServiceEnabled();
+        if (!enabled) return;
 
-      final pos = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.low,
-      );
-      final placemarks =
-          await placemarkFromCoordinates(pos.latitude, pos.longitude);
-      final p = placemarks.first;
+        var perm = await Geolocator.checkPermission();
+        if (perm == LocationPermission.denied) {
+          perm = await Geolocator.requestPermission();
+        }
+        if (perm == LocationPermission.deniedForever ||
+            perm == LocationPermission.denied) return;
 
-      setState(() {
+        final pos = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.low,
+        );
         _myLat = pos.latitude;
         _myLng = pos.longitude;
-        _myCity = p.locality ?? 'Desconocido';
-        _myCountryCode = p.isoCountryCode;
-        _loadingLoc = false;
 
-        // Si no hay una ciudad objetivo aún, usa la del usuario (solo etiqueta)
-        _filterCityName ??= _myCity;
-      });
-    } catch (e) {
-      setState(() => _loadingLoc = false);
+        try {
+          final ps = await placemarkFromCoordinates(_myLat!, _myLng!);
+          final p = ps.first;
+          _myCity = p.locality ?? _myCity ?? 'Desconocido';
+          _myCountryCode ??= p.isoCountryCode;
+        } catch (_) {}
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _bootstrapping = false;
+        });
+      } else {
+        _bootstrapping = false;
+      }
     }
   }
 
-  // ==========================================================
-// 🔎 Stream base de salas públicas (ya acotado por país)
-// ==========================================================
-  Stream<List<Room>> _publicRoomsBaseStream() {
-    // Nota: cuando _myCountryCode esté listo (tras _ensureLocation()),
-    // la consulta se re-crea y suscribe de nuevo.
-    final col = _db.collection('rooms');
-    final hasCountry = (_myCountryCode != null && _myCountryCode!.isNotEmpty);
-
-    final query = hasCountry
-        ? col
-            .where('isPublic', isEqualTo: true)
-            .where('countryCode', isEqualTo: _myCountryCode) // 🔒 mismo país
-            .orderBy('createdAt', descending: true)
-            .limit(200)
-        : col
-            .where('isPublic', isEqualTo: true)
-            .orderBy('createdAt', descending: true)
-            .limit(200);
-
-    return query
-        .snapshots()
-        .map((snap) => snap.docs.map((d) => Room.fromMap(d.data())).toList());
+  // 2) Define filtros por defecto con 40 km y ciudad/sexo del usuario
+  void _rebuildFiltersDefaults() {
+    _filters = RoomFilters(
+      cityName: _myCity,
+      userLat: _myLat,
+      userLng: _myLng,
+      userCountryCode: _myCountryCode,
+      userSex: _userSex, // importante para filtrar mixto/mismo sexo
+      radiusKm: _nearbyKm,
+      date: null,
+    );
   }
 
-  // ==========================================================
-  // 📏 Distancia Haversine (km)
-  // ==========================================================
+  // 3) Pide al service las salas con los filtros actuales
+  Future<List<Room>> _fetchRooms() async {
+    // Global-ready: NO restringimos por país en la UI. El service puede
+    // usar countryCode para sharding/optimización, pero no bloqueamos países.
+    final rooms = await _service.getFilteredPublicRooms(
+      cityName: _filters.cityName,
+      userLat: _filters.userLat,
+      userLng: _filters.userLng,
+      userCountryCode: _filters.userCountryCode, // opcional, no restrictivo
+      userSex: _filters.userSex,
+      radiusKm: _useNearby ? _filters.radiusKm : 50.0,
+      targetDate: _filters.date,
+    );
+
+    // Orden final: cercanía (si hay coords) y luego createdAt
+    if (_filters.userLat != null && _filters.userLng != null) {
+      rooms.sort((a, b) {
+        final da = _distanceKm(
+          _filters.userLat!,
+          _filters.userLng!,
+          a.lat ?? a.cityLat ?? 0,
+          a.lng ?? a.cityLng ?? 0,
+        );
+        final db = _distanceKm(
+          _filters.userLat!,
+          _filters.userLng!,
+          b.lat ?? b.cityLat ?? 0,
+          b.lng ?? b.cityLng ?? 0,
+        );
+        if (da != db) return da.compareTo(db);
+        return b.createdAt.compareTo(a.createdAt);
+      });
+    } else {
+      rooms.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }
+
+    return rooms;
+  }
+
+  // ----------------- Utilidades -----------------
   double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
     const R = 6371.0;
     final dLat = _deg2rad(lat2 - lat1);
@@ -172,293 +205,29 @@ class _RoomsPageState extends State<RoomsPage>
 
   double _deg2rad(double deg) => deg * (math.pi / 180);
 
-// ==========================================================
-// 🔠 Normalizador universal (quita tildes, comas, puntos, espacios extras)
-// ==========================================================
-  String _normalizeCity(String s) {
-    const Map<String, String> accents = {
-      'á': 'a',
-      'à': 'a',
-      'ä': 'a',
-      'â': 'a',
-      'Á': 'a',
-      'À': 'a',
-      'Ä': 'a',
-      'Â': 'a',
-      'é': 'e',
-      'è': 'e',
-      'ë': 'e',
-      'ê': 'e',
-      'É': 'e',
-      'È': 'e',
-      'Ë': 'e',
-      'Ê': 'e',
-      'í': 'i',
-      'ì': 'i',
-      'ï': 'i',
-      'î': 'i',
-      'Í': 'i',
-      'Ì': 'i',
-      'Ï': 'i',
-      'Î': 'i',
-      'ó': 'o',
-      'ò': 'o',
-      'ö': 'o',
-      'ô': 'o',
-      'Ó': 'o',
-      'Ò': 'o',
-      'Ö': 'o',
-      'Ô': 'o',
-      'ú': 'u',
-      'ù': 'u',
-      'ü': 'u',
-      'û': 'u',
-      'Ú': 'u',
-      'Ù': 'u',
-      'Ü': 'u',
-      'Û': 'u',
-      'ñ': 'n',
-      'Ñ': 'n'
-    };
-
-    return s
-        .toLowerCase()
-        .trim()
-        .split('')
-        .map((c) => accents[c] ?? c)
-        .join()
-        .replaceAll(
-            RegExp(r'[^a-z0-9 ]'), ' ') // elimina comas, puntos, símbolos, etc.
-        .replaceAll(RegExp(r'\s+'), ' '); // colapsa espacios
+  String _normalizeSex(String? s) {
+    if (s == null || s.trim().isEmpty) return 'mixto';
+    final v = s.trim().toLowerCase();
+    if (v.startsWith('m')) return 'masculino';
+    if (v.startsWith('f')) return 'femenino';
+    if (v.startsWith('mi')) return 'mixto';
+    return 'mixto';
   }
 
-// ==========================================================
-// 🧮 Aplicar filtros (país, fecha, sexo, ciudad/40km)
-// ==========================================================
-  List<Room> _applyFilters(List<Room> rooms) {
-    Iterable<Room> base = rooms;
-
-    // 1️⃣ País (solo si hay coincidencia clara)
-    if (_myCountryCode != null && _myCountryCode!.isNotEmpty) {
-      final userCountry = _normalizeCity(_myCountryCode!);
-      base = base.where((r) {
-        final rc = _normalizeCity(r.countryCode ?? '');
-        if (userCountry.isEmpty || rc.isEmpty) return true;
-        return rc.contains(userCountry) || userCountry.contains(rc);
-      });
-    }
-
-    // 2️⃣ Fecha (opcional)
-    DateTime? dayStart, dayEnd;
-    if (_filterDate != null) {
-      dayStart =
-          DateTime(_filterDate!.year, _filterDate!.month, _filterDate!.day);
-      dayEnd = dayStart
-          .add(const Duration(days: 1))
-          .subtract(const Duration(milliseconds: 1));
-      base = base.where((r) {
-        final e = r.eventAt;
-        return e != null && !e.isBefore(dayStart!) && !e.isAfter(dayEnd!);
-      });
-    }
-
-    // 3️⃣ Sexo (automático)
-    if (_userSex != null && _userSex!.isNotEmpty) {
-      final u = _userSex!.toLowerCase();
-      base = base.where((r) {
-        final s = (r.sex ?? 'mixto').toLowerCase();
-        return s == 'mixto' || s == u;
-      });
-    }
-
-    // 4️⃣ Ciudad seleccionada manualmente → prioridad total
-    if (_filterCityName != null && _filterCityName!.trim().isNotEmpty) {
-      final nameLc = _normalizeCity(_filterCityName!);
-      if (_filterCityLat != null && _filterCityLng != null) {
-        const cityTightKm = 10.0;
-        base = base.where((r) {
-          final lat = r.lat ?? r.cityLat;
-          final lng = r.lng ?? r.cityLng;
-          if (lat == null || lng == null) {
-            return _normalizeCity(r.city) == nameLc;
-          }
-          final d = _distanceKm(_filterCityLat!, _filterCityLng!, lat, lng);
-          return d <= cityTightKm;
-        });
-      } else {
-        base = base.where((r) => _normalizeCity(r.city) == nameLc);
-      }
-
-      return _sortRooms(base);
-    }
-
-    // 5️⃣ Sin ciudad seleccionada → usar ciudad del perfil o radio 50 km
-    if (_myCity != null && _myCity!.trim().isNotEmpty) {
-      final myCityNorm = _normalizeCity(_myCity!);
-
-      base = base.where((r) {
-        final roomCity = (r.city ?? '').toString();
-        final roomCityNorm = _normalizeCity(roomCity);
-
-        // Coincidencia flexible
-        if (roomCityNorm.contains(myCityNorm) ||
-            myCityNorm.contains(roomCityNorm)) {
-          return true;
-        }
-
-        // Distancia (50 km)
-        final lat = r.lat ?? r.cityLat;
-        final lng = r.lng ?? r.cityLng;
-        if (_myLat != null && _myLng != null && lat != null && lng != null) {
-          final d = _distanceKm(_myLat!, _myLng!, lat, lng);
-          if (d <= 50.0) return true;
-        }
-
-        return false;
-      });
-    } else {
-      // Sin ciudad → usar solo cercanía si hay ubicación
-      if (_myLat != null && _myLng != null) {
-        base = base.where((r) {
-          final lat = r.lat ?? r.cityLat;
-          final lng = r.lng ?? r.cityLng;
-          if (lat == null || lng == null) return false;
-          final d = _distanceKm(_myLat!, _myLng!, lat, lng);
-          return d <= 50.0;
-        });
-      } else {
-        base = const Iterable<Room>.empty();
-      }
-    }
-
-    return _sortRooms(base);
+  // ----------------- Acciones UI -----------------
+  Future<void> _onRefresh() async {
+    setState(() {
+      _roomsFuture = _fetchRooms();
+    });
+    await _roomsFuture;
   }
 
-// ==========================================================
-// 🔄 Función auxiliar para ordenar por cercanía y fecha
-// ==========================================================
-  List<Room> _sortRooms(Iterable<Room> base) {
-    final list = base.toList();
-    if (_myLat != null && _myLng != null) {
-      list.sort((a, b) {
-        double da = 1e9, db = 1e9;
-        final aLat = a.lat ?? a.cityLat, aLng = a.lng ?? a.cityLng;
-        final bLat = b.lat ?? b.cityLat, bLng = b.lng ?? b.cityLng;
-        if (aLat != null && aLng != null) {
-          da = _distanceKm(_myLat!, _myLng!, aLat, aLng);
-        }
-        if (bLat != null && bLng != null) {
-          db = _distanceKm(_myLat!, _myLng!, bLat, bLng);
-        }
-        if (da != db) return da.compareTo(db);
-        return b.createdAt.compareTo(a.createdAt);
-      });
-    } else {
-      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    }
-    return list;
-  }
-
-  String _norm(String s) {
-    const accents = {
-      'á': 'a',
-      'é': 'e',
-      'í': 'i',
-      'ó': 'o',
-      'ú': 'u',
-      'ü': 'u',
-      'ñ': 'n'
-    };
-    return s
-        .toLowerCase()
-        .replaceAllMapped(RegExp('[áéíóúüñ]'), (m) => accents[m.group(0)] ?? '')
-        .replaceAll(RegExp('[^a-z0-9 ]'), ' ') // elimina símbolos como , .
-        .replaceAll(RegExp(' +'), ' ') // colapsa espacios
-        .trim();
-  }
-
-  // ==========================================================
-  // 🚫 Bloqueo por país diferente (pantalla completa)
-  // ==========================================================
-  void _showBlockedCountryDialog() {
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => WillPopScope(
-        onWillPop: () async => false,
-        child: Container(
-          color: const Color(0xFF0E0E0E),
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.public_off,
-                      size: 48, color: Colors.redAccent),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Rango de búsqueda fuera de los límites',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Por seguridad y para evitar experiencias negativas, las búsquedas deben realizarse dentro de tu país actual.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  const SizedBox(height: 18),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 22, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      setState(() {
-                        _filterCityName = null;
-                        _filterCityLat = null;
-                        _filterCityLng = null;
-                        _filterCountryCode = null;
-                      });
-                    },
-                    child: const Text('Entendido',
-                        style: TextStyle(color: Colors.white)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ==========================================================
-  // 🧭 Navegación a detalle
-  // ==========================================================
-  void _openRoom(Room room) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => RoomDetailPage(room: room)),
-    );
-  }
-
-  // ==========================================================
-  // 🏙️ Abrir buscador de ciudad (Google Places)
-  // ==========================================================
-  Future<void> _openCityPicker() async {
+  Future<void> _pickCity() async {
     TextEditingController searchCtrl = TextEditingController();
     List<CitySuggestion> suggestions = [];
     bool searching = false;
+
+    CitySuggestion? chosen;
 
     await showModalBottomSheet(
       backgroundColor: const Color(0xFF1A1A1A),
@@ -487,9 +256,10 @@ class _RoomsPageState extends State<RoomsPage>
                     child: Text(
                       'Buscar ciudad',
                       style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600),
+                        color: Colors.white70,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -520,7 +290,9 @@ class _RoomsPageState extends State<RoomsPage>
                   if (searching)
                     const Center(
                       child: CircularProgressIndicator(
-                          color: Colors.blueAccent, strokeWidth: 2.5),
+                        color: Colors.blueAccent,
+                        strokeWidth: 2.5,
+                      ),
                     )
                   else if (suggestions.isEmpty)
                     const Expanded(
@@ -542,9 +314,14 @@ class _RoomsPageState extends State<RoomsPage>
                           return ListTile(
                             leading: const Icon(Icons.location_city,
                                 color: Colors.blueAccent),
-                            title: Text(s.description,
-                                style: const TextStyle(color: Colors.white)),
-                            onTap: () => Navigator.pop(context, s),
+                            title: Text(
+                              s.description,
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            onTap: () {
+                              chosen = s;
+                              Navigator.pop(context);
+                            },
                           );
                         },
                       ),
@@ -555,65 +332,59 @@ class _RoomsPageState extends State<RoomsPage>
           );
         });
       },
-    ).then((res) async {
-      if (res is CitySuggestion) {
-        // Obtener lat/lng exactos
-        final details = await PlaceService.getCityDetails(res.placeId);
-        if (details == null) return;
+    );
 
-        // Resolver país vía reverse geocoding para tener isoCountryCode
-        String? targetIso;
-        try {
-          final ps = await placemarkFromCoordinates(details.lat!, details.lng!);
-          targetIso = ps.first.isoCountryCode;
-        } catch (_) {}
+    if (chosen == null) return;
 
-        // Si país difiere del actual → bloquear
-        if (targetIso != null &&
-            _myCountryCode != null &&
-            targetIso.toUpperCase() != _myCountryCode!.toUpperCase()) {
-          setState(() {
-            _filterCityName = details.description;
-            _filterCityLat = details.lat;
-            _filterCityLng = details.lng;
-            _filterCountryCode = targetIso;
-          });
-          _showBlockedCountryDialog();
-          return;
-        }
+    // Detalles con lat/lng (GLOBAL: sin bloqueo por país)
+    final details = await PlaceService.getCityDetails(chosen!.placeId);
+    if (details == null) return;
 
-        // Aceptar ciudad
-        setState(() {
-          _filterCityName = details.description;
-          _filterCityLat = details.lat;
-          _filterCityLng = details.lng;
-          _filterCountryCode = targetIso;
-        });
-      }
+    setState(() {
+      _filters = _filters.copyWith(
+        cityName: details.description,
+        cityLat: details.lat,
+        cityLng: details.lng,
+      );
+      _roomsFuture = _fetchRooms();
     });
   }
 
-  // ==========================================================
-  // 🗓️ Selector de fecha (día objetivo)
-  // ==========================================================
   Future<void> _pickDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: _filterDate ?? now,
+      initialDate: _filters.date ?? now,
       firstDate: now.subtract(const Duration(days: 1)),
       lastDate: now.add(const Duration(days: 365)),
       builder: (context, child) => Theme(data: ThemeData.dark(), child: child!),
     );
     if (picked != null) {
-      setState(
-          () => _filterDate = DateTime(picked.year, picked.month, picked.day));
+      setState(() {
+        _filters = _filters.copyWith(
+          date: DateTime(picked.year, picked.month, picked.day),
+        );
+        _roomsFuture = _fetchRooms();
+      });
     }
   }
 
-  // ==========================================================
-  // 🎨 Construcción principal
-  // ==========================================================
+  void _clearCity() {
+    setState(() {
+      _filters =
+          _filters.copyWith(cityName: _myCity, cityLat: null, cityLng: null);
+      _roomsFuture = _fetchRooms();
+    });
+  }
+
+  void _clearDate() {
+    setState(() {
+      _filters = _filters.copyWith(date: null);
+      _roomsFuture = _fetchRooms();
+    });
+  }
+
+  // ----------------- UI -----------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -641,7 +412,9 @@ class _RoomsPageState extends State<RoomsPage>
                 context,
                 MaterialPageRoute(builder: (_) => const CreateRoomPage()),
               );
-              if (created == true && mounted) setState(() {});
+              if (created == true && mounted) {
+                setState(() => _roomsFuture = _fetchRooms());
+              }
             },
           ),
         ],
@@ -649,7 +422,7 @@ class _RoomsPageState extends State<RoomsPage>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildPublicRoomsTab(),
+          _buildPublicTab(),
           _buildMyRoomsTab(),
           const FindRoomPage(),
         ],
@@ -657,14 +430,10 @@ class _RoomsPageState extends State<RoomsPage>
     );
   }
 
-  /// ==========================================================
-  /// 🏙️ TAB 1 — Salas públicas (con filtros)
-  /// ==========================================================
-  Widget _buildPublicRoomsTab() {
-    if (_loadingLoc) {
+  Widget _buildPublicTab() {
+    if (_bootstrapping) {
       return const Center(
-        child: CircularProgressIndicator(color: Colors.blueAccent),
-      );
+          child: CircularProgressIndicator(color: Colors.blueAccent));
     }
 
     return Column(
@@ -674,83 +443,96 @@ class _RoomsPageState extends State<RoomsPage>
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: _FiltersCard(
             useNearby: _useNearby,
-            onToggleNearby: (v) => setState(() => _useNearby = v),
-            currentCityLabel: _filterCityName ?? _myCity ?? 'Seleccionar…',
-            onPickCity: _openCityPicker,
-            dateLabel: _filterDate == null
-                ? 'Fecha (opcional)'
-                : '${_filterDate!.day.toString().padLeft(2, '0')}/${_filterDate!.month.toString().padLeft(2, '0')}/${_filterDate!.year}',
-            onPickDate: _pickDate,
-            onClearCity: () {
+            onToggleNearby: (v) {
               setState(() {
-                _filterCityName = null;
-                _filterCityLat = null;
-                _filterCityLng = null;
-                _filterCountryCode = null;
+                _useNearby = v;
+                _roomsFuture = _fetchRooms();
               });
             },
-            onClearDate: () => setState(() => _filterDate = null),
+            currentCityLabel: _filters.cityName ?? _myCity ?? 'Seleccionar…',
+            onPickCity: _pickCity,
+            onClearCity: _clearCity,
+            dateLabel: _filters.date == null
+                ? 'Fecha (opcional)'
+                : '${_filters.date!.day.toString().padLeft(2, '0')}/${_filters.date!.month.toString().padLeft(2, '0')}/${_filters.date!.year}',
+            onPickDate: _pickDate,
+            onClearDate: _clearDate,
           ),
         ),
         const SizedBox(height: 6),
         Expanded(
-          child: StreamBuilder<List<Room>>(
-            key: ValueKey(
-              'pub_${_filterCityName}_${_filterDate?.millisecondsSinceEpoch ?? ''}_${_userSex ?? ''}_${_myCountryCode ?? ''}_${_myCity ?? ''}',
-            ),
-            stream: _publicRoomsBaseStream(),
-            builder: (context, snap) {
-              if (snap.connectionState == ConnectionState.waiting) {
-                return const Center(
-                    child: CircularProgressIndicator(color: Colors.blueAccent));
-              }
-              if (snap.hasError) {
-                return Center(
-                    child: Text('Error: ${snap.error}',
-                        style: const TextStyle(color: Colors.redAccent)));
-              }
+          child: RefreshIndicator(
+            color: Colors.blueAccent,
+            onRefresh: _onRefresh,
+            child: FutureBuilder<List<Room>>(
+              future: _roomsFuture,
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(color: Colors.blueAccent),
+                  );
+                }
+                if (snap.hasError) {
+                  return Center(
+                    child: Text(
+                      'Error: ${snap.error}',
+                      style: const TextStyle(color: Colors.redAccent),
+                    ),
+                  );
+                }
+                final rooms = snap.data ?? const <Room>[];
 
-              final all = snap.data ?? [];
-              final rooms = _applyFilters(all);
+                if (rooms.isEmpty) {
+                  return _EmptyState(
+                    title: 'No hay salas públicas según tus filtros',
+                    message:
+                        'Prueba otra fecha, cambia la ciudad o crea tu propia sala.',
+                    actionText: 'Crear una sala',
+                    onAction: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const CreateRoomPage()),
+                      );
+                    },
+                  );
+                }
 
-              if (rooms.isEmpty) {
-                return _EmptyState(
-                  title: 'No hay salas públicas según tus filtros',
-                  message:
-                      'Prueba otra fecha, cambia la ciudad o crea tu propia sala.',
-                  actionText: 'Crear una sala',
-                  onAction: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const CreateRoomPage()),
+                return ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  itemCount: rooms.length,
+                  itemBuilder: (_, i) {
+                    final r = rooms[i];
+                    return RoomCard(
+                      room: r,
+                      userLat: _filters.userLat,
+                      userLng: _filters.userLng,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => RoomDetailPage(room: r),
+                          ),
+                        );
+                      },
                     );
                   },
                 );
-              }
-
-              return ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: rooms.length,
-                itemBuilder: (_, i) => _roomCard(rooms[i]),
-              );
-            },
+              },
+            ),
           ),
         ),
       ],
     );
   }
 
-  /// ==========================================================
-  /// 👤 TAB 2 — Mis salas
-  /// ==========================================================
   Widget _buildMyRoomsTab() {
     final uid = _auth.currentUser?.uid;
     if (uid == null) {
       return const Center(
-        child: Text(
-          'Inicia sesión para ver tus salas.',
-          style: TextStyle(color: Colors.white54),
-        ),
+        child: Text('Inicia sesión para ver tus salas.',
+            style: TextStyle(color: Colors.white54)),
       );
     }
 
@@ -769,150 +551,51 @@ class _RoomsPageState extends State<RoomsPage>
         }
         if (snap.hasError) {
           return Center(
-              child: Text('Error: ${snap.error}',
-                  style: const TextStyle(color: Colors.redAccent)));
+            child: Text('Error: ${snap.error}',
+                style: const TextStyle(color: Colors.redAccent)),
+          );
         }
 
-        // Filtro de sexo aplicado también a "Mis salas"
         List<Room> rooms = (snap.data ?? []);
-        if (_userSex != null && _userSex!.isNotEmpty) {
-          rooms = rooms.where((r) {
-            final roomSex = (r.sex ?? 'mixto').toLowerCase();
-            if (roomSex == 'mixto') return true;
-            return roomSex == _userSex;
-          }).toList();
-        }
+        // Aplica regla: mixto o mismo sexo
+        final u = _normalizeSex(_userSex);
+        rooms = rooms.where((r) {
+          final s = (r.sex ?? 'mixto').toLowerCase();
+          return s == 'mixto' || s == u;
+        }).toList();
 
         if (rooms.isEmpty) {
           return const Center(
-              child: Text('Aún no te has unido ni has creado salas.',
-                  style: TextStyle(color: Colors.white54)));
+            child: Text('Aún no te has unido ni has creado salas.',
+                style: TextStyle(color: Colors.white54)),
+          );
         }
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: rooms.length,
-          itemBuilder: (_, i) => _roomCard(rooms[i]),
+          itemBuilder: (_, i) {
+            final r = rooms[i];
+            return RoomCard(
+              room: r,
+              userLat: _filters.userLat,
+              userLng: _filters.userLng,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => RoomDetailPage(room: r)),
+                );
+              },
+            );
+          },
         );
       },
     );
   }
-
-  /// ==========================================================
-  /// 💠 Tarjeta reutilizable de sala
-  /// ==========================================================
-  Widget _roomCard(Room room) {
-    // Distancia (si hay coords)
-    String? distLabel;
-    if (_myLat != null &&
-        _myLng != null &&
-        (room.lat != null || room.cityLat != null) &&
-        (room.lng != null || room.cityLng != null)) {
-      final lat = room.lat ?? room.cityLat!;
-      final lng = room.lng ?? room.cityLng!;
-      final d = _distanceKm(_myLat!, _myLng!, lat, lng);
-      distLabel = '${d.toStringAsFixed(1)} km';
-    }
-
-    // Fecha
-    String? dateLabel;
-    if (room.eventAt != null) {
-      final e = room.eventAt!;
-      dateLabel =
-          '${e.day.toString().padLeft(2, '0')}/${e.month.toString().padLeft(2, '0')}/${e.year} ${e.hour.toString().padLeft(2, '0')}:${e.minute.toString().padLeft(2, '0')}';
-    }
-
-    return GestureDetector(
-      onTap: () => _openRoom(room),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 14),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.shade800, width: 0.8),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Título
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    room.name,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ),
-                if (distLabel != null)
-                  Row(
-                    children: [
-                      const Icon(Icons.place, size: 16, color: Colors.white54),
-                      const SizedBox(width: 4),
-                      Text(distLabel,
-                          style: const TextStyle(
-                              color: Colors.white54, fontSize: 12)),
-                    ],
-                  ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            // Ciudad y fecha
-            Row(
-              children: [
-                const Icon(Icons.location_city,
-                    size: 16, color: Colors.white54),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text('Ciudad: ${room.city}',
-                      style:
-                          const TextStyle(color: Colors.white70, fontSize: 13)),
-                ),
-              ],
-            ),
-            if (dateLabel != null) ...[
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  const Icon(Icons.event, size: 16, color: Colors.white54),
-                  const SizedBox(width: 6),
-                  Text(dateLabel,
-                      style:
-                          const TextStyle(color: Colors.white70, fontSize: 13)),
-                ],
-              ),
-            ],
-            const SizedBox(height: 6),
-            Text(
-              'Equipos: ${room.teams} | Jugadores/Equipo: ${room.playersPerTeam}',
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                icon: const Icon(Icons.arrow_forward_ios,
-                    color: Colors.blueAccent, size: 16),
-                label: const Text(
-                  'Ver sala',
-                  style: TextStyle(color: Colors.blueAccent, fontSize: 13),
-                ),
-                onPressed: () => _openRoom(room),
-              ),
-            )
-          ],
-        ),
-      ),
-    );
-  }
 }
 
-/// ====================================================================
-/// 🎛️ Tarjeta de filtros (UI)
-/// ====================================================================
+// =================== Widgets auxiliares UI ===================
+
 class _FiltersCard extends StatelessWidget {
   final bool useNearby;
   final ValueChanged<bool> onToggleNearby;
@@ -938,6 +621,11 @@ class _FiltersCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cityEmpty = currentCityLabel.trim().isEmpty ||
+        currentCityLabel.toLowerCase().contains('seleccionar');
+
+    final dateEmpty = dateLabel.toLowerCase().contains('opcional');
+
     return Card(
       color: const Color(0xFF141414),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -970,6 +658,7 @@ class _FiltersCard extends StatelessWidget {
                     value: currentCityLabel,
                     onTap: onPickCity,
                     onClear: onClearCity,
+                    isEmpty: cityEmpty,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -980,6 +669,7 @@ class _FiltersCard extends StatelessWidget {
                     value: dateLabel,
                     onTap: onPickDate,
                     onClear: onClearDate,
+                    isEmpty: dateEmpty,
                   ),
                 ),
               ],
@@ -998,6 +688,7 @@ class _ActionField extends StatelessWidget {
   final String value;
   final VoidCallback onTap;
   final VoidCallback onClear;
+  final bool isEmpty;
 
   const _ActionField({
     required this.icon,
@@ -1005,13 +696,11 @@ class _ActionField extends StatelessWidget {
     required this.value,
     required this.onTap,
     required this.onClear,
+    required this.isEmpty,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isEmpty = value.toLowerCase().contains('opcional') ||
-        value.toLowerCase().contains('seleccionar');
-
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1049,9 +738,6 @@ class _ActionField extends StatelessWidget {
   }
 }
 
-/// ====================================================================
-/// 🔕 Estado vacío con acción
-/// ====================================================================
 class _EmptyState extends StatelessWidget {
   final String title;
   final String message;
@@ -1076,16 +762,20 @@ class _EmptyState extends StatelessWidget {
             const Icon(Icons.sentiment_dissatisfied,
                 color: Colors.white24, size: 56),
             const SizedBox(height: 12),
-            Text(title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold)),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
-            Text(message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white60)),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white60),
+            ),
             const SizedBox(height: 16),
             ElevatedButton(
               style: ElevatedButton.styleFrom(

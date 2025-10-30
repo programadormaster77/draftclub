@@ -7,21 +7,21 @@ import '../models/team_model.dart';
 /// ====================================================================
 /// - Crea equipos automáticos al generar una sala.
 /// - Permite unirse, cambiarse o salir de equipos.
-/// - Actualiza la lista global de jugadores de la sala.
-/// - Streams en tiempo real para la UI.
-/// - **Sin** transacciones problemáticas: lecturas antes de escrituras,
-///   usando updates atómicos con FieldValue para evitar duplicados.
+/// - Mantiene consistencia entre equipos y la sala global.
+/// - Asigna roles dinámicos (titular / suplente) según disponibilidad.
+/// - Streams optimizados en tiempo real para la UI.
+/// - Registra eventos del sistema para auditoría.
 /// ====================================================================
 class TeamService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  /// Colección de equipos dentro de una sala
+  /// 🔗 Colección de equipos dentro de una sala
   CollectionReference<Map<String, dynamic>> _teamsCol(String roomId) =>
       _db.collection('rooms').doc(roomId).collection('teams');
 
   // ------------------------------------------------------------------
-  // 🏗️ Crear equipos por defecto (Equipo 1..N)
+  // 🏗️ Crear equipos iniciales (Equipo 1..N)
   // ------------------------------------------------------------------
   Future<void> initDefaultTeams({
     required String roomId,
@@ -36,6 +36,7 @@ class TeamService {
         roomId: roomId,
         name: 'Equipo $i',
         players: const [],
+        roles: const {}, // ✅ Nuevo campo requerido
         maxPlayers: playersPerTeam,
         color: _pickColor(i),
         createdAt: DateTime.now(),
@@ -46,31 +47,30 @@ class TeamService {
   }
 
   // ------------------------------------------------------------------
-  // 🔄 Stream en tiempo real de los equipos
+  // 🔄 Stream en tiempo real de equipos
   // ------------------------------------------------------------------
   Stream<List<Team>> streamTeams(String roomId) {
     return _teamsCol(roomId)
         .orderBy('createdAt', descending: false)
         .snapshots()
-        .map((s) => s.docs.map((d) => Team.fromMap(d.data())).toList());
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => Team.fromMap(doc.data())).toList());
   }
 
   // ------------------------------------------------------------------
-  // 🔍 Equipo actual de un usuario en la sala
+  // 🔍 Obtener el equipo actual del usuario
   // ------------------------------------------------------------------
   Future<String?> getUserTeamId(String roomId, String uid) async {
     final snap = await _teamsCol(roomId).get();
-    for (final d in snap.docs) {
-      final players = List<String>.from(d.data()['players'] ?? []);
-      if (players.contains(uid)) return d.id;
+    for (final doc in snap.docs) {
+      final team = Team.fromMap(doc.data());
+      if (team.roles.containsKey(uid)) return team.id;
     }
     return null;
   }
 
   // ------------------------------------------------------------------
-  // 🔁 Unirse o cambiar de equipo
-  //   - Evita el error: "Transactions require all reads before writes"
-  //   - Hace lecturas previas y luego escribe con updates atómicos.
+  // 🔁 Unirse o cambiar de equipo con rol automático
   // ------------------------------------------------------------------
   Future<String> joinTeam({
     required String roomId,
@@ -84,40 +84,48 @@ class TeamService {
     final targetRef = teamsRef.doc(teamId);
 
     try {
-      // 1) Quitar al usuario de cualquier equipo actual (lectura + writes simples)
+      // 🧹 1. Eliminar al usuario de todos los equipos previos
       final allTeams = await teamsRef.get();
-      final batch = _db.batch();
-      for (final t in allTeams.docs) {
-        batch.update(t.reference, {
+      final batchRemove = _db.batch();
+      for (final doc in allTeams.docs) {
+        batchRemove.update(doc.reference, {
           'players': FieldValue.arrayRemove([uid]),
+          'roles.$uid': FieldValue.delete(),
         });
       }
-      await batch.commit();
+      await batchRemove.commit();
 
-      // 2) Leer estado del equipo destino
+      // 🔍 2. Leer equipo destino
       final targetSnap = await targetRef.get();
       if (!targetSnap.exists) return 'El equipo no existe.';
 
-      final data = targetSnap.data()!;
-      final players = List<String>.from(data['players'] ?? []);
-      final maxPlayers = (data['maxPlayers'] as int?) ?? 0;
+      final team = Team.fromMap(targetSnap.data()!);
 
-      if (players.contains(uid)) return 'Ya perteneces a este equipo.';
-      if (maxPlayers > 0 && players.length >= maxPlayers) {
-        return 'Este equipo está lleno.';
-      }
+      if (team.hasPlayer(uid)) return 'Ya perteneces a este equipo.';
+      final isFull = team.titulares.length >= team.maxPlayers;
 
-      // 3) Agregar al equipo destino (update atómico)
+      // ✅ 3. Determinar rol del jugador (titular o suplente)
+      final role = isFull ? 'suplente' : 'titular';
+
+      // ✅ 4. Agregar jugador y su rol
       await targetRef.update({
         'players': FieldValue.arrayUnion([uid]),
+        'roles.$uid': role,
       });
 
-      // 4) Mantener lista global de jugadores de la sala
+      // 🧾 5. Actualizar lista global de jugadores en la sala
       await roomRef.update({
         'players': FieldValue.arrayUnion([uid]),
       });
 
-      return 'Te uniste correctamente al ${data['name'] ?? 'equipo'}.';
+      // 💬 6. Registrar log del sistema
+      await _registerSystemLog(
+        roomId: roomId,
+        message:
+            'El jugador $uid se unió a ${team.name} como ${role.toUpperCase()}.',
+      );
+
+      return 'Te uniste correctamente al ${team.name} como ${role.toUpperCase()}.';
     } on FirebaseException catch (e) {
       return 'Error de Firebase: ${e.message ?? e.code}';
     } catch (e) {
@@ -134,26 +142,49 @@ class TeamService {
 
     final teams = await _teamsCol(roomId).get();
     final batch = _db.batch();
-    for (final d in teams.docs) {
-      batch.update(d.reference, {
+    for (final doc in teams.docs) {
+      batch.update(doc.reference, {
         'players': FieldValue.arrayRemove([uid]),
+        'roles.$uid': FieldValue.delete(),
+      });
+    }
+    await batch.commit();
+
+    await _registerSystemLog(
+      roomId: roomId,
+      message: 'El jugador $uid salió de su equipo.',
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // 🧼 Eliminar manualmente un usuario de todos los equipos
+  // ------------------------------------------------------------------
+  Future<void> removeUserFromAllTeams(String roomId, String uid) async {
+    final teams = await _teamsCol(roomId).get();
+    final batch = _db.batch();
+    for (final doc in teams.docs) {
+      batch.update(doc.reference, {
+        'players': FieldValue.arrayRemove([uid]),
+        'roles.$uid': FieldValue.delete(),
       });
     }
     await batch.commit();
   }
 
   // ------------------------------------------------------------------
-  // 🧼 Utilidad: limpiar al usuario de todos los equipos (para reasignación)
+  // 💬 Registrar logs del sistema
   // ------------------------------------------------------------------
-  Future<void> removeUserFromAllTeams(String roomId, String uid) async {
-    final teams = await _teamsCol(roomId).get();
-    final batch = _db.batch();
-    for (final d in teams.docs) {
-      batch.update(d.reference, {
-        'players': FieldValue.arrayRemove([uid]),
-      });
-    }
-    await batch.commit();
+  Future<void> _registerSystemLog({
+    required String roomId,
+    required String message,
+  }) async {
+    final roomLogsRef =
+        _db.collection('rooms').doc(roomId).collection('system_logs');
+    await roomLogsRef.add({
+      'message': message,
+      'timestamp': FieldValue.serverTimestamp(),
+      'type': 'team_event',
+    });
   }
 
   // ------------------------------------------------------------------
@@ -161,12 +192,14 @@ class TeamService {
   // ------------------------------------------------------------------
   String _pickColor(int i) {
     const palette = [
-      '#3A86FF', // azul
-      '#FF006E', // magenta
-      '#FB5607', // naranja
-      '#8338EC', // morado
-      '#2EC4B6', // turquesa
-      '#FFBE0B', // amarillo
+      '#3A86FF', // Azul
+      '#FF006E', // Magenta
+      '#FB5607', // Naranja
+      '#8338EC', // Morado
+      '#2EC4B6', // Turquesa
+      '#FFBE0B', // Amarillo
+      '#8AC926', // Verde lima
+      '#FF595E', // Rojo coral
     ];
     return palette[(i - 1) % palette.length];
   }

@@ -2,6 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+<key>NSLocationAlwaysUsageDescription</key>
+<string>DraftClub necesita acceder a tu ubicación incluso en segundo plano para encontrar partidos cerca de ti.</string>
+
+    <key>NSMicrophoneUsageDescription</key>
+<string>Necesitamos acceso al micrófono para enviar notas de voz.</string>
+<key>NSPhotoLibraryUsageDescription</key>
+<string>Necesitamos acceso a tus fotos para enviar imágenes en el chat.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+    <string>DraftClub necesita acceder a tu ubicación para mostrarte salas cercanas.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>DraftClub usa tu ubicación para recomendarte salas cercanas y organizar partidos.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

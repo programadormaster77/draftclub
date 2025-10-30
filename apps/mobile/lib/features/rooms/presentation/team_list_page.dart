@@ -7,13 +7,12 @@ import 'chat/chat_team_page.dart';
 import 'team_detail_page.dart';
 
 /// ====================================================================
-/// 👥 TeamListPage — Equipos de la sala (tiempo real)
+/// 👥 TeamListPage — Equipos de la sala (versión mejorada)
 /// ====================================================================
-/// 🔹 Muestra todos los equipos creados dentro de una sala.
-/// 🔹 Permite unirse a un equipo (si hay cupo disponible).
-/// 🔹 Muestra el equipo actual del usuario.
-/// 🔹 Permite abrir el chat o ver el detalle del equipo.
-/// 🔹 Diseño optimizado sin overflow ni saturación visual.
+/// 🔹 Diseño vertical profesional, con tarjetas dinámicas.
+/// 🔹 Muestra color del equipo, jugadores y botones claros.
+/// 🔹 Indica si es tu equipo o si está lleno.
+/// 🔹 Enlace directo al detalle o chat del equipo.
 /// ====================================================================
 class TeamListPage extends StatefulWidget {
   final Room room;
@@ -26,6 +25,7 @@ class TeamListPage extends StatefulWidget {
 class _TeamListPageState extends State<TeamListPage> {
   final _auth = FirebaseAuth.instance;
   final _service = TeamService();
+
   String? _myTeamId;
   bool _loadingJoin = false;
 
@@ -35,7 +35,9 @@ class _TeamListPageState extends State<TeamListPage> {
     _loadMyTeam();
   }
 
-  /// 🔹 Obtiene el equipo actual del usuario desde Firestore
+  /// ================================================================
+  /// 🔹 Carga el equipo actual del usuario
+  /// ================================================================
   Future<void> _loadMyTeam() async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
@@ -43,14 +45,17 @@ class _TeamListPageState extends State<TeamListPage> {
     if (mounted) setState(() => _myTeamId = id);
   }
 
+  /// ================================================================
   /// 🔹 Permite unirse o cambiar de equipo
+  /// ================================================================
   Future<void> _join(Team t) async {
     if (_loadingJoin) return;
     setState(() => _loadingJoin = true);
 
     try {
       final msg = await _service.joinTeam(roomId: widget.room.id, teamId: t.id);
-      await _loadMyTeam(); // 🔁 actualiza el estado visual
+      await _loadMyTeam();
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg), backgroundColor: Colors.blueAccent),
@@ -70,7 +75,9 @@ class _TeamListPageState extends State<TeamListPage> {
     }
   }
 
-  /// 🔹 Abre el chat del equipo (solo si pertenece)
+  /// ================================================================
+  /// 🔹 Abre el chat del equipo
+  /// ================================================================
   void _openChat(Team t) {
     if (_myTeamId == t.id) {
       Navigator.push(
@@ -91,7 +98,9 @@ class _TeamListPageState extends State<TeamListPage> {
     }
   }
 
-  /// 🔹 Abre los detalles del equipo (jugadores, chat, etc.)
+  /// ================================================================
+  /// 🔹 Abre detalles del equipo
+  /// ================================================================
   void _openTeamDetail(Team t) {
     Navigator.push(
       context,
@@ -99,6 +108,15 @@ class _TeamListPageState extends State<TeamListPage> {
         builder: (_) => TeamDetailPage(room: widget.room, team: t),
       ),
     );
+  }
+
+  /// ================================================================
+  /// 🎨 Convierte HEX a Color
+  /// ================================================================
+  Color _parseColor(String hex) {
+    hex = hex.replaceAll('#', '');
+    if (hex.length == 6) hex = 'FF$hex';
+    return Color(int.parse(hex, radix: 16));
   }
 
   @override
@@ -109,7 +127,10 @@ class _TeamListPageState extends State<TeamListPage> {
       backgroundColor: const Color(0xFF0E0E0E),
       appBar: AppBar(
         backgroundColor: Colors.black,
-        title: const Text('Equipos'),
+        title: Text(
+          'Equipos — ${room.name}',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         elevation: 2,
       ),
       body: StreamBuilder<List<Team>>(
@@ -141,120 +162,173 @@ class _TeamListPageState extends State<TeamListPage> {
 
           final uid = _auth.currentUser?.uid;
 
-          return ListView.separated(
+          return ListView.builder(
             padding: const EdgeInsets.all(16),
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemCount: teams.length,
             itemBuilder: (_, i) {
               final t = teams[i];
               final isMine = _myTeamId == t.id;
+              final isFull = t.isFull;
+              final color = _parseColor(t.color);
               final fullText = '${t.count}/${t.maxPlayers}';
 
               return GestureDetector(
                 onTap: () => _openTeamDetail(t),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1A),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey.shade800, width: 0.8),
-                  ),
-                  child: ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: Colors.white10,
-                      child: Icon(Icons.groups, color: Colors.white),
-                    ),
-
-                    // ================== NOMBRE + INFO ==================
-                    title: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          t.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 8,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            if (isMine)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.blueAccent.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Text(
-                                  'Tu equipo',
-                                  style: TextStyle(
-                                    color: Colors.blueAccent,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            Text(
-                              'Jugadores: $fullText',
-                              style: const TextStyle(
-                                  color: Colors.white70, fontSize: 13),
-                            ),
-                          ],
-                        ),
+                    gradient: LinearGradient(
+                      colors: [
+                        color.withOpacity(0.12),
+                        Colors.black.withOpacity(0.3),
                       ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-
-                    // ================== BOTONES DERECHA ==================
-                    trailing: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 160),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color:
+                          isMine ? Colors.blueAccent : color.withOpacity(0.35),
+                      width: isMine ? 2 : 1,
+                    ),
+                    boxShadow: [
+                      if (isMine)
+                        BoxShadow(
+                          color: Colors.blueAccent.withOpacity(0.3),
+                          blurRadius: 12,
+                          spreadRadius: 2,
+                        ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ============ ENCABEZADO ============ //
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: (uid == null || (t.isFull && !isMine))
-                                  ? null
-                                  : () => _join(t),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    isMine ? Colors.grey : Colors.blueAccent,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 10),
-                                minimumSize: const Size(40, 38),
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: color.withOpacity(0.4),
+                                child: const Icon(Icons.groups,
+                                    color: Colors.white),
                               ),
-                              child: FittedBox(
-                                child: _loadingJoin && isMine
-                                    ? const SizedBox(
-                                        height: 18,
-                                        width: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : Text(
-                                        isMine ? 'Seleccionado' : 'Unirme',
-                                        style: const TextStyle(fontSize: 13),
-                                      ),
+                              const SizedBox(width: 12),
+                              Text(
+                                t.name,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (isMine)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.blueAccent.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                    color: Colors.blueAccent, width: 1),
+                              ),
+                              child: const Text(
+                                'TU EQUIPO',
+                                style: TextStyle(
+                                    color: Colors.blueAccent,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12),
                               ),
                             ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // ============ INFO LINEA ============ //
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Jugadores: $fullText',
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 13),
                           ),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            icon: const Icon(Icons.chat_bubble_outline,
-                                color: Colors.white70),
-                            tooltip: 'Chat del equipo',
-                            onPressed: () => _openChat(t),
+                          Text(
+                            isFull ? 'Equipo completo' : 'Disponible',
+                            style: TextStyle(
+                              color: isFull
+                                  ? Colors.redAccent
+                                  : Colors.greenAccent,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                            ),
                           ),
                         ],
                       ),
-                    ),
+
+                      const SizedBox(height: 14),
+
+                      // ============ BOTONES ============ //
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: ElevatedButton.icon(
+                              onPressed: (uid == null || (isFull && !isMine))
+                                  ? null
+                                  : () => _join(t),
+                              icon: Icon(
+                                isMine ? Icons.check_circle : Icons.login,
+                                size: 18,
+                              ),
+                              label: Text(
+                                isMine
+                                    ? 'Seleccionado'
+                                    : (isFull ? 'Lleno' : 'Unirme'),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: isMine
+                                    ? Colors.grey
+                                    : (isFull
+                                        ? Colors.redAccent.withOpacity(0.6)
+                                        : Colors.blueAccent),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 12, horizontal: 10),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            flex: 2,
+                            child: OutlinedButton.icon(
+                              onPressed: () => _openChat(t),
+                              icon: const Icon(Icons.chat_bubble_outline,
+                                  size: 18),
+                              label: const Text('Chat'),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.white24),
+                                foregroundColor: Colors.white70,
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 12, horizontal: 8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               );
