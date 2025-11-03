@@ -2,25 +2,24 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-// 👇 OJO a esta ruta: desde /presentation/widgets -> ../../data/
 import '../../data/team_service.dart';
 
 /// ====================================================================
-/// 📋 RosterSidePanel — Versión PRO con acciones admin y logs
+/// 📋 RosterSidePanel — Versión PRO (sin bugs de layout)
 /// ====================================================================
-/// - Avatar circular con brillo y borde del color del equipo.
+/// - Avatar circular con borde dinámico.
 /// - Nombre, rango y posición.
-/// - Menú contextual (solo admin): Mover a Titular / Suplente / Expulsar.
-/// - Se adapta a pantallas anchas/estrechas.
-/// - Panel opcional de "Historial del equipo".
+/// - Menú admin (mover titular/suplente/expulsar).
+/// - Lee correctamente `fotoUrl`.
+/// - Incluye Historial del equipo.
 /// ====================================================================
 
 class RosterSidePanel extends StatelessWidget {
-  final List<String> titulares; // UIDs
-  final List<String> suplentes; // UIDs
+  final List<String> titulares;
+  final List<String> suplentes;
   final Color accent;
   final String roomId;
-  final String teamId; // 👈 NUEVO: necesario para acciones
+  final String teamId;
   final bool isWide;
 
   const RosterSidePanel({
@@ -29,7 +28,7 @@ class RosterSidePanel extends StatelessWidget {
     required this.suplentes,
     required this.accent,
     required this.roomId,
-    required this.teamId, // 👈 NUEVO
+    required this.teamId,
     required this.isWide,
   });
 
@@ -56,7 +55,6 @@ class RosterSidePanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _header('Plantilla', accent),
-
             _sectionTitle('Titulares', accent),
             _PlayersList(
               uids: titulares,
@@ -65,9 +63,7 @@ class RosterSidePanel extends StatelessWidget {
               roomId: roomId,
               teamId: teamId,
             ),
-
             const Divider(color: Colors.white12, height: 20, thickness: 0.6),
-
             _sectionTitle('Suplentes', accent),
             _PlayersList(
               uids: suplentes,
@@ -76,8 +72,6 @@ class RosterSidePanel extends StatelessWidget {
               roomId: roomId,
               teamId: teamId,
             ),
-
-            // ======== (Opcional) Historial del equipo ======== //
             _logsTile(roomId, accent),
           ],
         ),
@@ -261,7 +255,6 @@ class _PlayersList extends StatelessWidget {
       );
     }
 
-    // Leemos si el usuario actual es el dueño de la sala (admin)
     return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       future: FirebaseFirestore.instance.collection('rooms').doc(roomId).get(),
       builder: (context, roomSnap) {
@@ -275,7 +268,6 @@ class _PlayersList extends StatelessWidget {
           );
         }
 
-        // ✅ Corregido tipo y nulos (propiedad data del AsyncSnapshot)
         final data = roomSnap.data?.data();
         final currentUid = FirebaseAuth.instance.currentUser?.uid;
         final roomOwner = data?['ownerId'];
@@ -311,7 +303,8 @@ class _PlayersList extends StatelessWidget {
                 final uid = docs[i].id;
                 final data = docs[i].data();
                 final name = (data['name'] ?? 'Jugador') as String;
-                final avatar = (data['avatar'] ?? '') as String;
+                final avatar =
+                    (data['pothoUrl'] ?? data['avatar'] ?? '') as String;
                 final rank = (data['rank'] ?? 'Bronce') as String;
                 final pos = (data['position'] ?? '') as String;
 
@@ -336,9 +329,6 @@ class _PlayersList extends StatelessWidget {
   }
 }
 
-/// ====================================================================
-/// 🎯 PlayerCard — Tarjeta de jugador con menú admin (si corresponde)
-/// ====================================================================
 class _PlayerCard extends StatelessWidget {
   final String uid;
   final String name;
@@ -375,7 +365,7 @@ class _PlayerCard extends StatelessWidget {
       case 'diamante':
         return const Color(0xFF7DF9FF);
       default:
-        return const Color(0xFFCD7F32); // bronce
+        return const Color(0xFFCD7F32); // Bronce
     }
   }
 
@@ -436,7 +426,7 @@ class _PlayerCard extends StatelessWidget {
           ),
           const SizedBox(width: 10),
 
-          // Datos del jugador
+          // Datos
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -448,9 +438,7 @@ class _PlayerCard extends StatelessWidget {
                     Text(
                       name,
                       style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
+                          fontWeight: FontWeight.w600, color: Colors.white),
                       overflow: TextOverflow.ellipsis,
                     ),
                     _Badge(text: badgeText, color: accent),
@@ -459,103 +447,90 @@ class _PlayerCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Row(
                   children: [
-                    Text(
-                      rank,
-                      style: TextStyle(
-                        color: rankColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                    Flexible(
+                      child: Text(
+                        '$rank${position.isNotEmpty ? ' • $position' : ''}',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
-                    if (position.isNotEmpty)
-                      Text(
-                        ' • $position',
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 12),
-                      ),
                   ],
                 ),
               ],
             ),
           ),
 
-          // Menú de acciones (solo admin)
-          isAdmin
-              ? PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: Colors.white70),
-                  onSelected: (value) async {
-                    String? feedback;
-
-                    if (value == 'titular') {
-                      feedback = await service.promoteToStarter(
-                        roomId: roomId,
-                        teamId: teamId,
-                        uid: uid,
-                      );
-                    } else if (value == 'suplente') {
-                      feedback = await service.demoteToBench(
-                        roomId: roomId,
-                        teamId: teamId,
-                        uid: uid,
-                      );
-                    } else if (value == 'expulsar') {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (_) => AlertDialog(
-                          backgroundColor: const Color(0xFF1B1B1B),
-                          title: const Text('¿Expulsar jugador?',
-                              style: TextStyle(color: Colors.white)),
-                          content: Text(
-                            'Esta acción no se puede deshacer.\n\nJugador: $name',
-                            style: const TextStyle(color: Colors.white70),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(false),
-                              child: const Text('Cancelar'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () => Navigator.of(context).pop(true),
-                              child: const Text('Expulsar'),
-                            ),
-                          ],
+          // Menú de acciones
+          if (isAdmin)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Colors.white70),
+              onSelected: (value) async {
+                String? feedback;
+                if (value == 'titular') {
+                  feedback = await service.promoteToStarter(
+                    roomId: roomId,
+                    teamId: teamId,
+                    uid: uid,
+                  );
+                } else if (value == 'suplente') {
+                  feedback = await service.demoteToBench(
+                    roomId: roomId,
+                    teamId: teamId,
+                    uid: uid,
+                  );
+                } else if (value == 'expulsar') {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      backgroundColor: const Color(0xFF1B1B1B),
+                      title: const Text('¿Expulsar jugador?',
+                          style: TextStyle(color: Colors.white)),
+                      content: Text(
+                        'Esta acción no se puede deshacer.\n\nJugador: $name',
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          child: const Text('Cancelar'),
                         ),
-                      );
-                      if (confirm == true) {
-                        feedback = await service.removePlayerFromTeam(
-                          roomId: roomId,
-                          teamId: teamId,
-                          uid: uid,
-                        );
-                      }
-                    }
-
-                    if (feedback != null && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(feedback),
-                          backgroundColor: accent,
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          child: const Text('Expulsar'),
                         ),
-                      );
-                    }
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
-                      value: 'titular',
-                      child: Text('Mover a Titular'),
+                      ],
                     ),
-                    PopupMenuItem(
-                      value: 'suplente',
-                      child: Text('Mover a Suplente'),
-                    ),
-                    PopupMenuItem(
-                      value: 'expulsar',
-                      child: Text('Expulsar jugador',
-                          style: TextStyle(color: Colors.redAccent)),
-                    ),
-                  ],
-                )
-              : const SizedBox.shrink(),
+                  );
+                  if (confirm == true) {
+                    feedback = await service.removePlayerFromTeam(
+                      roomId: roomId,
+                      teamId: teamId,
+                      uid: uid,
+                    );
+                  }
+                }
+
+                if (feedback != null && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(feedback), backgroundColor: accent),
+                  );
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'titular', child: Text('Mover a Titular')),
+                PopupMenuItem(
+                    value: 'suplente', child: Text('Mover a Suplente')),
+                PopupMenuItem(
+                  value: 'expulsar',
+                  child: Text('Expulsar jugador',
+                      style: TextStyle(color: Colors.redAccent)),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -588,7 +563,6 @@ class _FallbackAvatar extends StatelessWidget {
 class _Badge extends StatelessWidget {
   final String text;
   final Color color;
-
   const _Badge({required this.text, required this.color});
 
   @override
