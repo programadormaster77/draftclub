@@ -13,13 +13,13 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.22.0"  # o "3.24.0" si la tienes localmente
+          flutter-version: "3.22.0"
 
       - name: Verify Flutter
         run: flutter --version
 
       - name: Get Flutter packages
-        run: flutter pub get --no-sound-null-safety
+        run: flutter pub get
 
       - name: Enable iOS
         run: flutter config --enable-ios
