@@ -1,20 +1,17 @@
-# Podfile — configuración base de iOS para Flutter + Firebase
+# Podfile — configuración segura Flutter + Firebase + GitHub CI/CD
 platform :ios, '13.0'
 
-use_frameworks!
-use_modular_headers!
-
-flutter_application_path = File.expand_path('..', __dir__)
-eval(File.read(File.join(flutter_application_path, '.flutter-plugins-dependencies')), binding)
+# Importa configuración interna de Flutter
+flutter_root = File.expand_path('..', File.dirname(__FILE__))
+eval(File.read(File.join(flutter_root, 'Flutter', 'podhelper.rb')), binding)
 
 target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
-  flutter_application_path = File.expand_path('..', __dir__)
-  eval(File.read(File.join(flutter_application_path, '.flutter-plugins-dependencies')), binding)
+  flutter_ios_podfile_setup
 
-  # Solución temporal para Firebase SDK 12+
+  # 🔧 Ajuste de compatibilidad Firebase / Xcode
   post_install do |installer|
     installer.pods_project.targets.each do |target|
       flutter_additional_ios_build_settings(target)
