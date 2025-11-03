@@ -1,4 +1,4 @@
-name: Build iOS IPA (manual)
+name: Build iOS IPA
 
 on:
   workflow_dispatch:
@@ -6,45 +6,49 @@ on:
 jobs:
   build:
     runs-on: macos-latest
+
     steps:
-      - name: Checkout repository
+      - name: 🧾 Set up job
+        run: echo "Initializing iOS build job..."
+
+      - name: 🧩 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Flutter
+      - name: 🧰 Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.22.0"
+          channel: stable
+          cache: true
 
-      - name: Verify Flutter
+      - name: 🔍 Verify Flutter
         run: flutter --version
 
-      - name: Get Flutter packages
-        run: flutter pub get
-
-      - name: Enable iOS
-        run: flutter config --enable-ios
-
-      - name: Install CocoaPods
+      - name: 📦 Get Flutter packages
+        working-directory: apps/mobile
         run: |
-          cd apps/mobile/ios
-          pod install --repo-update
+          flutter pub get
+          flutter analyze
 
-      - name: Build iOS app (Release, no codesign)
-        run: |
-          cd apps/mobile
-          flutter build ios --release --no-codesign --no-sound-null-safety
+      - name: 🛠️ Enable iOS
+        working-directory: apps/mobile
+        run: flutter build ios --release --no-codesign
 
-      - name: Package IPA
+      - name: 🧩 Install CocoaPods
+        working-directory: apps/mobile/ios
         run: |
-          mkdir -p build/ipa
-          cd apps/mobile/build/ios/iphoneos
-          mkdir -p Payload
-          cp -r Runner.app Payload/
-          zip -r DraftClub.ipa Payload
-          mv DraftClub.ipa ../../../ipa/
- 
-      - name: Upload IPA artifact
+          pod repo update
+          pod install
+
+      - name: 🚀 Build iOS app (Release, no codesign)
+        working-directory: apps/mobile
+        run: flutter build ipa --release --no-codesign
+
+      - name: 📦 Package IPA
         uses: actions/upload-artifact@v4
         with:
-          name: DraftClub_iOS
-          path: apps/mobile/build/ipa/DraftClub.ipa
+          name: draftclub-ios-ipa
+          path: apps/mobile/build/ios/ipa/*.ipa
+
+      - name: ✅ Complete job
+        run: echo "✅ Build process finished successfully!"
