@@ -59,10 +59,10 @@ class _DraftClubAppState extends State<DraftClubApp> {
       _appLinks = AppLinks();
 
       // Si la app se abrió desde un enlace (app cerrada)
-      final initialUri = await _appLinks.getInitialAppLink();
-      if (initialUri != null) {
-        _handleIncomingLink(initialUri);
-      }
+      final initialUri = await _appLinks.getInitialLink();
+      _sub = _appLinks.uriLinkStream.listen((Uri uri) {
+        _handleIncomingLink(uri);
+      });
 
       // Si la app ya está abierta y llega un nuevo enlace
       _sub = _appLinks.uriLinkStream.listen((Uri uri) {
