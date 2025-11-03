@@ -41,7 +41,7 @@ dependencies:
   flutter_animate: ^4.5.2
 
   # 📸 Captura, grabación y archivos (solo Android/iOS)
-  image_picker: ^1.2.0
+  image_picker: ^1.1.2
   record: ^6.1.2
   path_provider: ^2.1.4
   video_thumbnail: ^0.5.3
