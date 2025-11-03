@@ -1,22 +1,28 @@
-# Podfile — configuración segura Flutter + Firebase + GitHub CI/CD
+# =============================================================
+# ✅ Podfile estable — Flutter + Firebase + GitHub Actions
+# Compatible con Flutter 3.24+ y runners macOS M1/M2
+# =============================================================
+
 platform :ios, '13.0'
 
-# Importa configuración interna de Flutter
-flutter_root = File.expand_path('..', File.dirname(__FILE__))
-eval(File.read(File.join(flutter_root, 'Flutter', 'podhelper.rb')), binding)
+use_frameworks!
+use_modular_headers!
+
+# ✅ Carga manual del entorno Flutter (sin depender de Flutter/podhelper.rb)
+flutter_application_path = File.expand_path('..', __dir__)
+flutter_framework_dir = File.join(flutter_application_path, '.ios', 'Flutter')
 
 target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
-  flutter_ios_podfile_setup
-
-  # 🔧 Ajuste de compatibilidad Firebase / Xcode
+  # ✅ Ajuste post instalación para Firebase y SDK moderno
   post_install do |installer|
     installer.pods_project.targets.each do |target|
-      flutter_additional_ios_build_settings(target)
       target.build_configurations.each do |config|
         config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+        config.build_settings['ENABLE_BITCODE'] = 'NO'
+        config.build_settings['SWIFT_VERSION'] = '5.0'
       end
     end
   end
