@@ -42,7 +42,7 @@ jobs:
           cp -r Runner.app Payload/
           zip -r DraftClub.ipa Payload
           mv DraftClub.ipa ../../../ipa/
-
+ 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
