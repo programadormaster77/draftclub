@@ -1,0 +1,11 @@
+# Disabled old Flutter CI workflow (was causing redundant builds)
+# This dummy workflow exists only to silence VS Code linting.
+on:
+  workflow_dispatch:
+
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disabled workflow
+        run: echo "This workflow is intentionally disabled."
