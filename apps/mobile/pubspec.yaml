@@ -13,7 +13,7 @@ dependencies:
 
   # Estado y navegación
   flutter_riverpod: ^3.0.0-dev.3
-  go_router: ^14.2.0
+  go_router: ^16.3.0
   provider: ^6.1.2
 
   # Networking
@@ -21,15 +21,15 @@ dependencies:
   dio: ^5.7.0
 
   # Firebase Core
-  firebase_core: ^3.5.0
-  firebase_auth: ^5.3.0
-  cloud_firestore: ^5.4.4
-  firebase_storage: ^12.3.1
-  firebase_messaging: ^15.0.3
-  firebase_crashlytics: ^4.1.0
-  firebase_analytics: ^11.1.0
-  firebase_app_check: ^0.3.0
-  cloud_functions: ^5.1.0
+  firebase_core: ^4.2.1
+  firebase_auth: ^6.1.2
+  cloud_firestore: ^6.1.0
+  firebase_storage: ^13.0.4
+  firebase_messaging: ^16.0.4
+  firebase_crashlytics: ^5.0.4
+  firebase_analytics: ^12.0.4
+  firebase_app_check: ^0.4.1+2
+  cloud_functions: ^6.0.4
 
   # UI / Multimedia
   cached_network_image: ^3.4.0
@@ -48,9 +48,9 @@ dependencies:
   path: ^1.9.0
 
   # 🌍 Geolocalización y utilidades
-  geolocator: ^12.0.0
-  geocoding: ^3.0.0
-  intl: ^0.19.0
+  geolocator: ^14.0.2
+  geocoding: ^4.0.0
+  intl: ^0.20.2
   uuid: ^4.5.0
   share_plus: ^12.0.1
 
@@ -58,7 +58,7 @@ dependencies:
   in_app_purchase: ^3.1.11
 
   # 🔗 Sistema de enlaces profundos (Deep Links)
-  app_links: ^3.4.2
+  app_links: ^6.4.1
 
   # ⚙️ Dependencias base del fork local
   plugin_platform_interface: ^2.1.4
@@ -95,7 +95,7 @@ dependency_overrides:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
   uses-material-design: true
@@ -110,3 +110,4 @@ flutter_icons:
   image_path: "assets/icons/draftclub_logo.png"
   adaptive_icon_background: "#000000"
   adaptive_icon_foreground: "assets/icons/draftclub_logo.png"
+  remove_alpha_ios: true
