@@ -1,14 +1,15 @@
 name: Build iOS IPA (manual)
 
 on:
-  workflow_dispatch:  # 👈 Solo se ejecuta a mano, no interfiere con tus push
+  workflow_dispatch:  # 👈 Permite ejecutarlo a mano desde Actions
 
 jobs:
-  build-ios:
+  build_ios:
+    name: Build iOS IPA
     runs-on: macos-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Flutter
@@ -17,28 +18,25 @@ jobs:
           flutter-version: 'stable'
           channel: 'stable'
 
-      - name: Flutter doctor (optional)
+      - name: Verify Flutter
         run: flutter doctor -v
+
+      - name: Get Flutter packages
+        run: flutter pub get
 
       - name: Enable iOS
         run: flutter config --enable-ios
-
-      - name: Flutter pub get
-        run: flutter pub get
 
       - name: Install CocoaPods
         run: |
           sudo gem install cocoapods
           cd ios
-          pod repo update
           pod install
           cd ..
 
-      # Compila en modo Release para dispositivos (sin firma)
-      - name: Build iOS (Release, no codesign)
+      - name: Build iOS app (Release, no codesign)
         run: flutter build ios --release --no-codesign
 
-      # Empaqueta el Runner.app en un .ipa (IPA = zip con carpeta Payload/)
       - name: Package IPA
         run: |
           mkdir -p build/ios/ipa/Payload
@@ -46,7 +44,7 @@ jobs:
           cd build/ios/ipa
           zip -r DraftClub-unsigned.ipa Payload
 
-      - name: Upload artifact
+      - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: DraftClub-unsigned-ipa
