@@ -19,7 +19,7 @@ dependencies:
   # Networking
   http: ^1.5.0
   dio: ^5.7.0
-
+ 
   # Firebase Core
   firebase_core: ^4.2.1
   firebase_auth: ^6.1.2
