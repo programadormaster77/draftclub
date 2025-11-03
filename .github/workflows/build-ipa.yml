@@ -1,7 +1,7 @@
 name: Build iOS IPA (manual)
 
 on:
-  workflow_dispatch:  # 👈 Permite ejecutarlo a mano desde Actions
+  workflow_dispatch:
 
 jobs:
   build_ios:
@@ -15,7 +15,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: 'stable'
+          flutter-version: '3.24.3'   # ✅ Versión fija compatible con ARM macOS
           channel: 'stable'
 
       - name: Verify Flutter
