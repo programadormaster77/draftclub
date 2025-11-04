@@ -1,0 +1,77 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      # =========================================================
+      # 📦 CHECKOUT DEL REPOSITORIO
+      # =========================================================
+      - name: 🧩 Checkout repository
+        uses: actions/checkout@v4
+
+      # =========================================================
+      # 🧰 CONFIGURAR FLUTTER (usa misma versión que tu entorno)
+      # =========================================================
+      - name: 🧰 Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.4"
+          channel: stable
+          cache: true
+
+      - name: 🔍 Verify Flutter version
+        run: flutter --version
+
+      # =========================================================
+      # 📦 DEPENDENCIAS DE FLUTTER
+      # =========================================================
+      - name: 📦 Get Flutter packages
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      # =========================================================
+      # ⚙️ PREPARAR ENTORNO iOS (descarga engine y genera podhelper)
+      # =========================================================
+      - name: 🛠️ Precache iOS artifacts
+        run: flutter --no-version-check precache --ios
+
+      - name: ⚙️ Generate iOS structure
+        working-directory: apps/mobile
+        run: flutter build ios --config-only
+
+      # =========================================================
+      # 🧹 LIMPIEZA Y CONFIGURACIÓN DE COCOAPODS
+      # =========================================================
+      - name: 🧹 Clean CocoaPods cache
+        working-directory: apps/mobile/ios
+        run: |
+          rm -rf Pods Podfile.lock
+          pod repo update
+          pod install --verbose
+
+      # =========================================================
+      # 🚀 COMPILAR Y EMPAQUETAR IPA (sin firmar)
+      # =========================================================
+      - name: 🚀 Build iOS app (Release, no codesign)
+        working-directory: apps/mobile
+        run: flutter build ipa --release --no-codesign
+
+      # =========================================================
+      # 📦 EXPORTAR IPA COMO ARTEFACTO DESCARGABLE
+      # =========================================================
+      - name: 📦 Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: draftclub-ios-ipa
+          path: apps/mobile/build/ios/ipa/*.ipa
+
+      # =========================================================
+      # ✅ FINALIZACIÓN
+      # =========================================================
+      - name: ✅ Complete job
+        run: echo "✅ Build iOS finished successfully!"
