@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
 
       # =========================================================
-      # 🧰 CONFIGURAR FLUTTER (usa misma versión que tu entorno)
+      # 🧰 CONFIGURAR FLUTTER (usa la MISMA versión que tu entorno)
       # =========================================================
       - name: 🧰 Set up Flutter
         uses: subosito/flutter-action@v2
@@ -35,11 +35,12 @@ jobs:
         run: flutter pub get
 
       # =========================================================
-      # ⚙️ PREPARAR ENTORNO iOS (descarga engine y genera podhelper)
+      # ⚙️ PREPARAR ENTORNO iOS (descarga engine y genera podhelper.rb)
       # =========================================================
       - name: 🛠️ Precache iOS artifacts
         run: flutter --no-version-check precache --ios
 
+      # Genera ios/Flutter/podhelper.rb SIN exigir firmas
       - name: ⚙️ Generate iOS structure (simulator-safe / no codesign)
         working-directory: apps/mobile
         env:
@@ -49,37 +50,24 @@ jobs:
           EXPANDED_CODE_SIGN_IDENTITY: ""
           FLUTTER_SUPPRESS_ANALYTICS: "true"
         run: |
-          # Generar estructura para simulador iOS sin certificados
+          # Genera la carpeta ios/Flutter y el podhelper.rb
           flutter build ios --simulator --no-codesign || true
+          test -f ios/Flutter/podhelper.rb && echo "✅ podhelper.rb OK" || (echo "❌ Falta podhelper.rb" && exit 1)
 
-           # =========================================================
-      # 🧹 COCOAPODS FIX — Forzar Ruby 3.1 + reinstalar limpio
       # =========================================================
-      - name: 🧹 Clean and reinstall CocoaPods (Ruby 3.1 enforced)
+      # 🧹 COCOAPODS - instalación estable via Homebrew
+      # =========================================================
+      - name: 🧹 Install CocoaPods via Homebrew
         working-directory: apps/mobile/ios
-        shell: bash
         run: |
-          echo "🧩 Installing Ruby 3.1 and configuring PATH..."
-          brew uninstall --force ruby || true
-          brew install ruby@3.1
-          echo 'export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"' >> ~/.bashrc
-          echo 'export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"' >> ~/.zshrc
-          export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"
-          ruby -v
-
-          echo "🧹 Removing preinstalled CocoaPods..."
-          sudo gem uninstall cocoapods -a -I -x || true
-
-          echo "📦 Installing CocoaPods 1.15.2..."
-          sudo gem install cocoapods -v 1.15.2 --no-document
+          echo "🧩 Installing CocoaPods with Homebrew..."
+          brew update
+          brew install cocoapods
           pod --version
-
-          echo "🔁 Updating and installing pods..."
+          echo "🧹 Cleaning old pods..."
           rm -rf Pods Podfile.lock
           pod repo update
           pod install --repo-update --verbose
-
-
 
       # =========================================================
       # 🚀 COMPILAR Y EMPAQUETAR IPA (sin firmar)
