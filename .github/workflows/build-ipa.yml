@@ -59,22 +59,25 @@ jobs:
           fi
 
       # =========================================================
-      # 🧹 INSTALAR COCOAPODS DE FORMA ESTABLE (Ruby 3.3 fix)
+      # 🧹 FIX RUBY + INSTALACIÓN ESTABLE DE COCOAPODS
       # =========================================================
-      - name: 🧹 Install CocoaPods via Homebrew (stable)
+      - name: 🧹 Fix Ruby & install CocoaPods (Ruby 3.1.x)
         working-directory: apps/mobile/ios
         shell: bash
         run: |
-          echo "🧩 Desinstalando versiones conflictivas de CocoaPods..."
-          sudo gem uninstall cocoapods -a -I -x || true
+          echo "🧩 Desinstalando Ruby 3.3 y configurando Ruby 3.1.x..."
+          brew uninstall --force ruby || true
+          brew install ruby@3.1
+          echo 'export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"' >> ~/.bashrc
+          echo 'export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"' >> ~/.zshrc
+          export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"
+          ruby -v
 
-          echo "📦 Reinstalando CocoaPods con Homebrew..."
-          brew update
-          brew reinstall cocoapods
-          export PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
+          echo "🧩 Eliminando versiones conflictivas de CocoaPods..."
+          sudo gem uninstall cocoapods -aIx || true
 
-          echo "✅ Versión de CocoaPods:"
-          which pod
+          echo "📦 Instalando CocoaPods 1.15.2 (compatible con Ruby 3.1)..."
+          sudo gem install cocoapods -v 1.15.2 --no-document
           pod --version
 
           echo "🧹 Limpiando Pods anteriores..."
