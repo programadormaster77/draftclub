@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
 
       # =========================================================
-      # 🧰 CONFIGURAR FLUTTER (usa la MISMA versión que tu entorno)
+      # 🧰 CONFIGURAR FLUTTER (misma versión local)
       # =========================================================
       - name: 🧰 Set up Flutter
         uses: subosito/flutter-action@v2
@@ -35,52 +35,48 @@ jobs:
         run: flutter pub get
 
       # =========================================================
-      # ⚙️ PREPARAR ENTORNO iOS (descarga engine y genera podhelper.rb)
+      # ⚙️ PREPARAR ENTORNO iOS
       # =========================================================
       - name: 🛠️ Precache iOS artifacts
         run: flutter --no-version-check precache --ios
 
-      - name: ⚙️ Generate iOS structure (simulator-safe / no codesign)
+      - name: ⚙️ Generate iOS structure (no codesign)
         working-directory: apps/mobile
         env:
           CI: true
           CODE_SIGNING_ALLOWED: "NO"
-          CODE_SIGN_IDENTITY: ""
-          EXPANDED_CODE_SIGN_IDENTITY: ""
           FLUTTER_SUPPRESS_ANALYTICS: "true"
         run: |
           echo "🧩 Generando estructura iOS..."
           flutter build ios --simulator --no-codesign || true
-          if [ -f ios/Flutter/podhelper.rb ]; then
-            echo "✅ podhelper.rb generado correctamente."
-          else
-            echo "❌ No se encontró podhelper.rb"
-            exit 1
-          fi
+          test -f ios/Flutter/podhelper.rb && echo "✅ podhelper.rb OK" || (echo "❌ Falta podhelper.rb" && exit 1)
 
       # =========================================================
-      # 🧹 FIX RUBY + INSTALACIÓN ESTABLE DE COCOAPODS
+      # 🧹 FIX RUBY 3.1 + COCOAPODS ESTABLE
       # =========================================================
-      - name: 🧹 Fix Ruby & install CocoaPods (Ruby 3.1.x)
+      - name: 🧹 Fix Ruby & install CocoaPods (force Ruby 3.1)
         working-directory: apps/mobile/ios
         shell: bash
         run: |
-          echo "🧩 Desinstalando Ruby 3.3 y configurando Ruby 3.1.x..."
+          echo "🧩 Forzando Ruby 3.1.x globalmente..."
           brew uninstall --force ruby || true
           brew install ruby@3.1
+
+          echo 'export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"' >> ~/.bash_profile
           echo 'export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"' >> ~/.bashrc
           echo 'export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"' >> ~/.zshrc
           export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"
+          which ruby
           ruby -v
 
-          echo "🧩 Eliminando versiones conflictivas de CocoaPods..."
+          echo "🧹 Eliminando CocoaPods conflictivos..."
           sudo gem uninstall cocoapods -aIx || true
 
-          echo "📦 Instalando CocoaPods 1.15.2 (compatible con Ruby 3.1)..."
+          echo "📦 Instalando CocoaPods 1.15.2..."
           sudo gem install cocoapods -v 1.15.2 --no-document
           pod --version
 
-          echo "🧹 Limpiando Pods anteriores..."
+          echo "🧹 Limpiando Pods antiguos..."
           rm -rf Pods Podfile.lock ~/Library/Caches/CocoaPods
 
           echo "🔁 Actualizando repositorios e instalando Pods..."
@@ -88,19 +84,17 @@ jobs:
           pod install --repo-update --verbose
 
       # =========================================================
-      # 🚀 COMPILAR Y EMPAQUETAR IPA (sin firmar)
+      # 🚀 COMPILAR IPA (sin firmar)
       # =========================================================
       - name: 🚀 Build iOS app (Release, no codesign)
         working-directory: apps/mobile
         env:
           CI: true
           CODE_SIGNING_ALLOWED: "NO"
-          CODE_SIGN_IDENTITY: ""
-          EXPANDED_CODE_SIGN_IDENTITY: ""
         run: flutter build ipa --release --no-codesign
 
       # =========================================================
-      # 📦 EXPORTAR IPA COMO ARTEFACTO DESCARGABLE
+      # 📦 EXPORTAR IPA
       # =========================================================
       - name: 📦 Upload IPA artifact
         uses: actions/upload-artifact@v4
