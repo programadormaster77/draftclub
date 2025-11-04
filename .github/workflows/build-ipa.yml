@@ -40,7 +40,6 @@ jobs:
       - name: 🛠️ Precache iOS artifacts
         run: flutter --no-version-check precache --ios
 
-      # Genera ios/Flutter/podhelper.rb SIN exigir firmas
       - name: ⚙️ Generate iOS structure (simulator-safe / no codesign)
         working-directory: apps/mobile
         env:
@@ -50,22 +49,38 @@ jobs:
           EXPANDED_CODE_SIGN_IDENTITY: ""
           FLUTTER_SUPPRESS_ANALYTICS: "true"
         run: |
-          # Genera la carpeta ios/Flutter y el podhelper.rb
+          echo "🧩 Generando estructura iOS..."
           flutter build ios --simulator --no-codesign || true
-          test -f ios/Flutter/podhelper.rb && echo "✅ podhelper.rb OK" || (echo "❌ Falta podhelper.rb" && exit 1)
+          if [ -f ios/Flutter/podhelper.rb ]; then
+            echo "✅ podhelper.rb generado correctamente."
+          else
+            echo "❌ No se encontró podhelper.rb"
+            exit 1
+          fi
 
       # =========================================================
-      # 🧹 COCOAPODS - instalación estable via Homebrew
+      # 🧹 INSTALAR COCOAPODS DE FORMA ESTABLE (Ruby 3.3 fix)
       # =========================================================
-      - name: 🧹 Install CocoaPods via Homebrew
+      - name: 🧹 Install CocoaPods via Homebrew (stable)
         working-directory: apps/mobile/ios
+        shell: bash
         run: |
-          echo "🧩 Installing CocoaPods with Homebrew..."
+          echo "🧩 Desinstalando versiones conflictivas de CocoaPods..."
+          sudo gem uninstall cocoapods -a -I -x || true
+
+          echo "📦 Reinstalando CocoaPods con Homebrew..."
           brew update
-          brew install cocoapods
+          brew reinstall cocoapods
+          export PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
+
+          echo "✅ Versión de CocoaPods:"
+          which pod
           pod --version
-          echo "🧹 Cleaning old pods..."
-          rm -rf Pods Podfile.lock
+
+          echo "🧹 Limpiando Pods anteriores..."
+          rm -rf Pods Podfile.lock ~/Library/Caches/CocoaPods
+
+          echo "🔁 Actualizando repositorios e instalando Pods..."
           pod repo update
           pod install --repo-update --verbose
 
