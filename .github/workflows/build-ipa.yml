@@ -40,8 +40,13 @@ jobs:
       - name: 🛠️ Precache iOS artifacts
         run: flutter --no-version-check precache --ios
 
-      - name: ⚙️ Generate iOS structure
+      - name: ⚙️ Generate iOS structure (no codesign)
         working-directory: apps/mobile
+        env:
+          CI: true
+          CODE_SIGNING_ALLOWED: "NO"
+          CODE_SIGN_IDENTITY: ""
+          EXPANDED_CODE_SIGN_IDENTITY: ""
         run: flutter build ios --config-only
 
       # =========================================================
@@ -59,6 +64,11 @@ jobs:
       # =========================================================
       - name: 🚀 Build iOS app (Release, no codesign)
         working-directory: apps/mobile
+        env:
+          CI: true
+          CODE_SIGNING_ALLOWED: "NO"
+          CODE_SIGN_IDENTITY: ""
+          EXPANDED_CODE_SIGN_IDENTITY: ""
         run: flutter build ipa --release --no-codesign
 
       # =========================================================
