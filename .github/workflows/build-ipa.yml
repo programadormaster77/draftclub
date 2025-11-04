@@ -52,18 +52,21 @@ jobs:
           # Generar estructura para simulador iOS sin certificados
           flutter build ios --simulator --no-codesign || true
 
-          
+
+       # =========================================================
+      # 🧹 LIMPIEZA Y CONFIGURACIÓN DE COCOAPODS (FORZADA)
       # =========================================================
-      # 🧹 LIMPIEZA Y CONFIGURACIÓN DE COCOAPODS (estable)
-      # =========================================================
-      - name: 🧹 Clean and reinstall CocoaPods (safe)
+      - name: 🧹 Clean and reinstall CocoaPods (forced)
         working-directory: apps/mobile/ios
         run: |
-          echo "🧹 Cleaning Pods and reinstalling CocoaPods..."
+          echo "🧹 Removing preinstalled CocoaPods and reinstalling stable version..."
+          sudo gem uninstall cocoapods -a -I -x || true
           sudo gem install cocoapods -v 1.15.2 --no-document
+          pod --version
           pod repo update
           rm -rf Pods Podfile.lock
           pod install --repo-update --verbose
+
 
 
       # =========================================================
