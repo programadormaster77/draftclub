@@ -28,6 +28,18 @@ jobs:
         run: flutter --version
 
       # =========================================================
+      # 💎 CONFIGURAR RUBY 3.1 GLOBAL (evita conflicto Ruby 3.3)
+      # =========================================================
+      - name: 💎 Set up Ruby 3.1
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.1"
+          bundler-cache: false
+
+      - name: 🔍 Verify Ruby version
+        run: ruby -v
+
+      # =========================================================
       # 📦 DEPENDENCIAS DE FLUTTER
       # =========================================================
       - name: 📦 Get Flutter packages
@@ -52,31 +64,20 @@ jobs:
           test -f ios/Flutter/podhelper.rb && echo "✅ podhelper.rb OK" || (echo "❌ Falta podhelper.rb" && exit 1)
 
       # =========================================================
-      # 🧹 FIX RUBY 3.1 + COCOAPODS ESTABLE
+      # 🧹 INSTALAR COCOAPODS DE FORMA ESTABLE (con Ruby 3.1)
       # =========================================================
-      - name: 🧹 Fix Ruby & install CocoaPods (force Ruby 3.1)
+      - name: 🧹 Install CocoaPods (Ruby 3.1 stable)
         working-directory: apps/mobile/ios
         shell: bash
         run: |
-          echo "🧩 Forzando Ruby 3.1.x globalmente..."
-          brew uninstall --force ruby || true
-          brew install ruby@3.1
-
-          echo 'export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"' >> ~/.bash_profile
-          echo 'export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"' >> ~/.bashrc
-          echo 'export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"' >> ~/.zshrc
-          export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"
-          which ruby
-          ruby -v
-
-          echo "🧹 Eliminando CocoaPods conflictivos..."
+          echo "🧩 Limpiando CocoaPods antiguos..."
           sudo gem uninstall cocoapods -aIx || true
 
           echo "📦 Instalando CocoaPods 1.15.2..."
           sudo gem install cocoapods -v 1.15.2 --no-document
           pod --version
 
-          echo "🧹 Limpiando Pods antiguos..."
+          echo "🧹 Limpiando Pods previos..."
           rm -rf Pods Podfile.lock ~/Library/Caches/CocoaPods
 
           echo "🔁 Actualizando repositorios e instalando Pods..."
@@ -94,7 +95,7 @@ jobs:
         run: flutter build ipa --release --no-codesign
 
       # =========================================================
-      # 📦 EXPORTAR IPA
+      # 📦 EXPORTAR IPA COMO ARTEFACTO DESCARGABLE
       # =========================================================
       - name: 📦 Upload IPA artifact
         uses: actions/upload-artifact@v4
