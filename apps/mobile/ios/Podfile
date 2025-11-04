@@ -9,14 +9,21 @@ ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 use_frameworks!
 use_modular_headers!
 
-# Ruta base del proyecto Flutter
-flutter_application_path = File.expand_path(File.join(__dir__, '..'))
-podhelper_path = File.expand_path(File.join(flutter_application_path, 'Flutter', 'podhelper.rb'))
+# ============================================================
+# 🚀 RUTA CORRECTA DEL PODHELPER (dentro de ios/Flutter)
+# ============================================================
+
+flutter_application_path = File.expand_path(File.join(__dir__, 'Flutter'))
+podhelper_path = File.expand_path(File.join(flutter_application_path, 'podhelper.rb'))
 
 unless File.exist?(podhelper_path)
-  raise "❌ No se encontró podhelper.rb en #{podhelper_path}. Asegúrate de haber corrido 'flutter build ios' primero."
+  raise "❌ No se encontró podhelper.rb en #{podhelper_path}. Asegúrate de haber corrido 'flutter pub get' primero."
 end
 load podhelper_path
+
+# ============================================================
+# 🎯 CONFIGURACIÓN DE TARGETS
+# ============================================================
 
 target 'Runner' do
   use_frameworks!
@@ -32,7 +39,10 @@ target 'Runner' do
   end
 end
 
-# Evita duplicación de arquitectura en simuladores
+# ============================================================
+# ⚙️ AJUSTES POST-INSTALACIÓN (para evitar errores de arquitectura)
+# ============================================================
+
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
