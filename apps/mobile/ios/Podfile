@@ -47,19 +47,18 @@ end
 # 🩹 FIX GLOBAL — Forzar inclusión de Flutter.framework headers
 # ============================================================
 pre_install do |installer|
-  puts("🔧 Inyectando ruta de Flutter.framework para compatibilidad con wakelock_plus...")
+  puts("🔧 Inyectando ruta de Flutter.framework para compatibilidad con wakelock_plus y app_links...")
   installer.pod_targets.each do |pod|
     # Solo aplica a los plugins que fallan con 'Flutter/Flutter.h not found'
-    if pod.name.include?('wakelock_plus') || pod.name.include?('wakelock')
+    if pod.name.include?('wakelock_plus') || pod.name.include?('wakelock') || pod.name.include?('app_links')
       flutter_framework_dir = File.join(File.expand_path(flutter_application_path), '.ios', 'Flutter', 'engine')
-      pod.xcconfig('Release')['HEADER_SEARCH_PATHS'] ||= '$(inherited)'
-      pod.xcconfig('Release')['HEADER_SEARCH_PATHS'] << " #{flutter_framework_dir}/**"
-      pod.xcconfig('Debug')['HEADER_SEARCH_PATHS'] ||= '$(inherited)'
-      pod.xcconfig('Debug')['HEADER_SEARCH_PATHS'] << " #{flutter_framework_dir}/**"
+      %w[Release Debug].each do |config|
+        pod.xcconfig(config)['HEADER_SEARCH_PATHS'] ||= '$(inherited)'
+        pod.xcconfig(config)['HEADER_SEARCH_PATHS'] << " #{flutter_framework_dir}/**"
+      end
     end
   end
 end
-
 
 # ============================================================
 # 🧩 POST-INSTALL — Ajustes para evitar errores de compilación
@@ -67,6 +66,8 @@ end
 
 post_install do |installer|
   installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+
     target.build_configurations.each do |config|
       # ✅ Compatibilidad con Firebase y AppLinks
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
@@ -76,6 +77,9 @@ post_install do |installer|
       config.build_settings['SWIFT_OBJC_BRIDGING_HEADER'] = nil
       config.build_settings['SWIFT_OBJC_INTERFACE_HEADER_NAME'] = nil
       config.build_settings['DEFINES_MODULE'] = 'YES'
+
+      # 🚀 Evitar error de arquitectura en runners Apple Silicon
+      config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
     end
   end
 end

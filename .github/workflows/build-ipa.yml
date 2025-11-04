@@ -8,45 +8,70 @@ jobs:
     runs-on: macos-latest
 
     steps:
+      # =========================================================
+      # 📦 CHECKOUT DEL REPOSITORIO
+      # =========================================================
       - name: 🧩 Checkout repository
         uses: actions/checkout@v4
 
+      # =========================================================
+      # 🧰 CONFIGURAR FLUTTER (usa misma versión que tu entorno)
+      # =========================================================
       - name: 🧰 Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.24.5"
+          flutter-version: "3.35.4"
           channel: stable
           cache: true
 
-      - name: 🔍 Verify Flutter
+      - name: 🔍 Verify Flutter version
         run: flutter --version
 
+      # =========================================================
+      # 📦 DEPENDENCIAS DE FLUTTER
+      # =========================================================
       - name: 📦 Get Flutter packages
         working-directory: apps/mobile
         run: flutter pub get
 
-      # 👇 PRE-BUILD: genera .ios/Flutter/podhelper.rb antes de CocoaPods
-      - name: ⚙️ Prebuild iOS structure
-        working-directory: apps/mobile
-        run: flutter build ios --no-codesign || true
+      # =========================================================
+      # ⚙️ PREPARAR ENTORNO iOS (descarga engine y genera podhelper)
+      # =========================================================
+      - name: 🛠️ Precache iOS artifacts
+        run: flutter --no-version-check precache --ios
 
-      # 👇 Instala CocoaPods ahora que existe podhelper.rb
-      - name: 🧩 Install CocoaPods
+      - name: ⚙️ Generate iOS structure
+        working-directory: apps/mobile
+        run: flutter build ios --config-only
+
+      # =========================================================
+      # 🧹 LIMPIEZA Y CONFIGURACIÓN DE COCOAPODS
+      # =========================================================
+      - name: 🧹 Clean CocoaPods cache
         working-directory: apps/mobile/ios
         run: |
+          rm -rf Pods Podfile.lock
           pod repo update
-          pod install
+          pod install --verbose
 
-      # 👇 Compila la app sin firmar (para exportar IPA)
+      # =========================================================
+      # 🚀 COMPILAR Y EMPAQUETAR IPA (sin firmar)
+      # =========================================================
       - name: 🚀 Build iOS app (Release, no codesign)
         working-directory: apps/mobile
         run: flutter build ipa --release --no-codesign
 
-      - name: 📦 Package IPA
+      # =========================================================
+      # 📦 EXPORTAR IPA COMO ARTEFACTO DESCARGABLE
+      # =========================================================
+      - name: 📦 Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: draftclub-ios-ipa
           path: apps/mobile/build/ios/ipa/*.ipa
 
+      # =========================================================
+      # ✅ FINALIZACIÓN
+      # =========================================================
       - name: ✅ Complete job
         run: echo "✅ Build iOS finished successfully!"
