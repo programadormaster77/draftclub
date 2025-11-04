@@ -48,13 +48,16 @@ end
 # ============================================================
 pre_install do |installer|
   puts("🔧 Inyectando ruta de Flutter.framework para compatibilidad con wakelock_plus y app_links...")
+
   installer.pod_targets.each do |pod|
     # Solo aplica a los plugins que fallan con 'Flutter/Flutter.h not found'
     if pod.name.include?('wakelock_plus') || pod.name.include?('wakelock') || pod.name.include?('app_links')
       flutter_framework_dir = File.join(File.expand_path(flutter_application_path), '.ios', 'Flutter', 'engine')
-      %w[Release Debug].each do |config|
-        pod.xcconfig(config)['HEADER_SEARCH_PATHS'] ||= '$(inherited)'
-        pod.xcconfig(config)['HEADER_SEARCH_PATHS'] << " #{flutter_framework_dir}/**"
+
+      # ✅ Nuevo método compatible con CocoaPods 1.15+ (build_settings)
+      pod.build_configurations.each do |config_name, build_settings|
+        current = build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
+        build_settings['HEADER_SEARCH_PATHS'] = "#{current} #{flutter_framework_dir}/**"
       end
     end
   end
