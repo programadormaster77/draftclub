@@ -35,7 +35,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   // Campos especiales
   List<String> _selectedPositions = [];
   String _preferredFoot = 'Derecho';
-  String? _sex; // 🔹 Nuevo campo editable
+  String? _sex;
   Map<String, dynamic>? _selectedCityData;
 
   // Listas
@@ -54,7 +54,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   ];
 
   final List<String> _pies = ['Derecho', 'Izquierdo', 'Ambos'];
-  final List<String> _sexos = ['Masculino', 'Femenino']; // 🔹 Opciones
+  final List<String> _sexos = ['Masculino', 'Femenino'];
 
   @override
   void initState() {
@@ -73,7 +73,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       _alturaCtrl.text = data['heightCm']?.toString() ?? '';
       _ciudadCtrl.text = data['city'] ?? '';
       _preferredFoot = data['preferredFoot'] ?? 'Derecho';
-      _sex = data['sex'] ?? 'Masculino'; // ✅ Nuevo campo cargado
+      _sex = data['sex'] ?? 'Masculino';
       _currentPhotoUrl = data['photoUrl'];
       final pos = data['position'];
       if (pos != null && pos is String) {
@@ -123,7 +123,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         'cityData': _selectedCityData,
         'preferredFoot': _preferredFoot,
         'position': _selectedPositions.join(', '),
-        'sex': _sex ?? 'Masculino', // ✅ Nuevo campo
+        'sex': _sex ?? 'Masculino',
         'photoUrl': photoUrl,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
@@ -159,7 +159,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
-  // 🌍 MODAL DE SELECCIÓN DE CIUDAD (igual que create_room_page)
+  // 🌍 MODAL DE SELECCIÓN DE CIUDAD
   Future<void> _openCityPicker() async {
     final placeService = PlaceService();
     TextEditingController searchCtrl = TextEditingController();
@@ -284,7 +284,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
     });
   }
 
-  // ===================== UI =====================
   @override
   Widget build(BuildContext context) {
     final avatarWidget = _imageFile != null
@@ -330,14 +329,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 ),
               ),
               const SizedBox(height: 20),
-
               _buildTextField(_nombreCtrl, 'Nombre', true),
               _buildTextField(_apodoCtrl, 'Apodo (opcional)', false),
               const SizedBox(height: 12),
-
-              // 🔹 Nuevo campo: Selección de sexo
               DropdownButtonFormField<String>(
-                initialValue: _sex,
+                value: _sex,
                 dropdownColor: const Color(0xFF1A1A1A),
                 decoration: const InputDecoration(
                   labelText: 'Sexo',
@@ -359,8 +355,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 onChanged: (v) => setState(() => _sex = v),
               ),
               const SizedBox(height: 12),
-
-              // 🌍 Selector de ciudad
               GestureDetector(
                 onTap: _openCityPicker,
                 child: AbsorbPointer(
@@ -383,14 +377,33 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 ),
               ),
               const SizedBox(height: 12),
-
               _buildHeightField(),
               const SizedBox(height: 12),
               _buildPositionSelector(),
               const SizedBox(height: 12),
-              _buildFootSelector(),
+              DropdownButtonFormField<String>(
+                value: _preferredFoot,
+                dropdownColor: const Color(0xFF1A1A1A),
+                items: _pies
+                    .map((p) => DropdownMenuItem(
+                        value: p,
+                        child: Text(p,
+                            style: const TextStyle(color: Colors.white))))
+                    .toList(),
+                onChanged: (v) =>
+                    setState(() => _preferredFoot = v ?? 'Derecho'),
+                decoration: const InputDecoration(
+                  labelText: 'Pie dominante',
+                  labelStyle: TextStyle(color: Colors.white70),
+                  enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white24)),
+                  focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.blueAccent)),
+                  filled: true,
+                  fillColor: Color(0xFF111111),
+                ),
+              ),
               const SizedBox(height: 20),
-
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -413,7 +426,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
-  // ===================== Helpers =====================
   Widget _buildTextField(
       TextEditingController ctrl, String label, bool obligatorio) {
     return TextFormField(
@@ -526,29 +538,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
           ),
         );
       },
-    );
-  }
-
-  Widget _buildFootSelector() {
-    return DropdownButtonFormField<String>(
-      initialValue: _preferredFoot,
-      dropdownColor: const Color(0xFF1A1A1A),
-      items: _pies
-          .map((p) => DropdownMenuItem(
-              value: p,
-              child: Text(p, style: const TextStyle(color: Colors.white))))
-          .toList(),
-      onChanged: (v) => setState(() => _preferredFoot = v ?? 'Derecho'),
-      decoration: const InputDecoration(
-        labelText: 'Pie dominante',
-        labelStyle: TextStyle(color: Colors.white70),
-        enabledBorder:
-            OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-        focusedBorder: OutlineInputBorder(
-            borderSide: BorderSide(color: Colors.blueAccent)),
-        filled: true,
-        fillColor: Color(0xFF111111),
-      ),
     );
   }
 }
