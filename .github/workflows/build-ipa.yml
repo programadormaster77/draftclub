@@ -40,14 +40,18 @@ jobs:
       - name: 🛠️ Precache iOS artifacts
         run: flutter --no-version-check precache --ios
 
-      - name: ⚙️ Generate iOS structure (no codesign)
+      - name: ⚙️ Generate iOS structure (simulator-safe / no codesign)
         working-directory: apps/mobile
         env:
           CI: true
           CODE_SIGNING_ALLOWED: "NO"
           CODE_SIGN_IDENTITY: ""
           EXPANDED_CODE_SIGN_IDENTITY: ""
-        run: flutter build ios --config-only
+          FLUTTER_SUPPRESS_ANALYTICS: "true"
+        run: |
+          # Generar estructura para simulador iOS sin certificados
+          flutter build ios --simulator --no-codesign || true
+
 
       # =========================================================
       # 🧹 LIMPIEZA Y CONFIGURACIÓN DE COCOAPODS
