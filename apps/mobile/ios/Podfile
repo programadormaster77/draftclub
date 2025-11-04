@@ -36,7 +36,7 @@ target 'Runner' do
   use_modular_headers!
 
   flutter_ios_podfile_setup
-  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  flutter_install_all_ios_pods(File.dirname(File.realpath(__FILE__)))
 
   target 'RunnerTests' do
     inherit! :search_paths
@@ -44,27 +44,29 @@ target 'Runner' do
 end
 
 # ============================================================
-# 🩹 FIX GLOBAL — Forzar inclusión de Flutter.framework headers
+# 🩹 FIX GLOBAL — Compatibilidad CocoaPods 1.16+ (sin usar .xcconfig)
 # ============================================================
+
 pre_install do |installer|
   puts("🔧 Inyectando ruta de Flutter.framework para compatibilidad con wakelock_plus y app_links...")
 
   installer.pod_targets.each do |pod|
-    # Solo aplica a los plugins que fallan con 'Flutter/Flutter.h not found'
-    if pod.name.include?('wakelock_plus') || pod.name.include?('wakelock') || pod.name.include?('app_links')
-      flutter_framework_dir = File.join(File.expand_path(flutter_application_path), '.ios', 'Flutter', 'engine')
+    # 🔍 Solo afecta a pods que fallan con 'Flutter/Flutter.h not found'
+    next unless pod.name.match?(/wakelock_plus|wakelock|app_links/i)
 
-      # ✅ Nuevo método compatible con CocoaPods 1.15+ (build_settings)
-      pod.build_configurations.each do |config_name, build_settings|
-        current = build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
-        build_settings['HEADER_SEARCH_PATHS'] = "#{current} #{flutter_framework_dir}/**"
+    flutter_framework_dir = File.join(File.expand_path(flutter_application_path), '.ios', 'Flutter', 'engine')
+
+    pod.build_configurations.each do |config_name, build_settings|
+      current_paths = build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
+      unless current_paths.include?(flutter_framework_dir)
+        build_settings['HEADER_SEARCH_PATHS'] = "#{current_paths} #{flutter_framework_dir}/**"
       end
     end
   end
 end
 
 # ============================================================
-# 🧩 POST-INSTALL — Ajustes para evitar errores de compilación
+# 🧩 POST-INSTALL — Ajustes globales y compatibilidad Firebase/AppLinks
 # ============================================================
 
 post_install do |installer|
@@ -72,17 +74,26 @@ post_install do |installer|
     flutter_additional_ios_build_settings(target)
 
     target.build_configurations.each do |config|
-      # ✅ Compatibilidad con Firebase y AppLinks
+      # ✅ Compatibilidad mínima
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
 
-      # 🔧 Forzar uso de módulos de Flutter
+      # 🔧 Asegurar que los módulos de Flutter se compilen correctamente
       config.build_settings['OTHER_SWIFT_FLAGS'] = '-DDEBUG'
       config.build_settings['SWIFT_OBJC_BRIDGING_HEADER'] = nil
       config.build_settings['SWIFT_OBJC_INTERFACE_HEADER_NAME'] = nil
       config.build_settings['DEFINES_MODULE'] = 'YES'
 
-      # 🚀 Evitar error de arquitectura en runners Apple Silicon
+      # 🚀 Evitar error de arquitectura en simuladores Apple Silicon
       config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
+    end
+  end
+
+  # ✅ Fix adicional: desactiva el uso de frameworks dinámicos si algún plugin lo requiere
+  installer.aggregate_targets.each do |aggregate|
+    aggregate.user_project.native_targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['ONLY_ACTIVE_ARCH'] = 'NO'
+      end
     end
   end
 end
