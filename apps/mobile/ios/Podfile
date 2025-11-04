@@ -1,12 +1,11 @@
 # ============================================================
-# 📱 DRAFTCLUB — Podfile para entorno iOS (Flutter 3.35+ / Firebase 12.4+)
+# 📱 DRAFTCLUB — Podfile universal iOS (Flutter 3.35+ / Firebase 12.4+)
 # ============================================================
 
-platform :ios, '15.0'   # ✅ Firebase 12.4.0+ requiere iOS >= 15.0
+platform :ios, '15.0'   # 🔧 Firebase y AppLinks requieren iOS >= 15.0
 
-# Evita conflictos en M1/M2 y GitHub Actions
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
-use_frameworks!
+use_frameworks! :linkage => :static
 use_modular_headers!
 
 # ============================================================
@@ -22,10 +21,9 @@ end
 load podhelper_path
 
 # ============================================================
-# ⚙️ PARCHE PARA WAKELOCK_PLUS Y HEADERS DE FLUTTER
+# ⚙️ PARCHE PARA HEADERS Y PLUGINS (wakelock_plus, app_links, etc)
 # ============================================================
 
-# ✅ Este bloque debe ir fuera del target
 $flutter_framework_dir = File.join(File.expand_path(flutter_application_path), '.ios', 'Flutter', 'engine')
 ENV['FLUTTER_FRAMEWORK_DIR'] = $flutter_framework_dir
 
@@ -34,12 +32,10 @@ ENV['FLUTTER_FRAMEWORK_DIR'] = $flutter_framework_dir
 # ============================================================
 
 target 'Runner' do
-  use_frameworks!
+  use_frameworks! :linkage => :static
   use_modular_headers!
 
   flutter_ios_podfile_setup
-
-  # Plugins de Flutter
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
   target 'RunnerTests' do
@@ -48,15 +44,20 @@ target 'Runner' do
 end
 
 # ============================================================
-# 🧩 POST-INSTALL — Ajustes para evitar errores de arquitectura
+# 🧩 POST-INSTALL — Ajustes para evitar errores de compilación
 # ============================================================
 
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
-      # 🔧 Asegura compatibilidad total con Firebase 12.4+
+      # ✅ Compatibilidad con Firebase y AppLinks
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-      config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET[sdk=iphoneos*]'
+
+      # 🔧 Forzar uso de módulos de Flutter
+      config.build_settings['OTHER_SWIFT_FLAGS'] = '-DDEBUG'
+      config.build_settings['SWIFT_OBJC_BRIDGING_HEADER'] = nil
+      config.build_settings['SWIFT_OBJC_INTERFACE_HEADER_NAME'] = nil
+      config.build_settings['DEFINES_MODULE'] = 'YES'
     end
   end
 end
