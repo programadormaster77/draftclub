@@ -1,44 +1,44 @@
-# ================================================
-# ✅ DraftClub — Podfile universal (local + CI)
-# ================================================
+# ============================================================
+# 📱 DRAFTCLUB — Podfile para entorno iOS (Flutter 3.24+)
+# ============================================================
 
-platform :ios, '13.0'
+platform :ios, '12.0'
 
+# Evita conflictos en M1/M2 y GitHub Actions
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
-
-project 'Runner', {
-  'Debug' => :debug,
-  'Profile' => :release,
-  'Release' => :release,
-}
-
 use_frameworks!
 use_modular_headers!
 
-# ✅ Detecta automáticamente la ruta de Flutter en CI o local
-flutter_application_path = File.expand_path(File.join('..', '..'))
+# Ruta base del proyecto Flutter
+flutter_application_path = '../..'
 
-# Busca el archivo podhelper.rb, esté donde esté
-podhelper_path = File.join(flutter_application_path, 'Flutter', 'podhelper.rb')
+# 🔧 Verifica existencia de podhelper.rb antes de cargarlo
+podhelper_path = File.expand_path(File.join(flutter_application_path, 'Flutter', 'podhelper.rb'))
 unless File.exist?(podhelper_path)
-  podhelper_path = File.join(flutter_application_path, '.ios', 'Flutter', 'podhelper.rb')
+  raise "❌ No se encontró podhelper.rb en #{podhelper_path}. Asegúrate de haber corrido 'flutter build ios' primero."
 end
-
-raise "❌ No se encontró podhelper.rb en #{flutter_application_path}" unless File.exist?(podhelper_path)
 load podhelper_path
 
 target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
   flutter_ios_podfile_setup
 
-  # 🔹 Plugins adicionales si aplica
-  pod 'Firebase/Core'
-  pod 'Firebase/Messaging'
+  # Plugins de Flutter
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  install_all_flutter_pods File.dirname(File.realpath(__FILE__))
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
 end
 
+# Evita duplicación de arquitectura en simuladores
 post_install do |installer|
   installer.pods_project.targets.each do |target|
-    flutter_additional_ios_build_settings(target)
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
+      config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET[sdk=iphoneos*]'
+    end
   end
 end

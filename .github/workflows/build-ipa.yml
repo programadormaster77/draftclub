@@ -8,9 +8,6 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: 🧾 Set up job
-        run: echo "Initializing iOS build job..."
-
       - name: 🧩 Checkout repository
         uses: actions/checkout@v4
 
@@ -26,22 +23,22 @@ jobs:
 
       - name: 📦 Get Flutter packages
         working-directory: apps/mobile
-        run: |
-          flutter pub get
-          # Analiza el código, pero permite continuar si hay advertencias
-          flutter analyze || echo "⚠️ Advertencias detectadas, pero el build continuará."
+        run: flutter pub get
 
+      # 👇 PRE-BUILD: genera .ios/Flutter/podhelper.rb antes de CocoaPods
+      - name: ⚙️ Prebuild iOS structure
+        working-directory: apps/mobile
+        run: flutter build ios --no-codesign || true
+
+      # 👇 Instala CocoaPods ahora que existe podhelper.rb
       - name: 🧩 Install CocoaPods
         working-directory: apps/mobile/ios
         run: |
           pod repo update
           pod install
 
-      - name: 🛠️ Enable iOS build (no codesign)
-        working-directory: apps/mobile
-        run: flutter build ios --release --no-codesign
-
-      - name: 🚀 Build iOS IPA (Release)
+      # 👇 Compila la app sin firmar (para exportar IPA)
+      - name: 🚀 Build iOS app (Release, no codesign)
         working-directory: apps/mobile
         run: flutter build ipa --release --no-codesign
 
@@ -52,4 +49,4 @@ jobs:
           path: apps/mobile/build/ios/ipa/*.ipa
 
       - name: ✅ Complete job
-        run: echo "✅ Build process finished successfully!"
+        run: echo "✅ Build iOS finished successfully!"
