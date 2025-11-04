@@ -63,26 +63,31 @@ jobs:
           flutter build ios --simulator --no-codesign || true
           test -f ios/Flutter/podhelper.rb && echo "✅ podhelper.rb OK" || (echo "❌ Falta podhelper.rb" && exit 1)
 
-      # =========================================================
+         # =========================================================
       # 🧹 INSTALAR COCOAPODS DE FORMA ESTABLE (con Ruby 3.1)
       # =========================================================
       - name: 🧹 Install CocoaPods (Ruby 3.1 stable)
         working-directory: apps/mobile/ios
         shell: bash
         run: |
-          echo "🧩 Limpiando CocoaPods antiguos..."
+          echo "🧩 Eliminando CocoaPods previos..."
           sudo gem uninstall cocoapods -aIx || true
 
           echo "📦 Instalando CocoaPods 1.15.2..."
           sudo gem install cocoapods -v 1.15.2 --no-document
           pod --version
 
-          echo "🧹 Limpiando Pods previos..."
+          echo "🧹 Limpiando Pods y repositorios locales..."
           rm -rf Pods Podfile.lock ~/Library/Caches/CocoaPods
+          pod cache clean --all || true
 
-          echo "🔁 Actualizando repositorios e instalando Pods..."
-          pod repo update
-          pod install --repo-update --verbose
+          echo "🧹 Limpiando repositorios remotos (forzado)..."
+          rm -rf ~/.cocoapods/repos || true
+          pod setup
+
+          echo "🔁 Instalando pods desde cero..."
+          pod install --repo-update --verbose || pod install --verbose
+
 
       # =========================================================
       # 🚀 COMPILAR IPA (sin firmar)
