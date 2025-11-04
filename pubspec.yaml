@@ -26,6 +26,14 @@ dependencies:
 
   # 📷 Imágenes
   image_picker: ^1.1.2
+  image: ^4.2.0
+  video_thumbnail: ^0.5.3
+  path_provider: ^2.1.2
+
+  # Sonido
+
+  audioplayers: ^6.1.0
+
 
   # 💅 Fuentes y estado
   google_fonts: ^6.2.1

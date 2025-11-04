@@ -1,0 +1,43 @@
+// ===============================================================
+// 🔒 Storage Security Rules — DraftClub v1.0
+// ===============================================================
+// Protege las subidas multimedia de posts, perfiles y rooms.
+// ===============================================================
+
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ===========================================================
+    // 📷 Avatares de usuario
+    // ===========================================================
+    match /uploads/{uid}/avatars/{fileName} {
+      allow read: if true; // públicos
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ===========================================================
+    // 🏞️ Fotos del feed social
+    // ===========================================================
+    match /uploads/{uid}/photos/{postId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ===========================================================
+    // 🎥 Videos del feed social + miniaturas
+    // ===========================================================
+    match /uploads/{uid}/videos/{postId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ===========================================================
+    // 🧱 Por defecto, todo lo demás está bloqueado
+    // ===========================================================
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
