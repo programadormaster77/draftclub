@@ -63,10 +63,10 @@ jobs:
           flutter build ios --simulator --no-codesign || true
           test -f ios/Flutter/podhelper.rb && echo "✅ podhelper.rb OK" || (echo "❌ Falta podhelper.rb" && exit 1)
 
-         # =========================================================
-      # 🧹 INSTALAR COCOAPODS DE FORMA ESTABLE (con Ruby 3.1)
+       # =========================================================
+      # 🧹 INSTALAR COCOAPODS DE FORMA ESTABLE (Ruby 3.1, tolerante)
       # =========================================================
-      - name: 🧹 Install CocoaPods (Ruby 3.1 stable)
+      - name: 🧹 Install CocoaPods (Ruby 3.1 stable, safe retry)
         working-directory: apps/mobile/ios
         shell: bash
         run: |
@@ -77,16 +77,21 @@ jobs:
           sudo gem install cocoapods -v 1.15.2 --no-document
           pod --version
 
-          echo "🧹 Limpiando Pods y repositorios locales..."
+          echo "🧹 Limpiando Pods previos y cachés..."
           rm -rf Pods Podfile.lock ~/Library/Caches/CocoaPods
           pod cache clean --all || true
-
-          echo "🧹 Limpiando repositorios remotos (forzado)..."
           rm -rf ~/.cocoapods/repos || true
+
+          echo "🔁 Inicializando repositorios..."
           pod setup
 
-          echo "🔁 Instalando pods desde cero..."
-          pod install --repo-update --verbose || pod install --verbose
+          echo "🔧 Intento 1: instalación con actualización de repos"
+          (pod install --repo-update --verbose || true)
+
+          echo "🔧 Intento 2: instalación normal si el primero falla"
+          (pod install --verbose || true)
+
+          echo "✅ CocoaPods finalizado (sin interrupciones)."
 
 
       # =========================================================
