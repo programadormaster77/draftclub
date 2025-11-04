@@ -1,4 +1,6 @@
-# Podfile corregido para Flutter app (apps/mobile/ios)
+# ================================================
+# 📱 DraftClub iOS Podfile — Configuración estable
+# ================================================
 
 platform :ios, '13.0'
 
@@ -10,23 +12,25 @@ project 'Runner', {
   'Release' => :release,
 }
 
+# ✅ Necesario para compatibilidad con app_links, Firebase y demás plugins nativos
 use_frameworks!
 use_modular_headers!
 
-# ⚠️ CAMBIO AQUÍ — ruta correcta al podhelper.rb
+# ✅ Ruta correcta al archivo podhelper.rb (dos niveles arriba)
 flutter_application_path = '../..'
 load File.join(flutter_application_path, 'Flutter', 'podhelper.rb')
 
 target 'Runner' do
   flutter_ios_podfile_setup
 
-  # 🔹 Si tienes Firebase y app_links
+  # 🔹 Dependencias manuales si son requeridas
   pod 'Firebase/Core'
   pod 'Firebase/Messaging'
 
   install_all_flutter_pods File.dirname(File.realpath(__FILE__))
 end
 
+# ✅ Ajustes post-instalación recomendados
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
