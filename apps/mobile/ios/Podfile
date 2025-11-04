@@ -10,10 +10,9 @@ use_frameworks!
 use_modular_headers!
 
 # Ruta base del proyecto Flutter
-flutter_application_path = '../..'
-
-# 🔧 Verifica existencia de podhelper.rb antes de cargarlo
+flutter_application_path = File.expand_path(File.join(__dir__, '..'))
 podhelper_path = File.expand_path(File.join(flutter_application_path, 'Flutter', 'podhelper.rb'))
+
 unless File.exist?(podhelper_path)
   raise "❌ No se encontró podhelper.rb en #{podhelper_path}. Asegúrate de haber corrido 'flutter build ios' primero."
 end
