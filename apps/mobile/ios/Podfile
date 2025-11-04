@@ -2,7 +2,7 @@
 # 📱 DRAFTCLUB — Podfile para entorno iOS (Flutter 3.35+ / Firebase 12.4+)
 # ============================================================
 
-platform :ios, '14.0'   # ✅ Subido a iOS 14.0 para compatibilidad con Firebase 12+
+platform :ios, '15.0'   # ✅ Subido a iOS 15.0 (Firebase Firestore exige mínimo esto)
 
 # Evita conflictos en M1/M2 y GitHub Actions
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -46,8 +46,8 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
-      # 🔧 Asegura compatibilidad con Firebase 12+ (requiere iOS 14)
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+      # 🔧 Firebase 12.4.0+ requiere iOS >= 15.0
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET[sdk=iphoneos*]'
     end
   end
