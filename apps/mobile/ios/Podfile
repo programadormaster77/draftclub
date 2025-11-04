@@ -1,7 +1,7 @@
-# Uncomment this line to define a global platform for your project
+# Podfile corregido para Flutter app (apps/mobile/ios)
+
 platform :ios, '13.0'
 
-# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
 project 'Runner', {
@@ -10,20 +10,20 @@ project 'Runner', {
   'Release' => :release,
 }
 
-# 👇 ESTO ES CLAVE para que app_links y Firebase funcionen correctamente
 use_frameworks!
 use_modular_headers!
 
+# ⚠️ CAMBIO AQUÍ — ruta correcta al podhelper.rb
 flutter_application_path = '../..'
-load File.join(flutter_application_path, '.ios', 'Flutter', 'podhelper.rb')
+load File.join(flutter_application_path, 'Flutter', 'podhelper.rb')
 
 target 'Runner' do
   flutter_ios_podfile_setup
 
+  # 🔹 Si tienes Firebase y app_links
   pod 'Firebase/Core'
   pod 'Firebase/Messaging'
 
-  # 👇 Esto permite que todos los plugins (como app_links) se integren correctamente
   install_all_flutter_pods File.dirname(File.realpath(__FILE__))
 end
 
