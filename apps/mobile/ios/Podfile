@@ -1,12 +1,17 @@
-platform :ios, '15.0'
+# ============================================================
+# 📱 DRAFTCLUB — Podfile para entorno iOS (Flutter 3.35+ / Firebase 12.4+)
+# ============================================================
 
+platform :ios, '15.0'   # ✅ Firebase 12.4.0+ requiere iOS >= 15.0
+
+# Evita conflictos en M1/M2 y GitHub Actions
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 use_frameworks!
 use_modular_headers!
 
-# ✅ Parche para wakelock_plus
-$flutter_framework_dir = File.join(File.expand_path(flutter_application_path), '.ios', 'Flutter', 'engine')
-ENV['FLUTTER_FRAMEWORK_DIR'] = $flutter_framework_dir
+# ============================================================
+# 🚀 RUTA CORRECTA DEL PODHELPER (dentro de ios/Flutter)
+# ============================================================
 
 flutter_application_path = File.expand_path(File.join(__dir__, 'Flutter'))
 podhelper_path = File.expand_path(File.join(flutter_application_path, 'podhelper.rb'))
@@ -16,11 +21,25 @@ unless File.exist?(podhelper_path)
 end
 load podhelper_path
 
+# ============================================================
+# ⚙️ PARCHE PARA WAKELOCK_PLUS Y HEADERS DE FLUTTER
+# ============================================================
+
+# ✅ Este bloque debe ir fuera del target
+$flutter_framework_dir = File.join(File.expand_path(flutter_application_path), '.ios', 'Flutter', 'engine')
+ENV['FLUTTER_FRAMEWORK_DIR'] = $flutter_framework_dir
+
+# ============================================================
+# 🎯 CONFIGURACIÓN DE TARGETS
+# ============================================================
+
 target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
   flutter_ios_podfile_setup
+
+  # Plugins de Flutter
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
   target 'RunnerTests' do
@@ -28,9 +47,14 @@ target 'Runner' do
   end
 end
 
+# ============================================================
+# 🧩 POST-INSTALL — Ajustes para evitar errores de arquitectura
+# ============================================================
+
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
+      # 🔧 Asegura compatibilidad total con Firebase 12.4+
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET[sdk=iphoneos*]'
     end
