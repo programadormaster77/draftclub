@@ -52,30 +52,32 @@ jobs:
           # Generar estructura para simulador iOS sin certificados
           flutter build ios --simulator --no-codesign || true
 
+           # =========================================================
+      # 🧹 COCOAPODS FIX — Forzar Ruby 3.1 + reinstalar limpio
       # =========================================================
-      # 🧹 LIMPIEZA Y CONFIGURACIÓN DE COCOAPODS (ruby fix + forced)
-      # =========================================================
-      - name: 🧹 Clean and reinstall CocoaPods (Ruby 3.1 fix)
+      - name: 🧹 Clean and reinstall CocoaPods (Ruby 3.1 enforced)
         working-directory: apps/mobile/ios
+        shell: bash
         run: |
-          echo "🧩 Fixing Ruby environment and reinstalling CocoaPods..."
+          echo "🧩 Installing Ruby 3.1 and configuring PATH..."
+          brew uninstall --force ruby || true
           brew install ruby@3.1
-          echo 'export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"' >> ~/.bash_profile
-          source ~/.bash_profile
+          echo 'export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"' >> ~/.bashrc
+          echo 'export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"' >> ~/.zshrc
+          export PATH="/usr/local/opt/ruby@3.1/bin:$PATH"
           ruby -v
 
           echo "🧹 Removing preinstalled CocoaPods..."
           sudo gem uninstall cocoapods -a -I -x || true
 
-          echo "📦 Installing CocoaPods stable version..."
+          echo "📦 Installing CocoaPods 1.15.2..."
           sudo gem install cocoapods -v 1.15.2 --no-document
-
-          echo "🔁 Updating repos and installing pods..."
           pod --version
-          pod repo update
-          rm -rf Pods Podfile.lock
-          pod install --repo-update --verbose
 
+          echo "🔁 Updating and installing pods..."
+          rm -rf Pods Podfile.lock
+          pod repo update
+          pod install --repo-update --verbose
 
 
 
