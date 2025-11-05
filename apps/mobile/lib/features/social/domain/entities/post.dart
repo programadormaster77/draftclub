@@ -8,14 +8,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// ✅ Manejo seguro de tipos y valores nulos.
 /// ✅ Preparado para futuras expansiones (geo, privacidad, tags, etc.)
 /// ============================================================================
-
-/// ============================================================================
-/// 🧩 Post — Modelo robusto de publicación (versión corregida v2.2)
-/// ============================================================================
-/// ✅ Compatible con campos opcionales o ausentes.
-/// ✅ Evita fallos si falta `deleted` o `city`.
-/// ✅ Compatible con `authorId` como campo de referencia.
-/// ============================================================================
 class Post {
   final String id;
   final String authorId;
@@ -36,6 +28,9 @@ class Post {
   final String? countryCode;
   final bool deleted;
 
+  // ===========================================================================
+  // 🔹 Constructor base
+  // ===========================================================================
   Post({
     required this.id,
     required this.authorId,
@@ -57,6 +52,9 @@ class Post {
     this.deleted = false,
   });
 
+  // ===========================================================================
+  // 🔹 Constructor desde Map (el más utilizado)
+  // ===========================================================================
   factory Post.fromMap(Map<String, dynamic> data, String id) {
     return Post(
       id: id,
@@ -80,6 +78,17 @@ class Post {
     );
   }
 
+  // ===========================================================================
+  // 🔹 Constructor desde DocumentSnapshot (para compatibilidad directa)
+  // ===========================================================================
+  factory Post.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>? ?? {};
+    return Post.fromMap(data, doc.id);
+  }
+
+  // ===========================================================================
+  // 🔹 Convierte el Post a un Map (para guardar en Firestore)
+  // ===========================================================================
   Map<String, dynamic> toMap() {
     return {
       'authorId': authorId,
@@ -103,7 +112,7 @@ class Post {
   }
 
   // ===========================================================================
-  // 🔹 Copia el post modificando solo ciertos campos
+  // 🔹 Copia el Post modificando solo ciertos campos
   // ===========================================================================
   Post copyWith({
     String? id,
@@ -145,5 +154,13 @@ class Post {
       countryCode: countryCode ?? this.countryCode,
       deleted: deleted ?? this.deleted,
     );
+  }
+
+  // ===========================================================================
+  // 🔹 Representación legible (para depuración)
+  // ===========================================================================
+  @override
+  String toString() {
+    return 'Post(id: $id, authorId: $authorId, caption: $caption, mediaUrls: ${mediaUrls.length}, likes: $likeCount, comments: $commentCount)';
   }
 }
