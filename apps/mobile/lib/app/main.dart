@@ -1,26 +1,26 @@
 // 📦 Dependencias principales
+import 'package:draftclub_mobile/firebase_options.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // ✅ Riverpod base
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 import 'package:flutter/services.dart';
+import 'package:app_links/app_links.dart';
+import 'package:draftclub_mobile/features/profile/domain/xp_bootstrap.dart';
 
 // 🌐 Configuración de Firebase
-import '../firebase_options.dart';
 
 // 🎨 Tema visual global (nuevo Arena Pro)
 import 'package:draftclub_mobile/core/ui/ui_theme.dart';
 
 // 🧩 Páginas del flujo
-import '../features/auth/presentation/login_page.dart';
-import '../features/profile/presentation/profile_gate.dart';
-import '../features/feed/presentation/dashboard_page.dart';
-import '../features/rooms/presentation/room_detail_page.dart';
+import 'package:draftclub_mobile/features/auth/presentation/login_page.dart';
+import 'package:draftclub_mobile/features/profile/presentation/profile_gate.dart';
+import 'package:draftclub_mobile/features/feed/presentation/dashboard_page.dart';
+import 'package:draftclub_mobile/features/rooms/presentation/room_detail_page.dart';
 import 'package:draftclub_mobile/features/rooms/models/room_model.dart';
-
-// 🔗 Sistema de enlaces (deep links)
-import 'package:app_links/app_links.dart';
 
 /// ============================================================================
 /// 🚀 PUNTO DE ENTRADA PRINCIPAL DE LA APLICACIÓN
@@ -30,7 +30,13 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const DraftClubApp());
+
+  // ✅ ProviderScope: habilita Riverpod en toda la app
+  runApp(
+    const ProviderScope(
+      child: DraftClubApp(),
+    ),
+  );
 }
 
 /// ============================================================================
@@ -60,16 +66,13 @@ class _DraftClubAppState extends State<DraftClubApp> {
 
       // Si la app se abrió desde un enlace (app cerrada)
       final initialUri = await _appLinks.getInitialLink();
-      _sub = _appLinks.uriLinkStream.listen((Uri uri) {
-        _handleIncomingLink(uri);
-      });
+      if (initialUri != null) _handleIncomingLink(initialUri);
 
       // Si la app ya está abierta y llega un nuevo enlace
-      _sub = _appLinks.uriLinkStream.listen((Uri uri) {
-        _handleIncomingLink(uri);
-      }, onError: (err) {
-        debugPrint('⚠️ Error al procesar deep link: $err');
-      });
+      _sub = _appLinks.uriLinkStream.listen(
+        (Uri uri) => _handleIncomingLink(uri),
+        onError: (err) => debugPrint('⚠️ Error al procesar deep link: $err'),
+      );
     } on PlatformException catch (e) {
       debugPrint('⚠️ Error al inicializar AppLinks: $e');
     }
@@ -99,6 +102,7 @@ class _DraftClubAppState extends State<DraftClubApp> {
               .doc(roomId)
               .get();
 
+          if (!mounted) return;
           Navigator.of(context).pop(); // Cierra loader
 
           if (!snap.exists) {
@@ -120,7 +124,7 @@ class _DraftClubAppState extends State<DraftClubApp> {
             ),
           );
         } catch (e) {
-          Navigator.of(context).pop();
+          if (mounted) Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Error al abrir la sala: $e'),
@@ -182,6 +186,8 @@ class AuthStateHandler extends StatelessWidget {
             if (!profileSnapshot.hasData || !profileSnapshot.data!.exists) {
               return const ProfileGate();
             }
+// ✅ Asegurar xp=0 si no existe
+            XPBootstrap.ensureUserXP();
 
             return const DashboardPage();
           },

@@ -4,6 +4,7 @@ import 'package:draftclub_mobile/core/location/place_service.dart';
 import '../data/room_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:draftclub_mobile/features/profile/domain/xp_tracker.dart';
 
 /// ====================================================================
 /// ⚽ CreateRoomPage — Crear y compartir nuevas salas
@@ -12,6 +13,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// 🔹 Evita errores de Dropdown (género duplicado o no coincidente).
 /// 🔹 Compatible con cualquier país (ciudad, país, coordenadas).
 /// 🔹 Corrige el bug cuando `sex` está vacío o con espacios.
+/// 🔹 Otorga XP al crear una sala.
 /// ====================================================================
 class CreateRoomPage extends StatefulWidget {
   final Map<String, dynamic>? existingRoom; // 👈 si llega, estamos editando
@@ -26,9 +28,30 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
   final _nameCtrl = TextEditingController();
   final _cityCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
+
+  DateTime? _eventAt;
+  int _teams = 2;
+  int _players = 5;
+  int _subs = 2;
+  bool _isPublic = true;
+  bool _loading = false;
+  bool _searchingCity = false;
+  bool _searchingAddress = false;
+  String? _sex; // puede ser null hasta cargar
+  String? _lastCreatedRoomId;
+
+  Map<String, dynamic>? _selectedCityData;
+  Map<String, dynamic>? _selectedAddressData;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeForm();
+  }
+
   // ===========================================================
-// 🌍 Extrae y normaliza el código ISO de país desde el texto
-// ===========================================================
+  // 🌍 Extrae y normaliza el código ISO de país desde el texto
+  // ===========================================================
   String _extractCountryCode(String description) {
     final lower = description.toLowerCase();
 
@@ -54,27 +77,7 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
     if (lower.contains('corea')) return 'KR';
     if (lower.contains('chin')) return 'CN';
     if (lower.contains('austral')) return 'AU';
-    return 'XX'; // fallback universal
-  }
-
-  DateTime? _eventAt;
-  int _teams = 2;
-  int _players = 5;
-  int _subs = 2;
-  bool _isPublic = true;
-  bool _loading = false;
-  bool _searchingCity = false;
-  bool _searchingAddress = false;
-  String? _sex; // ahora puede ser null hasta cargar
-  String? _lastCreatedRoomId;
-
-  Map<String, dynamic>? _selectedCityData;
-  Map<String, dynamic>? _selectedAddressData;
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeForm();
+    return 'XX';
   }
 
   // ===========================================================
@@ -93,7 +96,6 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
   Future<void> _initializeForm() async {
     final r = widget.existingRoom;
     if (r != null) {
-      // 🧠 Editando sala existente
       _nameCtrl.text = r['name'] ?? '';
       _cityCtrl.text = r['city'] ?? '';
       _addressCtrl.text = r['exactAddress'] ?? '';
@@ -106,7 +108,6 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
       _isPublic = (r['isPublic'] ?? true);
       _sex = _normalizeSex(r['sex']);
     } else {
-      // 🧠 Nuevo registro → prellenar sexo desde perfil
       await _prefillSexFromProfile();
     }
     setState(() {});
@@ -156,6 +157,7 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
       };
 
       String roomId;
+
       if (widget.existingRoom != null) {
         // 🟢 Editar sala existente
         roomId = widget.existingRoom!['id'];
@@ -176,6 +178,9 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
           countryCode: payload['countryCode'],
           sex: payload['sex'],
         );
+
+        // 🎯 Asignar experiencia al crear una nueva sala
+        await RoomXPTracker.onRoomCreated(roomId);
       }
 
       if (!mounted) return;
@@ -285,7 +290,6 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
                       'cityName': details.description.split(',').first.trim(),
                       'lat': details.lat,
                       'lng': details.lng,
-                      // 🔹 Normalizar país real
                       'countryCode': _extractCountryCode(details.description),
                     }
                   : {'cityName': s['name']};

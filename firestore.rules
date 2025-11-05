@@ -15,6 +15,20 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if true; // público (perfiles visibles)
       allow write: if request.auth != null && request.auth.uid == uid;
+
+          // ===========================================================
+    // 🧠 XP_HISTORY — historial de experiencia (subcolección)
+    // ===========================================================
+    match /users/{uid}/xp_history/{xpId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null
+                    && request.auth.uid == uid
+                    && (request.resource.data.amount is int)
+                    && (request.resource.data.reason is string)
+                    && (request.resource.data.timestamp is timestamp);
+      allow update, delete: if false; // solo se agregan registros, no se editan ni borran
+    }
+
     }
 
     // ===========================================================
