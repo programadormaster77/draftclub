@@ -4,18 +4,21 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../auth/data/auth_service.dart';
 import '../../social/data/social_follow_service.dart';
+import '../../social/domain/entities/post.dart';
+import '../../social/presentation/page/post_detail_page.dart';
+import '../../social/presentation/page/follow_list_page.dart';
 import 'edit_profile_page.dart';
 
 /// ===============================================================
-/// 🧾 ProfilePage — Pantalla del perfil del jugador (versión PRO)
+/// 🧾 ProfilePage — Perfil del jugador (versión PRO con sincronización)
 /// ===============================================================
 /// - Muestra datos en tiempo real desde Firestore.
-/// - Incluye botón de seguir / siguiendo.
-/// - Muestra contadores: seguidores, seguidos y publicaciones.
-/// - Permite editar perfil y cerrar sesión.
+/// - Incluye botón seguir / editar.
+/// - Contadores dinámicos y parrilla tipo Instagram.
+/// - Refresca automáticamente al volver de otras páginas.
 /// ===============================================================
 class ProfilePage extends StatefulWidget {
-  final String? userId; // Si se pasa otro usuario, se muestra su perfil
+  final String? userId;
 
   const ProfilePage({super.key, this.userId});
 
@@ -54,6 +57,12 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _isLoadingFollow = false);
   }
 
+  Future<void> _refreshAfterReturn(Future<void> Function() openPage) async {
+    await openPage();
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUser = _auth.currentUser;
@@ -78,7 +87,7 @@ class _ProfilePageState extends State<ProfilePage> {
         backgroundColor: Colors.black,
         elevation: 2,
         actions: [
-          if (widget.userId == null) // Solo en el propio perfil
+          if (widget.userId == null)
             IconButton(
               icon: const Icon(Icons.logout, color: Colors.redAccent),
               onPressed: () async {
@@ -97,8 +106,7 @@ class _ProfilePageState extends State<ProfilePage> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            );
+                child: CircularProgressIndicator(color: Colors.white));
           }
 
           if (!snapshot.hasData || !snapshot.data!.exists) {
@@ -167,33 +175,61 @@ class _ProfilePageState extends State<ProfilePage> {
                 const SizedBox(height: 16),
 
                 // 🏷️ INFORMACIÓN
-                Text(
-                  name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                Text(name,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 Text('@$nickname',
                     style: const TextStyle(color: Colors.white54)),
                 const SizedBox(height: 4),
-                Text(
-                  'Sexo: $sex  ·  $position  ·  $city',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
-                ),
+                Text('Sexo: $sex  ·  $position  ·  $city',
+                    textAlign: TextAlign.center,
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 13)),
 
                 const SizedBox(height: 16),
 
-                // 👥 CONTADORES SOCIALES
+                // 👥 CONTADORES SOCIALES (clicables)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _SocialCounter(label: 'Seguidores', value: followers),
+                    _CounterButton(
+                      label: 'Seguidores',
+                      value: followers,
+                      onTap: () async {
+                        await _refreshAfterReturn(() async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => FollowListPage(
+                                userId: userId,
+                                showFollowers: true,
+                              ),
+                            ),
+                          );
+                        });
+                      },
+                    ),
                     const SizedBox(width: 20),
-                    _SocialCounter(label: 'Seguidos', value: following),
+                    _CounterButton(
+                      label: 'Seguidos',
+                      value: following,
+                      onTap: () async {
+                        await _refreshAfterReturn(() async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => FollowListPage(
+                                userId: userId,
+                                showFollowers: false,
+                              ),
+                            ),
+                          );
+                        });
+                      },
+                    ),
                     const SizedBox(width: 20),
                     _SocialCounter(label: 'Posts', value: posts),
                   ],
@@ -255,15 +291,17 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 const SizedBox(height: 30),
 
-                // 🧩 BOTONES (editar o seguir)
+                // 🧩 BOTONES
                 if (isMyProfile)
                   ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const EditProfilePage()),
-                      );
+                    onPressed: () async {
+                      await _refreshAfterReturn(() async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const EditProfilePage()),
+                        );
+                      });
                     },
                     icon: const Icon(Icons.edit),
                     label: const Text('Editar perfil'),
@@ -295,15 +333,141 @@ class _ProfilePageState extends State<ProfilePage> {
                               strokeWidth: 2,
                             ),
                           )
-                        : Text(
-                            _isFollowing ? 'Siguiendo' : 'Seguir',
-                            style: const TextStyle(color: Colors.white),
-                          ),
+                        : Text(_isFollowing ? 'Siguiendo' : 'Seguir',
+                            style: const TextStyle(color: Colors.white)),
                   ),
+
+                const SizedBox(height: 40),
+
+                // ===================== 🖼️ PARRILLA DE POSTS =====================
+                _UserPostsGrid(userId: userId),
               ],
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// ===============================================================
+/// 📸 _UserPostsGrid — Grilla de publicaciones del usuario
+/// ===============================================================
+class _UserPostsGrid extends StatelessWidget {
+  final String userId;
+  const _UserPostsGrid({required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('posts')
+          .where('authorId', isEqualTo: userId)
+          .where('deleted', isEqualTo: false)
+          .orderBy('createdAt', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(
+              child: CircularProgressIndicator(color: Colors.white));
+        }
+
+        final docs = snapshot.data!.docs;
+        if (docs.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(40),
+            child: Center(
+              child: Text('🏟️ Aún no hay publicaciones',
+                  style: TextStyle(color: Colors.white54)),
+            ),
+          );
+        }
+
+        final posts = docs
+            .map((d) => Post.fromMap(d.data() as Map<String, dynamic>, d.id))
+            .toList();
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 2,
+            mainAxisSpacing: 2,
+            childAspectRatio: 1,
+          ),
+          itemCount: posts.length,
+          itemBuilder: (context, i) {
+            final post = posts[i];
+            final thumb =
+                post.thumbUrl ?? (post.mediaUrls.isNotEmpty ? post.mediaUrls.first : '');
+            final isVideo = post.type == 'video' ||
+                thumb.toLowerCase().endsWith('.mp4') ||
+                thumb.toLowerCase().contains('video');
+
+            return GestureDetector(
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => PostDetailPage(post: post)),
+                );
+              },
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Container(
+                    color: Colors.black,
+                    child: thumb.isNotEmpty
+                        ? Image.network(thumb, fit: BoxFit.cover)
+                        : const Icon(Icons.sports_soccer,
+                            color: Colors.white30, size: 40),
+                  ),
+                  if (isVideo)
+                    const Positioned(
+                      right: 6,
+                      bottom: 6,
+                      child: Icon(Icons.play_circle_outline,
+                          color: Colors.white70, size: 20),
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// ===============================================================
+/// 🔢 _CounterButton — Contador con acción (clicable)
+/// ===============================================================
+class _CounterButton extends StatelessWidget {
+  final String label;
+  final int value;
+  final VoidCallback? onTap;
+
+  const _CounterButton({
+    required this.label,
+    required this.value,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Text('$value',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(label,
+              style: const TextStyle(color: Colors.white54, fontSize: 13)),
+        ],
       ),
     );
   }
@@ -330,19 +494,14 @@ class _StatCard extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              value,
-              style: const TextStyle(
-                color: Colors.blueAccent,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            Text(value,
+                style: const TextStyle(
+                    color: Colors.blueAccent,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
-            Text(
-              title,
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
-            ),
+            Text(title,
+                style: const TextStyle(color: Colors.white70, fontSize: 13)),
           ],
         ),
       ),
@@ -351,7 +510,7 @@ class _StatCard extends StatelessWidget {
 }
 
 /// ===============================================================
-/// 👥 _SocialCounter — Contador pequeño (seguidores / seguidos / posts)
+/// 👥 _SocialCounter — Contador simple (sin acción)
 /// ===============================================================
 class _SocialCounter extends StatelessWidget {
   final String label;
@@ -363,14 +522,9 @@ class _SocialCounter extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(
-          '$value',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        Text('$value',
+            style: const TextStyle(
+                color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 4),
         Text(label,
             style: const TextStyle(color: Colors.white54, fontSize: 13)),

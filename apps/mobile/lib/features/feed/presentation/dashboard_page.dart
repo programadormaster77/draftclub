@@ -1,22 +1,23 @@
-import 'package:draftclub_mobile/features/social/presentation/page/social_feed_page.dart';
 import 'package:flutter/material.dart';
-
-// ===================== IMPORTS DE MÓDULOS =====================
+import 'package:draftclub_mobile/features/social/presentation/page/social_feed_page.dart';
 import 'package:draftclub_mobile/features/social/presentation/sheets/create_post_sheet.dart';
-import '../../rooms/presentation/rooms_page.dart';
-import '../../rooms/presentation/create_room_page.dart';
-import '../../tournaments/presentation/tournaments_page.dart';
-import '../../profile/presentation/profile_page.dart';
+import 'package:draftclub_mobile/features/social/presentation/page/chat_list_page.dart';
+import 'package:draftclub_mobile/features/social/data/chat_service.dart';
+import 'package:draftclub_mobile/features/rooms/presentation/rooms_page.dart';
+import 'package:draftclub_mobile/features/rooms/presentation/create_room_page.dart';
+import 'package:draftclub_mobile/features/tournaments/presentation/tournaments_page.dart';
+import 'package:draftclub_mobile/features/profile/presentation/profile_page.dart';
 
 /// ====================================================================
-/// 🧭 DashboardPage — Control principal de navegación inferior
+/// 🧭 DashboardPage — Control global de navegación inferior (Versión PRO++)
 /// ====================================================================
-/// 🔹 Raíz visual tras el login.
-/// 🔹 Contiene las secciones principales y la barra inferior.
-/// 🔹 El botón central abre un modal con opciones de creación.
-/// 🔹 Conecta directamente con CreateRoomPage.
-/// 🔹 Refresca automáticamente RoomsPage al volver.
+/// 🔹 Centro principal de la app después del login.
+/// 🔹 Secciones: Feed, Salas, Crear (+), Torneos, Perfil.
+/// 🔹 Ícono 💬 con contador de mensajes no leídos (solo en Inicio y Perfil).
+/// 🔹 Transición fluida hacia ChatListPage.
+/// 🔹 Diseño limpio, coherente y profesional.
 /// ====================================================================
+
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
 
@@ -25,21 +26,22 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
+  final ChatService _chatService = ChatService();
   int _currentIndex = 0;
 
   // ================================================================
-  // 📄 PÁGINAS PRINCIPALES (ACTUALIZADO)
+  // 📄 PÁGINAS PRINCIPALES
   // ================================================================
   final List<Widget> _pages = const [
-    SocialFeedPage(), // ✅ Nuevo feed social real
-    RoomsPage(),
-    SizedBox(), // botón central → modal de creación
-    TournamentsPage(),
-    ProfilePage(),
+    SocialFeedPage(),  // 🏠 Inicio
+    RoomsPage(),       // ⚽ Salas
+    SizedBox(),        // (+) Crear
+    TournamentsPage(), // 🏆 Torneos
+    ProfilePage(),     // 👤 Perfil
   ];
 
   // ================================================================
-  // 🏷️ TÍTULOS PARA EL APPBAR
+  // 🏷️ TÍTULOS APPBAR
   // ================================================================
   final List<String> _titles = [
     'Inicio',
@@ -78,7 +80,7 @@ class _DashboardPageState extends State<DashboardPage> {
               runSpacing: 12,
               children: [
                 // ===========================================================
-                // 📹 Subir clip — conecta con CreatePostSheet
+                // 📹 Subir clip — CreatePostSheet
                 // ===========================================================
                 ListTile(
                   leading: const Icon(Icons.videocam, color: Colors.blueAccent),
@@ -107,7 +109,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
 
                 // ===========================================================
-                // ⚽ Crear sala — conecta con CreateRoomPage
+                // ⚽ Crear sala — CreateRoomPage
                 // ===========================================================
                 ListTile(
                   leading: const Icon(Icons.sports_soccer,
@@ -118,8 +120,6 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                   onTap: () async {
                     Navigator.pop(context);
-
-                    // ✅ Navegar a CreateRoomPage y refrescar Salas al volver
                     final result = await Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -127,21 +127,18 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     );
 
-                    // Si se creó una sala, forzamos actualización en RoomsPage
                     if (result == true && mounted) {
-                      setState(() {
-                        _currentIndex = 1; // Cambia a "Salas"
-                      });
+                      setState(() => _currentIndex = 1); // Ir a Salas
                     }
                   },
                 ),
 
                 // ===========================================================
-                // 🏆 Crear torneo — pendiente
+                // 🏆 Crear torneo — futuro módulo
                 // ===========================================================
                 ListTile(
-                  leading:
-                      const Icon(Icons.emoji_events, color: Colors.amberAccent),
+                  leading: const Icon(Icons.emoji_events,
+                      color: Colors.amberAccent),
                   title: const Text(
                     'Crear torneo',
                     style: TextStyle(color: Colors.white, fontSize: 16),
@@ -166,12 +163,19 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     final currentTitle = _titles[_currentIndex];
 
+    // Mostrar ícono de chat solo en Inicio o Perfil
+    final showChatIcon =
+        currentTitle == 'Inicio' || currentTitle == 'Perfil';
+
     return Scaffold(
       backgroundColor: const Color(0xFF0E0E0E),
 
-      // ===================== APPBAR DINÁMICO =====================
+      // ===================== APPBAR =====================
       appBar: currentTitle.isNotEmpty
           ? AppBar(
+              backgroundColor: Colors.black,
+              elevation: 2,
+              centerTitle: false,
               title: Text(
                 currentTitle,
                 style: const TextStyle(
@@ -179,19 +183,69 @@ class _DashboardPageState extends State<DashboardPage> {
                   letterSpacing: 0.5,
                 ),
               ),
-              backgroundColor: Colors.black,
-              elevation: 2,
-              centerTitle: false,
+              actions: showChatIcon
+                  ? [
+                      StreamBuilder<int>(
+                        stream: _chatService.getUnreadCount(),
+                        builder: (context, snapshot) {
+                          final unread = snapshot.data ?? 0;
+                          return Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.chat_bubble_outline,
+                                    color: Colors.white70),
+                                tooltip: 'Mensajes',
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const ChatListPage(),
+                                    ),
+                                  );
+                                },
+                              ),
+                              if (unread > 0)
+                                Positioned(
+                                  right: 10,
+                                  top: 8,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.redAccent,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    constraints: const BoxConstraints(
+                                      minWidth: 18,
+                                      minHeight: 18,
+                                    ),
+                                    child: Text(
+                                      unread.toString(),
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                    ]
+                  : null,
             )
           : null,
 
-      // ===================== CUERPO DINÁMICO =====================
+      // ===================== CUERPO =====================
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 250),
         child: _pages[_currentIndex],
       ),
 
-      // ===================== BARRA DE NAVEGACIÓN =====================
+      // ===================== BARRA INFERIOR =====================
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           color: Color(0xFF111111),
