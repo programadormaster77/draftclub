@@ -1,6 +1,10 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:draftclub_mobile/features/social/data/chat_service.dart';
 import 'package:draftclub_mobile/features/social/data/social_follow_service.dart';
 import 'package:draftclub_mobile/features/social/domain/entities/post.dart';
+import 'package:draftclub_mobile/features/social/presentation/page/chat_page.dart';
 import 'package:draftclub_mobile/features/social/presentation/page/edit_profile_page.dart';
 import 'package:draftclub_mobile/features/social/presentation/page/follow_list_page.dart';
 import 'package:draftclub_mobile/features/social/presentation/widgets/post_card.dart';
@@ -8,16 +12,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 /// ============================================================================
-/// 👤 UserProfilePage — Perfil de usuario (Versión PRO++)
+/// 👤 UserProfilePage — Perfil de usuario (versión corregida v2.2)
 /// ============================================================================
-/// ✅ Carga perfil desde Firestore.
-/// ✅ Usa SocialFollowService para seguir/dejar de seguir.
-/// ✅ Contadores en tiempo real: seguidores, seguidos y publicaciones.
-/// ✅ Feed del usuario.
-/// ✅ Botón Editar perfil si es el usuario actual.
-/// ✅ Al tocar seguidores/siguiendo abre FollowListPage.
+/// ✅ Muestra correctamente las publicaciones del usuario.
+/// ✅ Funciona aunque no exista el campo `deleted`.
+/// ✅ Evita errores de índices en Firestore.
+/// ✅ Mantiene soporte completo para seguir / mensajes / edición.
 /// ============================================================================
-
 class UserProfilePage extends StatefulWidget {
   final String userId;
   const UserProfilePage({super.key, required this.userId});
@@ -29,6 +30,8 @@ class UserProfilePage extends StatefulWidget {
 class _UserProfilePageState extends State<UserProfilePage> {
   final _auth = FirebaseAuth.instance;
   final _followService = SocialFollowService();
+  final _chatService = ChatService();
+
   bool _loadingFollow = false;
   bool _isFollowing = false;
   bool _isMe = false;
@@ -62,6 +65,33 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
+  /// 💬 Crea o abre chat con este usuario
+  Future<void> _openChat(String otherName, String otherPhoto) async {
+    final chatId = await _chatService.createOrGetChat(widget.userId);
+    if (chatId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo iniciar el chat'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatPage(
+          chatId: chatId,
+          otherUserId: widget.userId,
+          otherName: otherName,
+          otherPhoto: otherPhoto,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -81,8 +111,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         builder: (context, userSnap) {
           if (userSnap.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: Colors.blueAccent),
-            );
+                child: CircularProgressIndicator(color: Colors.blueAccent));
           }
           if (!userSnap.hasData || !userSnap.data!.exists) {
             return const Center(
@@ -100,6 +129,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
           return CustomScrollView(
             slivers: [
+              // ================= PERFIL HEADER =================
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
@@ -146,31 +176,57 @@ class _UserProfilePageState extends State<UserProfilePage> {
                           ],
                         ),
                       ),
+
+                      // ============ BOTONES DE ACCIÓN ============
                       if (!_isMe)
-                        TextButton(
-                          onPressed: _toggleFollow,
-                          style: TextButton.styleFrom(
-                            backgroundColor: _isFollowing
-                                ? Colors.white10
-                                : Colors.blueAccent,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: _loadingFollow
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: Colors.white),
-                                )
-                              : Text(
-                                  _isFollowing ? 'Siguiendo' : 'Seguir',
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 13),
+                        Column(
+                          children: [
+                            // ✅ Seguir / Siguiendo
+                            TextButton(
+                              onPressed: _toggleFollow,
+                              style: TextButton.styleFrom(
+                                backgroundColor: _isFollowing
+                                    ? Colors.white10
+                                    : Colors.blueAccent,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
+                              ),
+                              child: _loadingFollow
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : Text(
+                                      _isFollowing ? 'Siguiendo' : 'Seguir',
+                                      style: const TextStyle(
+                                          color: Colors.white, fontSize: 13),
+                                    ),
+                            ),
+                            const SizedBox(height: 6),
+
+                            // 💬 Mensaje directo
+                            OutlinedButton.icon(
+                              onPressed: () => _openChat(name, photoUrl),
+                              icon: const Icon(Icons.message_outlined,
+                                  color: Colors.white, size: 16),
+                              label: const Text('Mensaje',
+                                  style: TextStyle(
+                                      color: Colors.white, fontSize: 13)),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.white24),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ],
                         )
                       else
                         OutlinedButton(
@@ -196,9 +252,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   ),
                 ),
               ),
-              SliverToBoxAdapter(
-                child: _CountsSection(userId: widget.userId),
-              ),
+
+              // ================= CONTADORES =================
+              SliverToBoxAdapter(child: _CountsSection(userId: widget.userId)),
+
+              // ================= POSTS =================
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(16, 10, 16, 6),
@@ -214,7 +272,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   stream: FirebaseFirestore.instance
                       .collection('posts')
                       .where('authorId', isEqualTo: widget.userId)
-                      .where('deleted', isEqualTo: false)
                       .orderBy('createdAt', descending: true)
                       .snapshots(),
                   builder: (context, snap) {
@@ -227,6 +284,16 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         ),
                       );
                     }
+
+                    if (snap.hasError) {
+                      return Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text('Error: ${snap.error}',
+                            style:
+                                const TextStyle(color: Colors.redAccent)),
+                      );
+                    }
+
                     final docs = snap.data?.docs ?? [];
                     if (docs.isEmpty) {
                       return const Padding(
@@ -306,7 +373,6 @@ class _CountsSection extends StatelessWidget {
             stream: firestore
                 .collection('posts')
                 .where('authorId', isEqualTo: userId)
-                .where('deleted', isEqualTo: false)
                 .snapshots(),
             builder: (_, s) {
               final count = s.data?.docs.length ?? 0;
@@ -320,7 +386,7 @@ class _CountsSection extends StatelessWidget {
 }
 
 /// ============================================================================
-/// 🔸 Widget contador interactivo (abre listas de seguidores/siguiendo)
+/// 🔸 Widget contador interactivo
 /// ============================================================================
 class _InteractiveCounter extends StatelessWidget {
   final String label;
