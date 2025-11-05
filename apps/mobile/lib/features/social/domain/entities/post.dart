@@ -9,6 +9,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// ✅ Preparado para futuras expansiones (geo, privacidad, tags, etc.)
 /// ============================================================================
 
+/// ============================================================================
+/// 🧩 Post — Modelo robusto de publicación (versión corregida v2.2)
+/// ============================================================================
+/// ✅ Compatible con campos opcionales o ausentes.
+/// ✅ Evita fallos si falta `deleted` o `city`.
+/// ✅ Compatible con `authorId` como campo de referencia.
+/// ============================================================================
 class Post {
   final String id;
   final String authorId;
@@ -43,48 +50,17 @@ class Post {
     this.likeCount = 0,
     this.commentCount = 0,
     this.visibility = 'public',
-    required this.city,
+    this.city = '',
     this.cityLat,
     this.cityLng,
     this.countryCode,
     this.deleted = false,
   });
 
-  // ===========================================================================
-  // 🔹 FACTORY: Construye desde Firestore (DocumentSnapshot)
-  // ===========================================================================
-  factory Post.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>? ?? {};
-    return Post(
-      id: doc.id,
-      authorId: data['authorId'] ?? '',
-      type: data['type'] ?? 'photo',
-      mediaUrls: List<String>.from(data['mediaUrls'] ?? []),
-      thumbUrl: data['thumbUrl'],
-      aspectRatio: (data['aspectRatio'] as num?)?.toDouble(),
-      caption: data['caption'] ?? '',
-      tags: List<String>.from(data['tags'] ?? []),
-      mentions: List<String>.from(data['mentions'] ?? []),
-      createdAt:
-          data['createdAt'] is Timestamp ? data['createdAt'] : Timestamp.now(),
-      likeCount: (data['likeCount'] ?? 0) as int,
-      commentCount: (data['commentCount'] ?? 0) as int,
-      visibility: data['visibility'] ?? 'public',
-      city: data['city'] ?? '',
-      cityLat: (data['cityLat'] as num?)?.toDouble(),
-      cityLng: (data['cityLng'] as num?)?.toDouble(),
-      countryCode: data['countryCode'],
-      deleted: data['deleted'] ?? false,
-    );
-  }
-
-  // ===========================================================================
-  // 🔹 FACTORY: Construye desde un Map local (usado en algunos servicios)
-  // ===========================================================================
   factory Post.fromMap(Map<String, dynamic> data, String id) {
     return Post(
       id: id,
-      authorId: data['authorId'] ?? '',
+      authorId: data['authorId'] ?? data['userId'] ?? '',
       type: data['type'] ?? 'photo',
       mediaUrls: List<String>.from(data['mediaUrls'] ?? []),
       thumbUrl: data['thumbUrl'],
@@ -92,29 +68,25 @@ class Post {
       caption: data['caption'] ?? '',
       tags: List<String>.from(data['tags'] ?? []),
       mentions: List<String>.from(data['mentions'] ?? []),
-      createdAt:
-          data['createdAt'] is Timestamp ? data['createdAt'] : Timestamp.now(),
-      likeCount: (data['likeCount'] ?? 0) as int,
-      commentCount: (data['commentCount'] ?? 0) as int,
+      createdAt: data['createdAt'] ?? Timestamp.now(),
+      likeCount: data['likeCount'] ?? 0,
+      commentCount: data['commentCount'] ?? 0,
       visibility: data['visibility'] ?? 'public',
       city: data['city'] ?? '',
       cityLat: (data['cityLat'] as num?)?.toDouble(),
       cityLng: (data['cityLng'] as num?)?.toDouble(),
       countryCode: data['countryCode'],
-      deleted: data['deleted'] ?? false,
+      deleted: (data['deleted'] ?? false) == true,
     );
   }
 
-  // ===========================================================================
-  // 🔹 Serializa para guardar en Firestore
-  // ===========================================================================
   Map<String, dynamic> toMap() {
     return {
       'authorId': authorId,
       'type': type,
       'mediaUrls': mediaUrls,
-      'thumbUrl': thumbUrl,
-      'aspectRatio': aspectRatio,
+      if (thumbUrl != null) 'thumbUrl': thumbUrl,
+      if (aspectRatio != null) 'aspectRatio': aspectRatio,
       'caption': caption,
       'tags': tags,
       'mentions': mentions,
@@ -123,9 +95,9 @@ class Post {
       'commentCount': commentCount,
       'visibility': visibility,
       'city': city,
-      'cityLat': cityLat,
-      'cityLng': cityLng,
-      'countryCode': countryCode,
+      if (cityLat != null) 'cityLat': cityLat,
+      if (cityLng != null) 'cityLng': cityLng,
+      if (countryCode != null) 'countryCode': countryCode,
       'deleted': deleted,
     };
   }
