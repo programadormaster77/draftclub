@@ -1,6 +1,7 @@
 // lib/features/rooms/presentation/rooms_page.dart
 
 import 'dart:math' as math;
+import 'package:draftclub_mobile/features/rooms/presentation/room_controlle.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -17,15 +18,17 @@ import 'room_detail_page.dart';
 import 'find_room_page.dart';
 
 import 'package:draftclub_mobile/core/location/place_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../presentation/room_controller.dart';
 
-class RoomsPage extends StatefulWidget {
+class RoomsPage extends ConsumerStatefulWidget {
   const RoomsPage({super.key});
 
   @override
-  State<RoomsPage> createState() => _RoomsPageState();
+  ConsumerState<RoomsPage> createState() => _RoomsPageState();
 }
 
-class _RoomsPageState extends State<RoomsPage>
+class _RoomsPageState extends ConsumerState<RoomsPage>
     with SingleTickerProviderStateMixin {
   final _auth = FirebaseAuth.instance;
   final _db = FirebaseFirestore.instance;
@@ -383,6 +386,8 @@ class _RoomsPageState extends State<RoomsPage>
   // ----------------- UI -----------------
   @override
   Widget build(BuildContext context) {
+    final controller = ref.read(roomControllerProvider.notifier);
+    final state = ref.watch(roomControllerProvider);
     return Scaffold(
       backgroundColor: const Color(0xFF0E0E0E),
       appBar: AppBar(
@@ -427,6 +432,8 @@ class _RoomsPageState extends State<RoomsPage>
   }
 
   Widget _buildPublicTab() {
+    final state = ref.watch(roomControllerProvider);
+
     if (_bootstrapping) {
       return const Center(
           child: CircularProgressIndicator(color: Colors.blueAccent));
@@ -460,63 +467,45 @@ class _RoomsPageState extends State<RoomsPage>
           child: RefreshIndicator(
             color: Colors.blueAccent,
             onRefresh: _onRefresh,
-            child: FutureBuilder<List<Room>>(
-              future: _roomsFuture,
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(
+            child: state.isLoading
+                ? const Center(
                     child: CircularProgressIndicator(color: Colors.blueAccent),
-                  );
-                }
-                if (snap.hasError) {
-                  return Center(
-                    child: Text(
-                      'Error: ${snap.error}',
-                      style: const TextStyle(color: Colors.redAccent),
-                    ),
-                  );
-                }
-                final rooms = snap.data ?? const <Room>[];
-
-                if (rooms.isEmpty) {
-                  return _EmptyState(
-                    title: 'No hay salas públicas según tus filtros',
-                    message:
-                        'Prueba otra fecha, cambia la ciudad o crea tu propia sala.',
-                    actionText: 'Crear una sala',
-                    onAction: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const CreateRoomPage()),
-                      );
-                    },
-                  );
-                }
-
-                return ListView.builder(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
-                  itemCount: rooms.length,
-                  itemBuilder: (_, i) {
-                    final r = rooms[i];
-                    return RoomCard(
-                      room: r,
-                      userLat: _filters.userLat,
-                      userLng: _filters.userLng,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => RoomDetailPage(room: r),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                );
-              },
-            ),
+                  )
+                : (state.rooms.isEmpty
+                    ? _EmptyState(
+                        title: 'No hay salas públicas según tus filtros',
+                        message:
+                            'Prueba otra fecha, cambia la ciudad o crea tu propia sala.',
+                        actionText: 'Crear una sala',
+                        onAction: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const CreateRoomPage()),
+                          );
+                        },
+                      )
+                    : ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(16),
+                        itemCount: state.rooms.length,
+                        itemBuilder: (_, i) {
+                          final r = state.rooms[i];
+                          return RoomCard(
+                            room: r,
+                            userLat: _filters.userLat,
+                            userLng: _filters.userLng,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => RoomDetailPage(room: r),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      )),
           ),
         ),
       ],

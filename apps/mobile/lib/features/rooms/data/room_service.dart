@@ -1,28 +1,42 @@
-// lib/features/rooms/data/room_service.dart
+import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../models/room_model.dart';
-import 'package:uuid/uuid.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:uuid/uuid.dart';
+
+import '../models/room_model.dart';
 import 'team_service.dart';
-import 'dart:math' as math;
+
+// ✅ Helpers centralizados (manténlos si existen)
+import '../../../core/utils/string_utils.dart'
+    show normalizeText, toIso2OrGuess;
 
 /// ====================================================================
 /// ⚙️ RoomService — Gestión central de salas en Firestore (GLOBAL)
 /// ====================================================================
-/// 🔹 Compatible con cualquier país y nombre de ciudad.
-/// 🔹 Normaliza códigos de país a formato ISO-2 universal.
-/// 🔹 Soporta ubicación, filtrado avanzado y equipos automáticos.
-/// 🔹 Resiliente ante perfiles incompletos o geolocalización fallida.
-/// ====================================================================
 class RoomService {
-  final _firestore = FirebaseFirestore.instance;
-  final _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore;
+  final FirebaseAuth _auth;
 
-  /// ================================================================
-  /// 🏗️ Crear una nueva sala + equipos automáticos
-  /// ================================================================
+  RoomService({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+        _auth = auth ?? FirebaseAuth.instance;
+
+  // ===================================================================
+  // 🧩 Encapsulados de colecciones / docs
+  // ===================================================================
+  CollectionReference<Map<String, dynamic>> get _roomsCol =>
+      _firestore.collection('rooms');
+
+  DocumentReference<Map<String, dynamic>> _roomRef(String roomId) =>
+      _roomsCol.doc(roomId);
+
+  // ===================================================================
+  // 🏗️ Crear una nueva sala + equipos automáticos
+  // ===================================================================
   Future<String> createRoom({
     required String name,
     required int teams,
@@ -44,22 +58,30 @@ class RoomService {
 
     final roomId = const Uuid().v4();
 
+    // Ciudad base
     String city = (manualCity ?? '').trim();
     if (city.contains(',')) city = city.split(',').first.trim();
     if (city.isEmpty) city = 'Desconocido';
 
+    // Coordenadas base
     double? finalLat = lat ?? cityLat;
     double? finalLng = lng ?? cityLng;
+
+    // País ISO-2
     String? country = _toIsoFromName(countryCode);
+
+    // Sexo
     String finalSex = (sex ?? '').trim().toLowerCase();
     if (finalSex.isEmpty) finalSex = 'mixto';
 
+    // 1️⃣ Enriquecer con perfil del usuario
     try {
       final userDoc = await _firestore.collection('users').doc(uid).get();
       if (userDoc.exists) {
         final data = userDoc.data()!;
         finalSex = (data['sex'] ?? finalSex).toString().toLowerCase();
 
+        // Si no viene ciudad manual, usa la del perfil
         if (manualCity == null || manualCity.isEmpty) {
           final userCity = data['city'] ?? data['ciudad'];
           if (userCity != null && userCity.toString().isNotEmpty) {
@@ -73,31 +95,37 @@ class RoomService {
       }
     } catch (_) {}
 
+    // 2️⃣ Si faltan datos, intenta geolocalizar
     if ((manualCity == null || manualCity.isEmpty) ||
         (finalLat == null || finalLng == null)) {
       try {
-        bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        final serviceEnabled = await Geolocator.isLocationServiceEnabled();
         if (serviceEnabled) {
-          LocationPermission permission = await Geolocator.checkPermission();
+          var permission = await Geolocator.checkPermission();
           if (permission == LocationPermission.denied) {
             permission = await Geolocator.requestPermission();
           }
           if (permission == LocationPermission.always ||
               permission == LocationPermission.whileInUse) {
             final pos = await Geolocator.getCurrentPosition(
-                desiredAccuracy: LocationAccuracy.low);
+              desiredAccuracy: LocationAccuracy.low,
+            );
             final placemarks =
                 await placemarkFromCoordinates(pos.latitude, pos.longitude);
-            final p = placemarks.first;
-            city = p.locality ?? city;
-            finalLat = pos.latitude;
-            finalLng = pos.longitude;
-            country ??= _toIsoFromName(p.isoCountryCode);
+            if (placemarks.isNotEmpty) {
+              final p = placemarks.first;
+              city = (p.locality ?? city).toString();
+              country ??= _toIsoFromName(p.isoCountryCode);
+            }
+            finalLat ??= pos.latitude;
+            finalLng ??= pos.longitude;
           }
         }
       } catch (_) {}
     }
 
+    // 3️⃣ Construir modelo
+    final now = DateTime.now();
     final room = Room(
       id: roomId,
       name: name.trim(),
@@ -107,7 +135,8 @@ class RoomService {
       isPublic: isPublic,
       creatorId: uid,
       city: city,
-      createdAt: DateTime.now(),
+      createdAt: now,
+      updatedAt: now,
       eventAt: eventAt,
       cityLat: cityLat ?? finalLat,
       cityLng: cityLng ?? finalLng,
@@ -116,12 +145,13 @@ class RoomService {
       countryCode: country,
       exactAddress: exactAddress,
       sex: finalSex,
+      players: const [],
     );
 
-    await _firestore.collection('rooms').doc(roomId).set({
+    // 4️⃣ Persistir sala y crear equipos base
+    await _roomsCol.doc(roomId).set({
       ...room.toMap(),
       'players': [uid],
-      'updatedAt': Timestamp.now(),
       if (eventAt != null) 'eventAt': Timestamp.fromDate(eventAt),
       if (exactAddress != null && exactAddress.isNotEmpty)
         'exactAddress': exactAddress,
@@ -135,6 +165,7 @@ class RoomService {
       'sex': finalSex,
     });
 
+    // 5️⃣ Crear equipos
     final teamService = TeamService();
     await teamService.initDefaultTeams(
       roomId: roomId,
@@ -145,12 +176,12 @@ class RoomService {
     return roomId;
   }
 
-  /// ================================================================
-  /// 🔁 Cambiar visibilidad de una sala
-  /// ================================================================
+  // ===================================================================
+  // 🔁 Cambiar visibilidad
+  // ===================================================================
   Future<void> toggleVisibility(String roomId, bool isPublic) async {
     try {
-      await _firestore.collection('rooms').doc(roomId).update({
+      await _roomRef(roomId).update({
         'isPublic': isPublic,
         'updatedAt': Timestamp.now(),
       });
@@ -159,9 +190,9 @@ class RoomService {
     }
   }
 
-  // ================================================================
-  // 🔧 Asegurar ciudad/país/coords del usuario
-  // ================================================================
+  // ===================================================================
+  // 🔧 Asegurar ciudad/país/coords del usuario (perfil geo)
+  // ===================================================================
   Future<
       ({
         String? city,
@@ -202,21 +233,19 @@ class RoomService {
           if (perm == LocationPermission.always ||
               perm == LocationPermission.whileInUse) {
             final pos = await Geolocator.getCurrentPosition(
-                desiredAccuracy: LocationAccuracy.low);
+              desiredAccuracy: LocationAccuracy.low,
+            );
             lat = pos.latitude;
             lng = pos.longitude;
+
             try {
               final ps = await placemarkFromCoordinates(lat!, lng!);
-              final p = ps.first;
-              city ??= p.locality;
-              country ??= _toIsoFromName(p.isoCountryCode);
+              if (ps.isNotEmpty) {
+                final p = ps.first;
+                city ??= p.locality;
+                country ??= _toIsoFromName(p.isoCountryCode);
+              }
             } catch (_) {}
-            await _firestore.collection('users').doc(uid).update({
-              if (city != null) 'city': city,
-              if (country != null) 'countryCode': country,
-              'lat': lat,
-              'lng': lng,
-            });
           }
         }
       } catch (_) {}
@@ -225,18 +254,20 @@ class RoomService {
     return (city: city, countryCode: country, lat: lat, lng: lng, sex: sex);
   }
 
-  /// ================================================================
-  /// 📍 Obtener salas públicas filtradas automáticamente
-  /// ================================================================
+  // ===================================================================
+  // 📍 Listado automático de salas cerca del usuario
+  // ===================================================================
   Future<List<Room>> getFilteredPublicRoomsAuto({
     double radiusKm = 40,
     DateTime? targetDate,
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Usuario no autenticado');
+
     try {
       final profile = await _ensureUserGeoProfile();
       if (profile.lat == null || profile.lng == null) return [];
+
       final rooms = await getFilteredPublicRooms(
         cityName: profile.city,
         userLat: profile.lat,
@@ -246,26 +277,38 @@ class RoomService {
         radiusKm: radiusKm,
         targetDate: targetDate,
       );
+
+      // Orden por distancia y fecha
       rooms.sort((a, b) {
-        final da = _distanceKm(profile.lat!, profile.lng!,
-            a.lat ?? a.cityLat ?? 0, a.lng ?? a.cityLng ?? 0);
-        final db = _distanceKm(profile.lat!, profile.lng!,
-            b.lat ?? b.cityLat ?? 0, b.lng ?? b.cityLng ?? 0);
+        final da = _distanceKm(
+          profile.lat!,
+          profile.lng!,
+          (a.lat ?? a.cityLat ?? 0),
+          (a.lng ?? a.cityLng ?? 0),
+        );
+        final db = _distanceKm(
+          profile.lat!,
+          profile.lng!,
+          (b.lat ?? b.cityLat ?? 0),
+          (b.lng ?? b.cityLng ?? 0),
+        );
         if (da != db) return da.compareTo(db);
         if (a.eventAt != null && b.eventAt != null) {
-          return a.eventAt!.compareTo(b.eventAt!);
+          final cmp = a.eventAt!.compareTo(b.eventAt!);
+          if (cmp != 0) return cmp;
         }
         return b.createdAt.compareTo(a.createdAt);
       });
+
       return rooms;
     } catch (_) {
       return [];
     }
   }
 
-  /// ================================================================
-  /// 📍 Obtener salas públicas filtradas (GLOBAL + Estricto)
-  /// ================================================================
+  // ===================================================================
+  // 📍 Filtro global (país/ciudad/radio)
+  // ===================================================================
   Future<List<Room>> getFilteredPublicRooms({
     String? cityName,
     double? cityLat,
@@ -279,8 +322,7 @@ class RoomService {
     String? cityCountryCode,
   }) async {
     try {
-      final snap = await _firestore
-          .collection('rooms')
+      final snap = await _roomsCol
           .where('isPublic', isEqualTo: true)
           .orderBy('createdAt', descending: true)
           .limit(200)
@@ -289,7 +331,7 @@ class RoomService {
       List<Room> rooms =
           snap.docs.map((doc) => Room.fromMap(doc.data())).toList();
 
-      // 📅 Filtrar por fecha
+      // 1️⃣ Filtro por fecha
       if (targetDate != null) {
         final start =
             DateTime(targetDate.year, targetDate.month, targetDate.day);
@@ -302,7 +344,7 @@ class RoomService {
             .toList();
       }
 
-      // 🌍 Filtrar país (por ciudad seleccionada o usuario)
+      // 2️⃣ Filtro por país
       String? isoForFilter;
       if ((cityName != null && cityName.trim().isNotEmpty) &&
           (cityCountryCode != null && cityCountryCode.isNotEmpty)) {
@@ -320,25 +362,24 @@ class RoomService {
         }).toList();
       }
 
-      // 🏙️ Ciudad + cercanía (modo estricto)
+      // 3️⃣ Filtro por ciudad / radio
       if (cityName != null && cityName.trim().isNotEmpty) {
-        final wanted = _norm(cityName.split(',').first);
+        final wanted = normalizeText(cityName.split(',').first);
         rooms = rooms.where((r) {
-          final roomCity = _norm(r.city.split(',').first);
+          final roomCity = normalizeText(r.city.split(',').first);
           final sameCity = roomCity == wanted;
 
           final hasCoords = (r.cityLat != null &&
               r.cityLng != null &&
               cityLat != null &&
               cityLng != null);
-
           final nearby = hasCoords
               ? _distanceKm(cityLat!, cityLng!, r.cityLat!, r.cityLng!) <=
                   radiusKm
               : false;
 
           final sameCountry = (cityCountryCode != null && r.countryCode != null)
-              ? r.countryCode!.toUpperCase() == cityCountryCode!.toUpperCase()
+              ? (r.countryCode!.toUpperCase() == cityCountryCode.toUpperCase())
               : true;
 
           return sameCountry && (sameCity || nearby);
@@ -352,7 +393,7 @@ class RoomService {
         }).toList();
       }
 
-      // 🚻 Filtrar por sexo
+      // 4️⃣ Sexo
       if (userSex != null && userSex.isNotEmpty) {
         final u = userSex.toLowerCase();
         rooms = rooms.where((r) {
@@ -361,13 +402,21 @@ class RoomService {
         }).toList();
       }
 
-      // 🧭 Ordenar resultados
+      // 5️⃣ Orden
       if (userLat != null && userLng != null) {
         rooms.sort((a, b) {
-          final da = _distanceKm(userLat, userLng, a.lat ?? a.cityLat ?? 0,
-              a.lng ?? a.cityLng ?? 0);
-          final db = _distanceKm(userLat, userLng, b.lat ?? b.cityLat ?? 0,
-              b.lng ?? b.cityLng ?? 0);
+          final da = _distanceKm(
+            userLat,
+            userLng,
+            (a.lat ?? a.cityLat ?? 0),
+            (a.lng ?? a.cityLng ?? 0),
+          );
+          final db = _distanceKm(
+            userLat,
+            userLng,
+            (b.lat ?? b.cityLat ?? 0),
+            (b.lng ?? b.cityLng ?? 0),
+          );
           if (da != db) return da.compareTo(db);
           return b.createdAt.compareTo(a.createdAt);
         });
@@ -381,43 +430,35 @@ class RoomService {
     }
   }
 
-  // ================================================================
-  // 🧮 Utilidades de distancia
-  // ================================================================
-  double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
-    const R = 6371.0;
-    final dLat = _deg2rad(lat2 - lat1);
-    final dLon = _deg2rad(lon2 - lon1);
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(_deg2rad(lat1)) *
-            math.cos(_deg2rad(lat2)) *
-            math.sin(dLon / 2) *
-            math.sin(dLon / 2);
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-  }
-
-  double _deg2rad(double deg) => deg * (math.pi / 180);
-
-  // ================================================================
-  // 👥 Unirse / salir / editar / eliminar sala
-  // ================================================================
+  // ===================================================================
+  // 👥 Unirse / salir
+  // ===================================================================
   Future<String> joinRoom(String roomId) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Usuario no autenticado');
-    final ref = _firestore.collection('rooms').doc(roomId);
+
+    final ref = _roomRef(roomId);
+
     return _firestore.runTransaction((tx) async {
       final doc = await tx.get(ref);
       if (!doc.exists) throw Exception('La sala no existe');
+
       final data = doc.data()!;
-      final players = List<String>.from(data['players'] ?? []);
-      final teams = data['teams'] ?? 0;
-      final playersPerTeam = data['playersPerTeam'] ?? 0;
-      final substitutes = data['substitutes'] ?? 0;
+      final players = List<String>.from(data['players'] ?? <String>[]);
+      final teams = (data['teams'] ?? 0) as int;
+      final playersPerTeam = (data['playersPerTeam'] ?? 0) as int;
+      final substitutes = (data['substitutes'] ?? 0) as int;
       final maxPlayers = (teams * playersPerTeam) + substitutes;
+
       if (players.contains(uid)) return 'Ya estás en esta sala.';
       if (players.length >= maxPlayers) return 'La sala ya está llena.';
+
       players.add(uid);
-      tx.update(ref, {'players': players, 'updatedAt': Timestamp.now()});
+      tx.update(ref, {
+        'players': players,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
       return 'Te uniste correctamente.';
     });
   }
@@ -425,50 +466,105 @@ class RoomService {
   Future<String> leaveRoom(String roomId) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Usuario no autenticado');
-    final ref = _firestore.collection('rooms').doc(roomId);
+
+    final ref = _roomRef(roomId);
+
     return _firestore.runTransaction((tx) async {
       final doc = await tx.get(ref);
       if (!doc.exists) throw Exception('La sala no existe');
+
       final data = doc.data()!;
-      final players = List<String>.from(data['players'] ?? []);
+      final players = List<String>.from(data['players'] ?? <String>[]);
+
       if (!players.contains(uid)) return 'No estás en esta sala.';
+
       players.remove(uid);
-      tx.update(ref, {'players': players, 'updatedAt': Timestamp.now()});
+      tx.update(ref, {
+        'players': players,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
       return 'Saliste correctamente de la sala.';
     });
   }
 
+  // ===================================================================
+  // ✏️ Actualizar / eliminar / obtener
+  // ===================================================================
   Future<void> updateRoom(String roomId, Map<String, dynamic> updates) async {
-    await _firestore
-        .collection('rooms')
-        .doc(roomId)
-        .update({...updates, 'updatedAt': Timestamp.now()});
+    final sanitized = Map<String, dynamic>.from(updates)
+      ..remove('id')
+      ..remove('creatorId');
+
+    if (sanitized.containsKey('city')) {
+      final v = sanitized['city'];
+      if (v is String && v.contains(',')) {
+        sanitized['city'] = v.split(',').first.trim();
+      }
+    }
+    if (sanitized.containsKey('sex')) {
+      sanitized['sex'] =
+          (sanitized['sex']?.toString().toLowerCase() ?? 'mixto');
+    }
+    if (sanitized.containsKey('eventAt') && sanitized['eventAt'] is DateTime) {
+      sanitized['eventAt'] = Timestamp.fromDate(sanitized['eventAt']);
+    }
+
+    sanitized['updatedAt'] = FieldValue.serverTimestamp();
+    await _roomRef(roomId).update(sanitized);
   }
 
   Future<Room?> getRoomById(String roomId) async {
-    final doc = await _firestore.collection('rooms').doc(roomId).get();
-    return doc.exists ? Room.fromMap(doc.data()!) : null;
+    final doc = await _roomRef(roomId).get();
+    if (!doc.exists) return null;
+    return Room.fromMap(doc.data()!);
   }
 
   Future<void> deleteRoom(String roomId) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Usuario no autenticado');
-    final doc = await _firestore.collection('rooms').doc(roomId).get();
-    if (!doc.exists) throw Exception('La sala no existe');
-    final data = doc.data()!;
+
+    final d = await _roomRef(roomId).get();
+    if (!d.exists) throw Exception('La sala no existe');
+
+    final data = d.data()!;
     if (data['creatorId'] != uid) {
       throw Exception('Solo el creador puede eliminar la sala.');
     }
-    await _firestore.collection('rooms').doc(roomId).delete();
+
+    final batch = _firestore.batch();
+    final teamsCol = _roomRef(roomId).collection('teams');
+    final logsCol = _roomRef(roomId).collection('system_logs');
+
+    try {
+      final teams = await teamsCol.get();
+      for (final t in teams.docs) {
+        batch.delete(t.reference);
+      }
+    } catch (_) {}
+
+    try {
+      final logs = await logsCol.get();
+      for (final l in logs.docs) {
+        batch.delete(l.reference);
+      }
+    } catch (_) {}
+
+    batch.delete(_roomRef(roomId));
+    await batch.commit();
   }
 
-  // ================================================================
-  // 🌎 Normalizadores universales
-  // ================================================================
+  // ===================================================================
+  // 🌎 Normalizador
+  // ===================================================================
   String? _toIsoFromName(String? name) {
     if (name == null) return null;
-    final n = _norm(name);
+    final n = normalizeText(name);
     if (n.length == 2) return n.toUpperCase();
+    final viaHelper = toIso2OrGuess(name);
+    if (viaHelper != null && viaHelper.trim().isNotEmpty) {
+      return viaHelper.toUpperCase();
+    }
 
     const map = {
       'colom': 'CO',
@@ -511,38 +607,21 @@ class RoomService {
     return name.toUpperCase();
   }
 
-  // ---------------------------------------------------------------
-  // 🔠 Normalizador de texto: elimina tildes, minúsculas y ñ → n
-  // ---------------------------------------------------------------
-  String _norm(String s) {
-    const repl = {
-      'á': 'a',
-      'à': 'a',
-      'ä': 'a',
-      'â': 'a',
-      'é': 'e',
-      'è': 'e',
-      'ë': 'e',
-      'ê': 'e',
-      'í': 'i',
-      'ì': 'i',
-      'ï': 'i',
-      'î': 'i',
-      'ó': 'o',
-      'ò': 'o',
-      'ö': 'o',
-      'ô': 'o',
-      'ú': 'u',
-      'ù': 'u',
-      'ü': 'u',
-      'û': 'u',
-      'ñ': 'n',
-    };
-    final sb = StringBuffer();
-    for (final ch in s.trim().toLowerCase().runes) {
-      final c = String.fromCharCode(ch);
-      sb.write(repl[c] ?? c);
-    }
-    return sb.toString();
+  // ===============================================================
+  // 🧮 Cálculo de distancia Haversine (seguro)
+  // ===============================================================
+  double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
+    const R = 6371.0;
+    final dLat = _deg2rad(lat2 - lat1);
+    final dLon = _deg2rad(lon2 - lon1);
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_deg2rad(lat1)) *
+            math.cos(_deg2rad(lat2)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return R * c;
   }
+
+  double _deg2rad(double deg) => deg * (math.pi / 180.0);
 }
