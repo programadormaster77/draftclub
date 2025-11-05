@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../domain/entities/post.dart';
-import '../../domain/repositories/social_repository.dart';
-import 'repositories/social_repository_impl.dart';
+import 'package:draftclub_mobile/features/social/domain/entities/post.dart';
+import 'package:draftclub_mobile/features/social/domain/repositories/social_repository.dart';
+import 'package:draftclub_mobile/features/social/domain/repositories/social_repository_impl.dart';
 import 'sources/social_storage_source.dart';
 
 /// ===============================================================

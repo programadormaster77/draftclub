@@ -1,8 +1,8 @@
 import 'dart:io';
+import 'package:draftclub_mobile/features/social/data/social_service.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../../data/social_service.dart';
-import '../../../domain/entities/post.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/post_success_overlay.dart';
 
 /// ===============================================================
@@ -80,6 +80,17 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
   // ===================== PUBLICAR =====================
   Future<void> _publish() async {
     final caption = _captionCtrl.text.trim();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+
+    if (uid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text('Debes iniciar sesión para publicar.'),
+        ),
+      );
+      return;
+    }
 
     if (_selectedFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -105,10 +116,11 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
 
     try {
       await _service.createPost(
-        mediaFile: _selectedFile!,
+        uid: uid,
+        file: _selectedFile!,
         type: _mediaType ?? 'photo',
         caption: caption,
-        city: 'Bogotá',
+        city: 'Bogotá', // 🔹 Temporal hasta integrar ubicación real
       );
 
       if (!mounted) return;
@@ -210,8 +222,10 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
               spacing: 12,
               runSpacing: 12,
               children: [
-                _buildActionButton(Icons.photo, 'Foto galería', _pickImageFromGallery),
-                _buildActionButton(Icons.videocam, 'Video galería', _pickVideoFromGallery),
+                _buildActionButton(
+                    Icons.photo, 'Foto galería', _pickImageFromGallery),
+                _buildActionButton(
+                    Icons.videocam, 'Video galería', _pickVideoFromGallery),
                 _buildActionButton(Icons.camera_alt, 'Tomar foto', _takePhoto),
                 _buildActionButton(Icons.camera, 'Grabar video', _recordVideo),
               ],
@@ -269,6 +283,7 @@ class _CreatePostSheetState extends State<CreatePostSheet> {
     );
   }
 
+  // ===================== BOTÓN AUXILIAR =====================
   Widget _buildActionButton(IconData icon, String label, VoidCallback onTap) {
     return ElevatedButton.icon(
       onPressed: _isUploading ? null : onTap,

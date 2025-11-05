@@ -1,9 +1,12 @@
+import 'package:draftclub_mobile/features/social/presentation/page/social_feed_page.dart';
 import 'package:flutter/material.dart';
+
+// ===================== IMPORTS DE MÓDULOS =====================
+import 'package:draftclub_mobile/features/social/presentation/sheets/create_post_sheet.dart';
 import '../../rooms/presentation/rooms_page.dart';
 import '../../rooms/presentation/create_room_page.dart';
 import '../../tournaments/presentation/tournaments_page.dart';
 import '../../profile/presentation/profile_page.dart';
-import 'feed_page.dart';
 
 /// ====================================================================
 /// 🧭 DashboardPage — Control principal de navegación inferior
@@ -25,10 +28,10 @@ class _DashboardPageState extends State<DashboardPage> {
   int _currentIndex = 0;
 
   // ================================================================
-  // 📄 PÁGINAS PRINCIPALES
+  // 📄 PÁGINAS PRINCIPALES (ACTUALIZADO)
   // ================================================================
   final List<Widget> _pages = const [
-    FeedPage(),
+    SocialFeedPage(), // ✅ Nuevo feed social real
     RoomsPage(),
     SizedBox(), // botón central → modal de creación
     TournamentsPage(),
@@ -74,6 +77,9 @@ class _DashboardPageState extends State<DashboardPage> {
             child: Wrap(
               runSpacing: 12,
               children: [
+                // ===========================================================
+                // 📹 Subir clip — conecta con CreatePostSheet
+                // ===========================================================
                 ListTile(
                   leading: const Icon(Icons.videocam, color: Colors.blueAccent),
                   title: const Text(
@@ -82,9 +88,27 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                   onTap: () {
                     Navigator.pop(context);
-                    // TODO: conectar con pantalla de subida de clips
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => DraggableScrollableSheet(
+                        initialChildSize: 0.9,
+                        minChildSize: 0.6,
+                        maxChildSize: 0.95,
+                        expand: false,
+                        builder: (_, scrollCtrl) => SingleChildScrollView(
+                          controller: scrollCtrl,
+                          child: const CreatePostSheet(),
+                        ),
+                      ),
+                    );
                   },
                 ),
+
+                // ===========================================================
+                // ⚽ Crear sala — conecta con CreateRoomPage
+                // ===========================================================
                 ListTile(
                   leading: const Icon(Icons.sports_soccer,
                       color: Colors.greenAccent),
@@ -111,6 +135,10 @@ class _DashboardPageState extends State<DashboardPage> {
                     }
                   },
                 ),
+
+                // ===========================================================
+                // 🏆 Crear torneo — pendiente
+                // ===========================================================
                 ListTile(
                   leading:
                       const Icon(Icons.emoji_events, color: Colors.amberAccent),

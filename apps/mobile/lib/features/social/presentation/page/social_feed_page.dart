@@ -1,17 +1,17 @@
+import 'package:draftclub_mobile/features/social/domain/entities/post.dart';
+import 'package:draftclub_mobile/features/social/domain/repositories/social_repository_impl.dart';
+import 'package:draftclub_mobile/features/social/presentation/widgets/post_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../domain/entities/post.dart';
-import '../../../data/repositories/social_repository_impl.dart';
-import '../../widgets/post_card.dart';
 import '../sheets/create_post_sheet.dart';
 
 /// ===============================================================
-/// 📰 SocialFeedPage — Página principal del módulo social
+/// 📰 SocialFeedPage — Feed Social integrado al Dashboard
 /// ===============================================================
-/// - Muestra las publicaciones recientes (foto/video)
-/// - Usa el repositorio SocialRepositoryImpl (no accede directo a Firestore)
-/// - Integra CreatePostSheet con animación modal
-/// - Diseño coherente con theme.dart
+/// 🔹 Escucha publicaciones en tiempo real desde Firestore.
+/// 🔹 Permite crear posts desde el botón flotante.
+/// 🔹 Se integra visualmente al DashboardPage (sin AppBar propio).
+/// 🔹 Usa el repositorio SocialRepositoryImpl para obtener datos.
 /// ===============================================================
 class SocialFeedPage extends StatefulWidget {
   const SocialFeedPage({super.key});
@@ -22,7 +22,7 @@ class SocialFeedPage extends StatefulWidget {
 
 class _SocialFeedPageState extends State<SocialFeedPage> {
   final _repo = SocialRepositoryImpl();
-  String? _currentCity; // Futuro: filtro por ciudad
+  String? _currentCity; // 🔹 Futuro: filtro por ciudad
   late final ScrollController _scrollCtrl;
 
   @override
@@ -38,7 +38,7 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
   }
 
   // ==========================================================
-  // 🔹 Método para abrir el modal de creación de post
+  // 📱 Abrir hoja de creación de publicación
   // ==========================================================
   Future<void> _openCreatePostSheet() async {
     await showModalBottomSheet(
@@ -70,7 +70,7 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
   }
 
   // ==========================================================
-  // 🧩 UI
+  // 🧩 INTERFAZ PRINCIPAL
   // ==========================================================
   @override
   Widget build(BuildContext context) {
@@ -80,15 +80,6 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
-        appBar: AppBar(
-          backgroundColor: theme.colorScheme.surface,
-          elevation: 0.5,
-          title: const Text(
-            'Feed Social',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          centerTitle: true,
-        ),
 
         // ===================== STREAM PRINCIPAL =====================
         body: StreamBuilder<List<Post>>(
@@ -125,7 +116,7 @@ class _SocialFeedPageState extends State<SocialFeedPage> {
               color: Colors.blueAccent,
               backgroundColor: theme.scaffoldBackgroundColor,
               onRefresh: () async {
-                setState(() {}); // Refresca stream
+                setState(() {}); // Fuerza un rebuild del stream
               },
               child: ListView.builder(
                 controller: _scrollCtrl,

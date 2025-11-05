@@ -3,23 +3,63 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../auth/data/auth_service.dart';
+import '../../social/data/social_follow_service.dart';
 import 'edit_profile_page.dart';
 
 /// ===============================================================
-/// 🧾 ProfilePage — Pantalla del perfil del jugador
+/// 🧾 ProfilePage — Pantalla del perfil del jugador (versión PRO)
 /// ===============================================================
-/// - Lee datos en tiempo real desde Firestore.
-/// - Muestra información, progreso y estadísticas.
-/// - Permite editar el perfil y cerrar sesión.
+/// - Muestra datos en tiempo real desde Firestore.
+/// - Incluye botón de seguir / siguiendo.
+/// - Muestra contadores: seguidores, seguidos y publicaciones.
+/// - Permite editar perfil y cerrar sesión.
 /// ===============================================================
-class ProfilePage extends StatelessWidget {
-  const ProfilePage({super.key});
+class ProfilePage extends StatefulWidget {
+  final String? userId; // Si se pasa otro usuario, se muestra su perfil
+
+  const ProfilePage({super.key, this.userId});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  final _auth = FirebaseAuth.instance;
+  final _followService = SocialFollowService();
+
+  bool _isFollowing = false;
+  bool _isLoadingFollow = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkFollowStatus();
+  }
+
+  Future<void> _checkFollowStatus() async {
+    final current = _auth.currentUser;
+    if (current == null ||
+        widget.userId == null ||
+        widget.userId == current.uid) return;
+
+    final following = await _followService.isFollowing(widget.userId!);
+    if (mounted) setState(() => _isFollowing = following);
+  }
+
+  Future<void> _toggleFollow() async {
+    if (_isLoadingFollow) return;
+    setState(() => _isLoadingFollow = true);
+    await _followService.toggleFollow(widget.userId!);
+    await _checkFollowStatus();
+    setState(() => _isLoadingFollow = false);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final currentUser = _auth.currentUser;
+    final userId = widget.userId ?? currentUser?.uid;
 
-    if (user == null) {
+    if (userId == null) {
       return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(
@@ -34,17 +74,17 @@ class ProfilePage extends StatelessWidget {
 
       // ===================== APP BAR =====================
       appBar: AppBar(
-        title: const Text('Mi perfil ⚽'),
+        title: const Text('Perfil ⚽'),
         backgroundColor: Colors.black,
         elevation: 2,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.redAccent),
-            onPressed: () async {
-              await AuthService().signOut();
-              // El flujo de salida lo maneja AuthStateHandler automáticamente.
-            },
-          ),
+          if (widget.userId == null) // Solo en el propio perfil
+            IconButton(
+              icon: const Icon(Icons.logout, color: Colors.redAccent),
+              onPressed: () async {
+                await AuthService().signOut();
+              },
+            ),
         ],
       ),
 
@@ -52,7 +92,7 @@ class ProfilePage extends StatelessWidget {
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
             .collection('users')
-            .doc(user.uid)
+            .doc(userId)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -64,7 +104,7 @@ class ProfilePage extends StatelessWidget {
           if (!snapshot.hasData || !snapshot.data!.exists) {
             return const Center(
               child: Text(
-                'Aún no tienes un perfil configurado.\nCompleta tu información.',
+                'Este jugador aún no tiene perfil configurado.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white70),
               ),
@@ -78,20 +118,18 @@ class ProfilePage extends StatelessWidget {
           final nickname = data['nickname'] ?? '';
           final city = data['city'] ?? '-';
           final position = data['position'] ?? '-';
-          final sex = data['sex'] ?? '-'; // 🔹 Nuevo campo mostrado
+          final sex = data['sex'] ?? '-';
           final rank = data['rank'] ?? 'Bronce';
-          final xp = (data['xp'] is int)
-              ? data['xp'] as int
-              : (data['xp'] is double)
-                  ? (data['xp'] as double).toInt()
-                  : 0;
+          final xp = (data['xp'] ?? 0).toInt();
           final photoUrl = data['photoUrl'];
+          final followers = data['followersCount'] ?? 0;
+          final following = data['followingCount'] ?? 0;
+          final posts = data['postsCount'] ?? 0;
           final partidos = (data['matches'] ?? 0).toString();
           final victorias = (data['wins'] ?? 0).toString();
           final empates = (data['draws'] ?? 0).toString();
           final derrotas = (data['losses'] ?? 0).toString();
 
-          // ===================== RANGOS DISPONIBLES =====================
           final rangos = {
             'Bronce': 0,
             'Plata': 500,
@@ -108,7 +146,9 @@ class ProfilePage extends StatelessWidget {
           final progreso =
               (xp / siguienteNivel.value.toDouble()).clamp(0.0, 1.0);
 
-          // ===================== INTERFAZ PRINCIPAL =====================
+          final isMyProfile = currentUser?.uid == userId;
+
+          // ===================== INTERFAZ =====================
           return SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -126,7 +166,7 @@ class ProfilePage extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // 🏷️ INFORMACIÓN PRINCIPAL
+                // 🏷️ INFORMACIÓN
                 Text(
                   name,
                   style: const TextStyle(
@@ -136,12 +176,8 @@ class ProfilePage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
-
-                // 🔹 Mostramos sexo, posición y ciudad
-                Text(
-                  '@$nickname',
-                  style: const TextStyle(color: Colors.white54),
-                ),
+                Text('@$nickname',
+                    style: const TextStyle(color: Colors.white54)),
                 const SizedBox(height: 4),
                 Text(
                   'Sexo: $sex  ·  $position  ·  $city',
@@ -149,9 +185,23 @@ class ProfilePage extends StatelessWidget {
                   style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
 
+                const SizedBox(height: 16),
+
+                // 👥 CONTADORES SOCIALES
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _SocialCounter(label: 'Seguidores', value: followers),
+                    const SizedBox(width: 20),
+                    _SocialCounter(label: 'Seguidos', value: following),
+                    const SizedBox(width: 20),
+                    _SocialCounter(label: 'Posts', value: posts),
+                  ],
+                ),
+
                 const SizedBox(height: 20),
 
-                // 🧠 PROGRESO DE NIVEL
+                // 🧠 PROGRESO
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -162,10 +212,9 @@ class ProfilePage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Progreso de nivel',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
-                      ),
+                      const Text('Progreso de nivel',
+                          style:
+                              TextStyle(color: Colors.white70, fontSize: 14)),
                       const SizedBox(height: 8),
                       LinearProgressIndicator(
                         value: progreso,
@@ -175,17 +224,13 @@ class ProfilePage extends StatelessWidget {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       const SizedBox(height: 10),
+                      Text('Rango: $rank',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold)),
                       Text(
-                        'Rango: $rank',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        'XP: $xp / ${siguienteNivel.value} (${siguienteNivel.key})',
-                        style: const TextStyle(color: Colors.white54),
-                      ),
+                          'XP: $xp / ${siguienteNivel.value} (${siguienteNivel.key})',
+                          style: const TextStyle(color: Colors.white54)),
                     ],
                   ),
                 ),
@@ -210,29 +255,51 @@ class ProfilePage extends StatelessWidget {
 
                 const SizedBox(height: 30),
 
-                // ✏️ BOTÓN EDITAR PERFIL
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const EditProfilePage(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.edit),
-                  label: const Text('Editar perfil'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 14,
-                      horizontal: 40,
+                // 🧩 BOTONES (editar o seguir)
+                if (isMyProfile)
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const EditProfilePage()),
+                      );
+                    },
+                    icon: const Icon(Icons.edit),
+                    label: const Text('Editar perfil'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueAccent,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 14, horizontal: 40),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20)),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
+                  )
+                else
+                  ElevatedButton(
+                    onPressed: _isLoadingFollow ? null : _toggleFollow,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          _isFollowing ? Colors.grey[800] : Colors.blueAccent,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 14, horizontal: 60),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20)),
                     ),
+                    child: _isLoadingFollow
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text(
+                            _isFollowing ? 'Siguiendo' : 'Seguir',
+                            style: const TextStyle(color: Colors.white),
+                          ),
                   ),
-                ),
               ],
             ),
           );
@@ -279,6 +346,35 @@ class _StatCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// ===============================================================
+/// 👥 _SocialCounter — Contador pequeño (seguidores / seguidos / posts)
+/// ===============================================================
+class _SocialCounter extends StatelessWidget {
+  final String label;
+  final int value;
+
+  const _SocialCounter({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          '$value',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(label,
+            style: const TextStyle(color: Colors.white54, fontSize: 13)),
+      ],
     );
   }
 }
