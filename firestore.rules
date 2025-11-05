@@ -1,8 +1,8 @@
 // ===============================================================
-// 🔒 Firestore Security Rules — DraftClub v1.2 (Optimized)
+// 🔒 Firestore Security Rules — DraftClub v1.3 (Social System Ready)
 // ===============================================================
-// Protege perfiles, publicaciones, likes, comentarios y reportes.
-// Compatible con futuras funciones (feed_home, notifications, etc.)
+// Protege perfiles, publicaciones, likes, comentarios, reportes,
+// y el nuevo sistema de seguidores/seguidos (follows).
 // ===============================================================
 
 rules_version = '2';
@@ -21,41 +21,40 @@ service cloud.firestore {
     // 📰 POSTS — publicaciones sociales (feed)
     // ===========================================================
     match /posts/{postId} {
-      // 🔹 Lectura pública
       allow read: if true;
 
-      // 🔹 Crear solo si el usuario es el autor
+      // 🔹 Crear: solo si el usuario autenticado es el autor
       allow create: if request.auth != null
                     && request.auth.uid == request.resource.data.authorId
                     && (request.resource.data.createdAt is timestamp)
                     && (request.resource.data.type in ['photo', 'video'])
-                    && (request.resource.data.city is string)
                     && (request.resource.data.caption is string)
+                    && (request.resource.data.city is string)
                     && (request.resource.data.mediaUrls is list)
                     && request.resource.data.caption.size() < 2200
                     && request.resource.data.mediaUrls.size() <= 5;
 
-      // 🔹 Editar solo si es el autor del post existente
+      // 🔹 Editar: solo el autor del post
       allow update: if request.auth != null
                     && resource.data.authorId == request.auth.uid;
 
-      // 🔹 Eliminar solo si es el autor
+      // 🔹 Eliminar: solo el autor del post
       allow delete: if request.auth != null
                      && resource.data.authorId == request.auth.uid;
     }
 
     // ===========================================================
-    // ❤️ POST_LIKES — cada usuario solo puede dar/quitar like a posts
+    // ❤️ POST_LIKES — control de "me gusta"
     // ===========================================================
-    match /post_likes/{postId}/likes/{uid} {
+    match /posts/{postId}/likes/{uid} {
       allow read: if true;
       allow write: if request.auth != null && request.auth.uid == uid;
     }
 
     // ===========================================================
-    // 💬 POST_COMMENTS — comentarios públicos, pero seguros
+    // 💬 COMMENTS — comentarios (colección anidada en cada post)
     // ===========================================================
-    match /post_comments/{postId}/comments/{commentId} {
+    match /posts/{postId}/comments/{commentId} {
       allow read: if true;
       allow create: if request.auth != null
                     && request.resource.data.authorId == request.auth.uid
@@ -63,16 +62,44 @@ service cloud.firestore {
                     && (request.resource.data.text.size() > 0)
                     && (request.resource.data.text.size() <= 500)
                     && (request.resource.data.createdAt is timestamp);
+      allow update: if request.auth != null
+                    && resource.data.authorId == request.auth.uid;
       allow delete: if request.auth != null
-                     && resource.data.authorId == request.auth.uid;
+                    && resource.data.authorId == request.auth.uid;
     }
 
     // ===========================================================
-    // 🚩 REPORTS — reportes de contenido
+    // 🚩 REPORTS — reportes de publicaciones
     // ===========================================================
     match /reports/{reportId} {
       allow create: if request.auth != null;
       allow read, update, delete: if false; // solo admins
+    }
+
+    // ===========================================================
+    // 👥 FOLLOWS — relaciones seguidor/seguido (top-level)
+    // ===========================================================
+    // Cada documento tiene estructura:
+    // {
+    //   followerId: string,
+    //   targetId: string,
+    //   createdAt: timestamp
+    // }
+    match /follows/{followId} {
+      allow read: if true;
+
+      // ✅ Crear: solo si el seguidor es el usuario autenticado
+      allow create: if request.auth != null
+                    && request.resource.data.followerId == request.auth.uid
+                    && (request.resource.data.targetId is string)
+                    && (request.resource.data.createdAt is timestamp);
+
+      // ✅ Eliminar: solo si el seguidor del doc es el usuario autenticado
+      allow delete: if request.auth != null
+                    && resource.data.followerId == request.auth.uid;
+
+      // ❌ No se puede actualizar (no tiene sentido en este modelo)
+      allow update: if false;
     }
 
     // ===========================================================
@@ -84,7 +111,7 @@ service cloud.firestore {
     }
 
     // ===========================================================
-    // ⚙️ ROOMS / TOURNAMENTS (prototipo)
+    // ⚙️ ROOMS / TOURNAMENTS — prototipo
     // ===========================================================
     match /rooms/{roomId} {
       allow read: if true;
@@ -92,7 +119,7 @@ service cloud.firestore {
     }
 
     // ===========================================================
-    // 🧱 DEFAULT DENY — bloquea todo lo no definido arriba
+    // 🚫 DEFAULT DENY — bloquea cualquier otra colección
     // ===========================================================
     match /{document=**} {
       allow read, write: if false;

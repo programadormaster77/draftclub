@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:draftclub_mobile/features/social/data/social_likes_service.dart';
 import 'package:draftclub_mobile/features/social/data/social_reports_service.dart';
+import 'package:draftclub_mobile/features/social/data/social_follow_service.dart';
 import 'package:draftclub_mobile/features/social/domain/entities/post.dart';
 import 'package:draftclub_mobile/features/social/presentation/page/post_detail_page.dart';
+import 'package:draftclub_mobile/features/social/presentation/page/user_profile_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,9 +15,10 @@ import 'package:video_player/video_player.dart';
 /// 🖼️ PostCard — Tarjeta del feed social (versión PRO++)
 /// ============================================================================
 /// • Muestra nombre y avatar del autor (lee users/<authorId>)
-/// • Botón “Seguir” (stub listo para conectar al servicio de follow)
-/// • Imagen con aspecto 4:5 (estilo Instagram) y vídeo con reproductor simple
-/// • Likes atómicos (sin dobles toques fantasma) y contador en stream
+/// • Avatar/nombre abren UserProfilePage(userId: authorId)
+/// • Botón “Seguir” usando SocialFollowService (sincripta/atómico)
+/// • Imagen con aspecto 4:5 (Instagram-like) o video con player simple
+/// • Likes atómicos (sin dobles fantasmas) y contador en stream
 /// • Menú contextual: copiar enlace, reportar, eliminar (autor)
 /// ============================================================================
 
@@ -30,6 +33,7 @@ class PostCard extends StatefulWidget {
 class _PostCardState extends State<PostCard> {
   final _likesService = SocialLikesService();
   final _reportsService = SocialReportsService();
+  final _followService = SocialFollowService();
   final _auth = FirebaseAuth.instance;
 
   bool _isLiked = false;
@@ -290,6 +294,18 @@ class _PostCardState extends State<PostCard> {
     const textPrimary = Colors.white;
     const textSecondary = Colors.white70;
 
+    final displayName =
+        (_author?['name'] ?? _author?['nickname'] ?? 'Jugador').toString();
+
+    void _openAuthorProfile() {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => UserProfilePage(userId: widget.post.authorId),
+        ),
+      );
+    }
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -301,7 +317,7 @@ class _PostCardState extends State<PostCard> {
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         color: colorSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        elevation: 2,
+        elevation: 3,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -310,27 +326,33 @@ class _PostCardState extends State<PostCard> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
                 children: [
-                  _Avatar(photoUrl: _author?['photoUrl']),
+                  GestureDetector(
+                    onTap: _openAuthorProfile,
+                    child: _Avatar(photoUrl: _author?['photoUrl']),
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          (_author?['name'] ??
-                              _author?['nickname'] ??
-                              'Jugador') as String,
-                          style: const TextStyle(
-                            color: textPrimary,
-                            fontWeight: FontWeight.bold,
+                    child: GestureDetector(
+                      onTap: _openAuthorProfile,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayName,
+                            style: const TextStyle(
+                              color: textPrimary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
                           ),
-                        ),
-                        Text(
-                          '${widget.post.city} • ${_formatDate(widget.post.createdAt.toDate())}',
-                          style: const TextStyle(
-                              color: textSecondary, fontSize: 12),
-                        ),
-                      ],
+                          const SizedBox(height: 2),
+                          Text(
+                            '${widget.post.city} • ${_formatDate(widget.post.createdAt.toDate())}',
+                            style: const TextStyle(
+                                color: textSecondary, fontSize: 12),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   if ((_currentUserId != null) &&
@@ -388,15 +410,12 @@ class _PostCardState extends State<PostCard> {
                     children: [
                       GestureDetector(
                         onTap: _toggleLike,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          child: Icon(
-                            _isLiked
-                                ? Icons.favorite
-                                : Icons.favorite_border_outlined,
-                            color: _isLiked ? Colors.redAccent : Colors.white70,
-                            size: 22,
-                          ),
+                        child: Icon(
+                          _isLiked
+                              ? Icons.favorite
+                              : Icons.favorite_border_outlined,
+                        color: _isLiked ? Colors.redAccent : Colors.white70,
+                          size: 22,
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -447,7 +466,7 @@ class _PostCardState extends State<PostCard> {
 
   static String _formatDate(DateTime date) {
     String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(date.day)}/${two(date.month)}/${date.year} ${two(date.hour)}:${two(date.minute)}';
+    return '${two(date.day)}/${two(date.month)}/${date.year} ${two(date.hour)}:${two(date.minute).padLeft(2, '0')}';
   }
 }
 
@@ -463,9 +482,9 @@ class _Avatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasPhoto = photoUrl != null && photoUrl!.isNotEmpty;
     return CircleAvatar(
-      radius: 18,
+      radius: 20,
       backgroundImage: hasPhoto ? NetworkImage(photoUrl!) : null,
-      backgroundColor: Colors.white12,
+      backgroundColor: Colors.white10,
       child: hasPhoto
           ? null
           : const Icon(Icons.person, color: Colors.white70, size: 18),
@@ -473,7 +492,7 @@ class _Avatar extends StatelessWidget {
   }
 }
 
-/// Botón “Seguir” (stub listo para conectar a tu servicio de follows).
+/// Botón “Seguir” usando SocialFollowService (sin listeners manuales).
 class _FollowButton extends StatefulWidget {
   final String authorId;
   final String currentUserId;
@@ -487,63 +506,28 @@ class _FollowButton extends StatefulWidget {
 }
 
 class _FollowButtonState extends State<_FollowButton> {
+  final _service = SocialFollowService();
   bool _loading = false;
   bool _isFollowing = false;
-  StreamSubscription<DocumentSnapshot>? _sub;
 
   @override
   void initState() {
     super.initState();
-    // escucha rápida para reflejar estado
-    final ref = FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.currentUserId)
-        .collection('following')
-        .doc(widget.authorId);
-
-    _sub = ref.snapshots().listen((snap) {
-      if (!mounted) return;
-      setState(() => _isFollowing = snap.exists);
-    });
+    _initFollowState();
   }
 
-  @override
-  void dispose() {
-    _sub?.cancel();
-    super.dispose();
+  Future<void> _initFollowState() async {
+    final status = await _service.isFollowing(widget.authorId);
+    if (mounted) setState(() => _isFollowing = status);
   }
 
   Future<void> _toggleFollow() async {
     if (_loading) return;
     setState(() => _loading = true);
 
-    final myFollowingRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.currentUserId)
-        .collection('following')
-        .doc(widget.authorId);
-
-    final hisFollowersRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.authorId)
-        .collection('followers')
-        .doc(widget.currentUserId);
-
     try {
-      await FirebaseFirestore.instance.runTransaction((tx) async {
-        final fSnap = await tx.get(myFollowingRef);
-        if (fSnap.exists) {
-          tx.delete(myFollowingRef);
-          tx.delete(hisFollowersRef);
-        } else {
-          tx.set(myFollowingRef, {
-            'since': FieldValue.serverTimestamp(),
-          });
-          tx.set(hisFollowersRef, {
-            'since': FieldValue.serverTimestamp(),
-          });
-        }
-      });
+      await _service.toggleFollow(widget.authorId);
+      await _initFollowState();
     } catch (e) {
       debugPrint('⚠️ Error toggle follow: $e');
       if (mounted) {
@@ -564,9 +548,8 @@ class _FollowButtonState extends State<_FollowButton> {
     return TextButton(
       onPressed: _toggleFollow,
       style: TextButton.styleFrom(
-        backgroundColor:
-            _isFollowing ? Colors.white10 : Colors.blueAccent, // contraste
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        backgroundColor: _isFollowing ? Colors.white10 : Colors.blueAccent,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       child: _loading
@@ -574,7 +557,10 @@ class _FollowButtonState extends State<_FollowButton> {
               width: 14,
               height: 14,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: Colors.white))
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
           : Text(
               _isFollowing ? 'Siguiendo' : 'Seguir',
               style: const TextStyle(color: Colors.white, fontSize: 12),
@@ -592,7 +578,7 @@ class _PostMedia extends StatelessWidget {
     final u = url.toLowerCase();
     return u.endsWith('.mp4') ||
         u.endsWith('.mov') ||
-        u.contains('video'); // por si el storage taggea
+        u.contains('video');
   }
 
   @override

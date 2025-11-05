@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:draftclub_mobile/features/social/data/social_comments_service.dart';
+import 'package:draftclub_mobile/features/social/data/social_follow_service.dart';
 import 'package:draftclub_mobile/features/social/domain/entities/post.dart';
+import 'package:draftclub_mobile/features/social/presentation/page/user_profile_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -8,9 +10,9 @@ import 'package:flutter/material.dart';
 /// 💬 PostDetailPage — Detalle del post con comentarios (Versión PRO++)
 /// ============================================================================
 /// - Muestra la publicación y sus comentarios en tiempo real.
-/// - Muestra nombre, foto y botón de "Seguir" del autor.
-/// - Estilo visual tipo Instagram.
-/// - Permite al autor editar o eliminar sus propios comentarios.
+/// - Avatar/nombre del autor o comentarista abre su perfil.
+/// - Botón “Seguir” conectado al servicio oficial.
+/// - Permite editar o eliminar tus comentarios.
 /// ============================================================================
 
 class PostDetailPage extends StatefulWidget {
@@ -41,9 +43,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
           .collection('users')
           .doc(widget.post.authorId)
           .get();
-      if (doc.exists) {
-        setState(() => _authorData = doc.data());
-      }
+      if (doc.exists) setState(() => _authorData = doc.data());
     } catch (e) {
       debugPrint('⚠️ Error cargando autor: $e');
     }
@@ -73,8 +73,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final currentUser = _auth.currentUser;
-    final textPrimary = Colors.white;
-    final textSecondary = Colors.white70;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -85,46 +83,68 @@ class _PostDetailPageState extends State<PostDetailPage> {
       ),
       body: Column(
         children: [
-          // ===================== CABECERA DEL POST =====================
+          // ================= CABECERA DEL POST =================
           Container(
             padding: const EdgeInsets.all(14),
             color: const Color(0xFF1A1A1A),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundImage: (_authorData?['photoUrl'] != null &&
-                          (_authorData?['photoUrl'] as String).isNotEmpty)
-                      ? NetworkImage(_authorData!['photoUrl'])
-                      : null,
-                  backgroundColor: Colors.white12,
-                  child: (_authorData?['photoUrl'] == null ||
-                          (_authorData?['photoUrl'] as String).isEmpty)
-                      ? const Icon(Icons.person,
-                          color: Colors.white70, size: 26)
-                      : null,
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            UserProfilePage(userId: widget.post.authorId),
+                      ),
+                    );
+                  },
+                  child: CircleAvatar(
+                    radius: 24,
+                    backgroundImage: (_authorData?['photoUrl'] != null &&
+                            (_authorData?['photoUrl'] as String).isNotEmpty)
+                        ? NetworkImage(_authorData!['photoUrl'])
+                        : null,
+                    backgroundColor: Colors.white12,
+                    child: (_authorData?['photoUrl'] == null ||
+                            (_authorData?['photoUrl'] as String).isEmpty)
+                        ? const Icon(Icons.person,
+                            color: Colors.white70, size: 26)
+                        : null,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _authorData?['name'] ??
-                            _authorData?['nickname'] ??
-                            'Jugador',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              UserProfilePage(userId: widget.post.authorId),
                         ),
-                      ),
-                      Text(
-                        widget.post.caption,
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 14),
-                      ),
-                    ],
+                      );
+                    },
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _authorData?['name'] ??
+                              _authorData?['nickname'] ??
+                              'Jugador',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          widget.post.caption,
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 14),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 if (currentUser != null &&
@@ -137,7 +157,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
             ),
           ),
 
-          // ===================== STREAM DE COMENTARIOS =====================
+          // ================= STREAM DE COMENTARIOS =================
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: _commentsService.getCommentsStream(widget.post.id),
@@ -189,64 +209,87 @@ class _PostDetailPageState extends State<PostDetailPage> {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              CircleAvatar(
-                                radius: 18,
-                                backgroundImage: (photo != null &&
-                                        (photo as String).isNotEmpty)
-                                    ? NetworkImage(photo)
-                                    : null,
-                                backgroundColor: Colors.white12,
-                                child: (photo == null || (photo).isEmpty)
-                                    ? const Icon(Icons.person,
-                                        color: Colors.white70, size: 18)
-                                    : null,
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => UserProfilePage(
+                                          userId: c['authorId']),
+                                    ),
+                                  );
+                                },
+                                child: CircleAvatar(
+                                  radius: 18,
+                                  backgroundImage: (photo != null &&
+                                          (photo as String).isNotEmpty)
+                                      ? NetworkImage(photo)
+                                      : null,
+                                  backgroundColor: Colors.white12,
+                                  child: (photo == null || photo.isEmpty)
+                                      ? const Icon(Icons.person,
+                                          color: Colors.white70, size: 18)
+                                      : null,
+                                ),
                               ),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            name,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
+                                    GestureDetector(
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => UserProfilePage(
+                                                userId: c['authorId']),
+                                          ),
+                                        );
+                                      },
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              name,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                        if (isMine)
-                                          PopupMenuButton<String>(
-                                            icon: const Icon(Icons.more_vert,
-                                                color: Colors.white54,
-                                                size: 18),
-                                            color: const Color(0xFF1A1A1A),
-                                            onSelected: (value) {
-                                              if (value == 'edit') {
-                                                _editComment(c);
-                                              } else if (value == 'delete') {
-                                                _deleteComment(c);
-                                              }
-                                            },
-                                            itemBuilder: (context) => [
-                                              const PopupMenuItem(
-                                                value: 'edit',
-                                                child: Text('Editar',
-                                                    style: TextStyle(
-                                                        color: Colors.white)),
-                                              ),
-                                              const PopupMenuItem(
-                                                value: 'delete',
-                                                child: Text('Eliminar',
-                                                    style: TextStyle(
-                                                        color:
-                                                            Colors.redAccent)),
-                                              ),
-                                            ],
-                                          ),
-                                      ],
+                                          if (isMine)
+                                            PopupMenuButton<String>(
+                                              icon: const Icon(Icons.more_vert,
+                                                  color: Colors.white54,
+                                                  size: 18),
+                                              color: const Color(0xFF1A1A1A),
+                                              onSelected: (value) {
+                                                if (value == 'edit') {
+                                                  _editComment(c);
+                                                } else if (value == 'delete') {
+                                                  _deleteComment(c);
+                                                }
+                                              },
+                                              itemBuilder: (context) => [
+                                                const PopupMenuItem(
+                                                  value: 'edit',
+                                                  child: Text('Editar',
+                                                      style: TextStyle(
+                                                          color:
+                                                              Colors.white)),
+                                                ),
+                                                const PopupMenuItem(
+                                                  value: 'delete',
+                                                  child: Text('Eliminar',
+                                                      style: TextStyle(
+                                                          color: Colors
+                                                              .redAccent)),
+                                                ),
+                                              ],
+                                            ),
+                                        ],
+                                      ),
                                     ),
                                     const SizedBox(height: 3),
                                     Text(
@@ -279,7 +322,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
             ),
           ),
 
-          // ===================== CAMPO DE ESCRITURA =====================
+          // ================= CAMPO DE ESCRITURA =================
           SafeArea(
             child: Container(
               color: const Color(0xFF1A1A1A),
@@ -409,7 +452,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
 }
 
 /// ============================================================================
-/// 🔹 Botón “Seguir” (igual al del feed principal)
+/// 🔹 Botón “Seguir” (con SocialFollowService)
 /// ============================================================================
 class _FollowButton extends StatefulWidget {
   final String authorId;
@@ -424,6 +467,7 @@ class _FollowButton extends StatefulWidget {
 }
 
 class _FollowButtonState extends State<_FollowButton> {
+  final _service = SocialFollowService();
   bool _loading = false;
   bool _isFollowing = false;
 
@@ -434,47 +478,16 @@ class _FollowButtonState extends State<_FollowButton> {
   }
 
   Future<void> _checkFollow() async {
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.currentUserId)
-        .collection('following')
-        .doc(widget.authorId)
-        .get();
-    if (mounted) setState(() => _isFollowing = doc.exists);
+    final status = await _service.isFollowing(widget.authorId);
+    if (mounted) setState(() => _isFollowing = status);
   }
 
   Future<void> _toggleFollow() async {
     if (_loading) return;
     setState(() => _loading = true);
-
-    final myRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.currentUserId)
-        .collection('following')
-        .doc(widget.authorId);
-    final hisRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.authorId)
-        .collection('followers')
-        .doc(widget.currentUserId);
-
-    try {
-      await FirebaseFirestore.instance.runTransaction((tx) async {
-        final snap = await tx.get(myRef);
-        if (snap.exists) {
-          tx.delete(myRef);
-          tx.delete(hisRef);
-        } else {
-          tx.set(myRef, {'since': FieldValue.serverTimestamp()});
-          tx.set(hisRef, {'since': FieldValue.serverTimestamp()});
-        }
-      });
-      if (mounted) setState(() => _isFollowing = !_isFollowing);
-    } catch (e) {
-      debugPrint('⚠️ Error follow: $e');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    await _service.toggleFollow(widget.authorId);
+    await _checkFollow();
+    if (mounted) setState(() => _loading = false);
   }
 
   @override
@@ -490,8 +503,8 @@ class _FollowButtonState extends State<_FollowButton> {
           ? const SizedBox(
               width: 14,
               height: 14,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: Colors.white))
+              child:
+                  CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
           : Text(
               _isFollowing ? 'Siguiendo' : 'Seguir',
               style: const TextStyle(color: Colors.white, fontSize: 12),
