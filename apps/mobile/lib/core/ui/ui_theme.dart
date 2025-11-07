@@ -47,6 +47,8 @@ class AppTextStyles {
     fontSize: 13,
     color: AppColors.textMuted,
   );
+
+  static TextStyle? get sectionTitle => null;
 }
 
 class AppDecorations {

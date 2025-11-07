@@ -1,24 +1,31 @@
 import 'dart:math' as math;
+import 'dart:async'; // 👈 AGREGA ESTA LÍNEA
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// ====================================================================
-/// ⚽ FieldPitchWidget — Persistencia 100% en Firestore (Versión Final)
+/// ⚽ FieldPitchWidget — Persistencia 100% en Firestore (con filtro por equipo)
 /// ====================================================================
-/// ✅ Sin dependencias de datos iniciales en memoria.
-/// ✅ Lee y actualiza directamente desde Firestore.
-/// ✅ Mantiene posiciones entre sesiones y recargas.
-/// ✅ Compatible con drag, reset, y animaciones.
+/// ✅ Sin dependencias en memoria.
+/// ✅ Mantiene posiciones (drag + persistencia) en rooms/{roomId}/players/{uid}.
+/// ✅ Si se pasa `teamId`, filtra por los IDs listados en teams/{teamId}.players.
+/// ✅ Si `teamId` es null, muestra TODOS los players de la sala (modo compat).
+/// ✅ Iluminación y animaciones.
 /// ====================================================================
 class FieldPitchWidget extends StatefulWidget {
   final Color teamColor;
   final String roomId;
+
+  /// Si se pasa, solo renderiza jugadores cuyo ID esté en teams/{teamId}.players.
+  final String? teamId;
+
   final bool enableLighting;
 
   const FieldPitchWidget({
     super.key,
     required this.teamColor,
     required this.roomId,
+    this.teamId,
     this.enableLighting = true,
   });
 
@@ -65,33 +72,95 @@ class _FieldPitchWidgetState extends State<FieldPitchWidget> {
 
   double _lerp(double a, double b, double t) => a + (b - a) * t;
 
-  @override
-  Widget build(BuildContext context) {
-    final stream = FirebaseFirestore.instance
+  // ----------------------------------------------------------------
+  // 🧠 Stream de jugadores:
+  // - Sin teamId: rooms/{roomId}/players (todos)
+  // - Con teamId: lee teams/{teamId}.players y hace whereIn por documentId
+  //   (Firestore permite máx. 10 IDs por whereIn; tus equipos son <=5)
+  // ----------------------------------------------------------------
+  Stream<QuerySnapshot<Map<String, dynamic>>> _playersStream() {
+    final basePlayersCol = FirebaseFirestore.instance
         .collection('rooms')
         .doc(widget.roomId)
         .collection('players')
-        .snapshots();
+        .withConverter<Map<String, dynamic>>(
+          fromFirestore: (snap, _) => snap.data() ?? {},
+          toFirestore: (data, _) => data,
+        );
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: stream,
+    // Modo compat: sin filtro por equipo
+    if (widget.teamId == null || widget.teamId!.isEmpty) {
+      return basePlayersCol.snapshots();
+    }
+
+    // Con filtro por equipo (escucha cambios del equipo y cambia el query)
+    final teamDoc = FirebaseFirestore.instance
+        .collection('rooms')
+        .doc(widget.roomId)
+        .collection('teams')
+        .doc(widget.teamId);
+
+    // Usamos un StreamController para "cambiar" el stream de players al vuelo.
+    final controller =
+        StreamController<QuerySnapshot<Map<String, dynamic>>>.broadcast();
+
+    StreamSubscription? teamSub;
+    StreamSubscription? playersSub;
+
+    teamSub = teamDoc.snapshots().listen((teamSnap) {
+      final teamData = (teamSnap.data() ?? {}) as Map<String, dynamic>;
+      final List<dynamic> idsDyn = teamData['players'] ?? [];
+      final List<String> playerIds =
+          idsDyn.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+
+      // cancelamos el stream anterior de players si existía
+      playersSub?.cancel();
+      if (playerIds.isEmpty) {
+        // Emitimos un QuerySnapshot vacío artificial cuando no hay IDs
+        final emptyQuery =
+            basePlayersCol.where(FieldPath.documentId, whereIn: ['__none__']);
+        playersSub = emptyQuery.snapshots().listen(controller.add);
+      } else {
+        // whereIn por documentId (máx. 10; suficiente para tus equipos <=5)
+        final q = basePlayersCol.where(
+          FieldPath.documentId,
+          whereIn: playerIds.length > 10 ? playerIds.sublist(0, 10) : playerIds,
+        );
+        playersSub = q.snapshots().listen(controller.add);
+      }
+    });
+
+    controller.onCancel = () async {
+      await playersSub?.cancel();
+      await teamSub?.cancel();
+    };
+
+    return controller.stream;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _playersStream(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
 
         // 🔹 Si no hay jugadores aún, muestra la cancha vacía
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        final docs = snapshot.data?.docs ?? const [];
+        if (docs.isEmpty) {
           return _buildEmptyPitch(context);
         }
 
-        final playerData = snapshot.data!.docs.map((doc) {
-          final data = doc.data() as Map<String, dynamic>;
+        final playerData = docs.map((doc) {
+          final data = doc.data();
           return {
             'uid': doc.id,
-            'name': data['name'] ?? '',
-            'rank': data['rank'] ?? '',
-            'avatar': data['avatar'] ?? '',
+            'name': (data['name'] ?? '').toString(),
+            'rank': (data['rank'] ?? '').toString(),
+            // Acepta 'avatar' o 'photoUrl' si alguno viniera
+            'avatar': (data['avatar'] ?? data['photoUrl'] ?? '').toString(),
             'x': (data['x'] ?? 0.5).toDouble(),
             'y': (data['y'] ?? 0.5).toDouble(),
           };
@@ -125,7 +194,9 @@ class _FieldPitchWidgetState extends State<FieldPitchWidget> {
               child: Stack(
                 children: [
                   CustomPaint(
-                      size: Size(fieldW, fieldH), painter: _PitchPainter()),
+                    size: Size(fieldW, fieldH),
+                    painter: _PitchPainter(),
+                  ),
                   if (widget.enableLighting)
                     Positioned.fill(
                       child:
@@ -166,8 +237,11 @@ class _FieldPitchWidgetState extends State<FieldPitchWidget> {
     );
   }
 
-  /// Muestra la cancha vacía si aún no hay jugadores creados.
+  /// Muestra la cancha vacía si aún no hay jugadores creados (o en ese equipo).
   Widget _buildEmptyPitch(BuildContext context) {
+    final msg = (widget.teamId != null && widget.teamId!.isNotEmpty)
+        ? "Aún no hay jugadores en este equipo"
+        : "Aún no hay jugadores en esta sala";
     return Container(
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -175,10 +249,10 @@ class _FieldPitchWidgetState extends State<FieldPitchWidget> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white12, width: 2),
       ),
-      child: const Center(
+      child: Center(
         child: Text(
-          "Aún no hay jugadores en esta sala",
-          style: TextStyle(color: Colors.white54),
+          msg,
+          style: const TextStyle(color: Colors.white54),
         ),
       ),
     );
@@ -331,10 +405,13 @@ class _AnimatedPlayerEditableState extends State<_AnimatedPlayerEditable>
                   ),
                 ),
                 if (rank.isNotEmpty)
-                  Text(rank,
-                      style: TextStyle(
-                          color: widget.teamColor.withOpacity(0.9),
-                          fontSize: 10)),
+                  Text(
+                    rank,
+                    style: TextStyle(
+                      color: widget.teamColor.withOpacity(0.9),
+                      fontSize: 10,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -390,7 +467,10 @@ class _AvatarBubble extends StatelessWidget {
       child: Text(
         letter,
         style: const TextStyle(
-            color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+          color: Colors.white,
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }

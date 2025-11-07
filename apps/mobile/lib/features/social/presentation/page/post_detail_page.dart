@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:draftclub_mobile/features/social/data/social_comments_service.dart';
 import 'package:draftclub_mobile/features/social/data/social_follow_service.dart';
 import 'package:draftclub_mobile/features/social/domain/entities/post.dart';
-import 'package:draftclub_mobile/features/social/presentation/page/user_profile_page.dart';
+import 'package:draftclub_mobile/features/profile/presentation/profile_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -96,7 +96,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                       context,
                       MaterialPageRoute(
                         builder: (_) =>
-                            UserProfilePage(userId: widget.post.authorId),
+                            ProfilePage(userId: widget.post.authorId),
                       ),
                     );
                   },
@@ -122,7 +122,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                         context,
                         MaterialPageRoute(
                           builder: (_) =>
-                              UserProfilePage(userId: widget.post.authorId),
+                              ProfilePage(userId: widget.post.authorId),
                         ),
                       );
                     },
@@ -214,8 +214,8 @@ class _PostDetailPageState extends State<PostDetailPage> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) => UserProfilePage(
-                                          userId: c['authorId']),
+                                      builder: (_) =>
+                                          ProfilePage(userId: c['authorId']),
                                     ),
                                   );
                                 },
@@ -242,7 +242,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (_) => UserProfilePage(
+                                            builder: (_) => ProfilePage(
                                                 userId: c['authorId']),
                                           ),
                                         );
@@ -276,8 +276,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                                                   value: 'edit',
                                                   child: Text('Editar',
                                                       style: TextStyle(
-                                                          color:
-                                                              Colors.white)),
+                                                          color: Colors.white)),
                                                 ),
                                                 const PopupMenuItem(
                                                   value: 'delete',
@@ -503,8 +502,8 @@ class _FollowButtonState extends State<_FollowButton> {
           ? const SizedBox(
               width: 14,
               height: 14,
-              child:
-                  CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: Colors.white))
           : Text(
               _isFollowing ? 'Siguiendo' : 'Seguir',
               style: const TextStyle(color: Colors.white, fontSize: 12),

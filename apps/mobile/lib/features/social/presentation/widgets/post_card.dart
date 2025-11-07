@@ -5,7 +5,7 @@ import 'package:draftclub_mobile/features/social/data/social_reports_service.dar
 import 'package:draftclub_mobile/features/social/data/social_follow_service.dart';
 import 'package:draftclub_mobile/features/social/domain/entities/post.dart';
 import 'package:draftclub_mobile/features/social/presentation/page/post_detail_page.dart';
-import 'package:draftclub_mobile/features/social/presentation/page/user_profile_page.dart';
+import 'package:draftclub_mobile/features/profile/presentation/profile_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -353,7 +353,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => UserProfilePage(userId: widget.post.authorId),
+          builder: (_) => ProfilePage(userId: widget.post.authorId),
         ),
       );
     }
@@ -440,7 +440,8 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 heartScale: _heartScale,
               )
             else
-              _EmptyMediaPlaceholder(onDoubleTap: _likeWithHeart, heartScale: _heartScale),
+              _EmptyMediaPlaceholder(
+                  onDoubleTap: _likeWithHeart, heartScale: _heartScale),
 
             // --------------------- DESCRIPCIÓN ---------------------
             if (widget.post.caption.isNotEmpty)
@@ -460,10 +461,8 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                   spacing: 8,
                   runSpacing: 6,
                   children: [
-                    for (final t in widget.post.tags)
-                      _ChipTag(text: '#$t'),
-                    for (final m in widget.post.mentions)
-                      _ChipTag(text: '@$m'),
+                    for (final t in widget.post.tags) _ChipTag(text: '#$t'),
+                    for (final m in widget.post.mentions) _ChipTag(text: '@$m'),
                   ],
                 ),
               ),
@@ -483,8 +482,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                           _isLiked
                               ? Icons.favorite
                               : Icons.favorite_border_outlined,
-                          color:
-                              _isLiked ? Colors.redAccent : Colors.white70,
+                          color: _isLiked ? Colors.redAccent : Colors.white70,
                           size: 22,
                         ),
                       ),
@@ -504,8 +502,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) =>
-                                  PostDetailPage(post: widget.post),
+                              builder: (_) => PostDetailPage(post: widget.post),
                             ),
                           );
                         },
@@ -570,9 +567,11 @@ class _AvatarSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 40, height: 40,
+      width: 40,
+      height: 40,
       decoration: BoxDecoration(
-        color: Colors.white10, borderRadius: BorderRadius.circular(20),
+        color: Colors.white10,
+        borderRadius: BorderRadius.circular(20),
       ),
     );
   }
@@ -602,9 +601,11 @@ class _ChipTag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white12, borderRadius: BorderRadius.circular(18),
+        color: Colors.white12,
+        borderRadius: BorderRadius.circular(18),
       ),
-      child: Text(text, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+      child: Text(text,
+          style: const TextStyle(color: Colors.white70, fontSize: 12)),
     );
   }
 }
@@ -695,7 +696,8 @@ class _MediaCarouselState extends State<_MediaCarousel> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.black45, borderRadius: BorderRadius.circular(16),
+                color: Colors.black45,
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -730,7 +732,7 @@ class _MediaSkeleton extends StatelessWidget {
         child: CircularProgressIndicator(color: Colors.white54),
       ),
     );
-    }
+  }
 }
 
 /// Placeholder cuando no hay medias: muestra ícono + anima heart en double-tap.
@@ -758,8 +760,8 @@ class _EmptyMediaPlaceholder extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Center(
-                child: Icon(Icons.sports_soccer,
-                    color: Colors.white30, size: 50),
+                child:
+                    Icon(Icons.sports_soccer, color: Colors.white30, size: 50),
               ),
             ),
             ScaleTransition(

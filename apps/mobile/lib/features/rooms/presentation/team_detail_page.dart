@@ -16,6 +16,7 @@ import 'widgets/roster_side_panel.dart';
 /// 🔹 Integra fotos, nombres y rangos reales en el campo.
 /// 🔹 Añade barra lateral de plantilla (RosterSidePanel).
 /// 🔹 Diseño moderno, adaptable y profesional.
+/// 🔹 Incluye compatibilidad con salas nuevas y fallback dinámico.
 /// ====================================================================
 class TeamDetailPage extends StatefulWidget {
   final Room room;
@@ -223,117 +224,148 @@ class _TeamDetailPageState extends State<TeamDetailPage> {
           final players = List<String>.from(teamData['players'] ?? []);
           final isWide = MediaQuery.of(context).size.width >= 720;
 
+          // ================================================================
+          // 🔁 Fallback dinámico: si players está vacío, busca por teamId
+          // ================================================================
           if (players.isEmpty) {
-            return _emptyTeamLayout(teamColor);
+            return StreamBuilder<QuerySnapshot>(
+              stream: _firestore
+                  .collection('rooms')
+                  .doc(widget.room.id)
+                  .collection('players')
+                  .where('teamId', isEqualTo: widget.team.id)
+                  .snapshots(),
+              builder: (context, snap) {
+                if (!snap.hasData) {
+                  return const Center(
+                      child:
+                          CircularProgressIndicator(color: Colors.blueAccent));
+                }
+                if (snap.data!.docs.isEmpty) {
+                  return _emptyTeamLayout(teamColor);
+                }
+
+                final fallbackPlayers =
+                    snap.data!.docs.map((d) => d.id.toString()).toList();
+
+                return _buildMainLayout(
+                    context, teamColor, isWide, fallbackPlayers);
+              },
+            );
           }
 
-          // ================== CABECERA ==================
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A1A),
-                  borderRadius: BorderRadius.circular(16),
-                  border:
-                      Border.all(color: teamColor.withOpacity(0.3), width: 1),
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: teamColor.withOpacity(0.3),
-                      child: const Icon(Icons.groups, color: Colors.white70),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Text(
-                        _nameCtrl.text,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: teamColor,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.exit_to_app,
-                          color: Colors.redAccent),
-                      tooltip: 'Salir del equipo',
-                      onPressed: _leaveTeam,
-                    ),
-                  ],
-                ),
-              ),
-
-              // ================== CANCHA + PANEL ==================
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: isWide
-                      ? Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // ⚽ Campo sincronizado en tiempo real con Firestore
-                            Expanded(
-                              flex: 3,
-                              child: FieldPitchWidget(
-                                teamColor: teamColor,
-                                roomId: widget.room.id,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            // 📋 Panel lateral (titulares/suplentes)
-                            Expanded(
-                              flex: 2,
-                              child: RosterSidePanel(
-                                titulares: players,
-                                suplentes: const [],
-                                accent: teamColor,
-                                roomId: widget.room.id,
-                                teamId: widget.team.id,
-                                isWide: isWide,
-                              ),
-                            ),
-                          ],
-                        )
-                      : SingleChildScrollView(
-                          child: Column(
-                            children: [
-                              // ⚽ Campo (vista móvil)
-                              FieldPitchWidget(
-                                teamColor: teamColor,
-                                roomId: widget.room.id,
-                              ),
-                              const SizedBox(height: 20),
-                              // 📋 Panel lateral compacto con scroll
-                              SizedBox(
-                                height:
-                                    MediaQuery.of(context).size.height * 0.4,
-                                child: SingleChildScrollView(
-                                  child: RosterSidePanel(
-                                    titulares: players,
-                                    suplentes: const [],
-                                    accent: teamColor,
-                                    roomId: widget.room.id,
-                                    teamId: widget.team.id,
-                                    isWide: isWide,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                ),
-              ),
-            ],
-          );
+          // ================================================================
+          // 🧩 Layout principal cuando players[] ya existe
+          // ================================================================
+          return _buildMainLayout(context, teamColor, isWide, players);
         },
       ),
+    );
+  }
+
+  // ================================================================
+  // 🧩 Layout principal (cancha + panel)
+  // ================================================================
+  Widget _buildMainLayout(BuildContext context, Color teamColor, bool isWide,
+      List<String> players) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: teamColor.withOpacity(0.3), width: 1),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: teamColor.withOpacity(0.3),
+                child: const Icon(Icons.groups, color: Colors.white70),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  _nameCtrl.text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: teamColor,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.exit_to_app, color: Colors.redAccent),
+                tooltip: 'Salir del equipo',
+                onPressed: _leaveTeam,
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: isWide
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ⚽ Campo sincronizado en tiempo real con Firestore
+                      Expanded(
+                        flex: 3,
+                        child: FieldPitchWidget(
+                          teamColor: teamColor,
+                          roomId: widget.room.id,
+                          teamId: widget.team.id,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      // 📋 Panel lateral (titulares/suplentes)
+                      Expanded(
+                        flex: 2,
+                        child: RosterSidePanel(
+                          titulares: players,
+                          suplentes: const [],
+                          accent: teamColor,
+                          roomId: widget.room.id,
+                          teamId: widget.team.id,
+                          isWide: isWide,
+                        ),
+                      ),
+                    ],
+                  )
+                : SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        FieldPitchWidget(
+                          teamColor: teamColor,
+                          roomId: widget.room.id,
+                          teamId: widget.team.id,
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.4,
+                          child: SingleChildScrollView(
+                            child: RosterSidePanel(
+                              titulares: players,
+                              suplentes: const [],
+                              accent: teamColor,
+                              roomId: widget.room.id,
+                              teamId: widget.team.id,
+                              isWide: isWide,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+        ),
+      ],
     );
   }
 

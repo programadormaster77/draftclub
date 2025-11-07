@@ -3,9 +3,19 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+
   "functions": {
-    "source": "functions"
+    "source": "firebase/functions",
+    "runtime": "nodejs18",
+    "ignore": [
+      "node_modules",
+      ".git",
+      "firebase-debug.log",
+      "tsconfig.json",
+      "README.md"
+    ]
   },
+
   "hosting": {
     "public": "build/web",
     "ignore": [
@@ -20,12 +30,17 @@
       }
     ]
   },
+
   "storage": {
     "rules": "storage.rules"
   },
+
   "emulators": {
     "firestore": {
       "port": 8080
+    },
+    "functions": {
+      "port": 5001
     },
     "hosting": {
       "port": 5000

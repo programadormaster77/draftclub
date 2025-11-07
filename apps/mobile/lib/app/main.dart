@@ -1,4 +1,5 @@
 // 📦 Dependencias principales
+import 'package:draftclub_mobile/features/notifications/services/topic_manage.dart';
 import 'package:draftclub_mobile/firebase_options.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart'; // ✅ Riverpod base
@@ -22,7 +23,12 @@ import 'package:draftclub_mobile/features/feed/presentation/dashboard_page.dart'
 import 'package:draftclub_mobile/features/rooms/presentation/room_detail_page.dart';
 import 'package:draftclub_mobile/features/rooms/models/room_model.dart';
 
+// 🔔 Servicios de notificaciones (nuevo módulo)
+import 'package:draftclub_mobile/features/notifications/services/fcm_service.dart';
+import 'package:draftclub_mobile/features/notifications/services/local_notification_service.dart';
+
 /// ============================================================================
+
 /// 🚀 PUNTO DE ENTRADA PRINCIPAL DE LA APLICACIÓN
 /// ============================================================================
 Future<void> main() async {
@@ -30,6 +36,12 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // 🧩 Inicializa servicios globales de notificaciones
+  await LocalNotificationService
+      .initialize(); // notificaciones locales + pitido árbitro
+  await FcmService
+      .initialize(); // registro FCM + handlers foreground/background
 
   // ✅ ProviderScope: habilita Riverpod en toda la app
   runApp(
@@ -40,7 +52,7 @@ Future<void> main() async {
 }
 
 /// ============================================================================
-/// 🎯 DraftClubApp — Configuración global + manejo de deep links
+/// 🎯 DraftClubApp — Configuración global + manejo de deep links + notificaciones
 /// ============================================================================
 class DraftClubApp extends StatefulWidget {
   const DraftClubApp({super.key});
@@ -52,11 +64,14 @@ class DraftClubApp extends StatefulWidget {
 class _DraftClubAppState extends State<DraftClubApp> {
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _sub;
+  StreamSubscription<Uri>?
+      _notifSub; // 🔔 nuevo: escucha enlaces desde notificaciones
 
   @override
   void initState() {
     super.initState();
     _initAppLinks();
+    _listenNotificationLinks(); // nuevo
   }
 
   // 🔗 Inicializa el sistema de enlaces "draftclub://room/<ID>"
@@ -76,6 +91,18 @@ class _DraftClubAppState extends State<DraftClubApp> {
     } on PlatformException catch (e) {
       debugPrint('⚠️ Error al inicializar AppLinks: $e');
     }
+  }
+
+  // 🔔 Escucha enlaces generados por taps en notificaciones (foreground/background)
+  void _listenNotificationLinks() {
+    _notifSub = FcmService.linkStream.listen(
+      (Uri uri) {
+        debugPrint('🔔 Deep link recibido desde notificación: $uri');
+        _handleIncomingLink(uri);
+      },
+      onError: (err) =>
+          debugPrint('⚠️ Error al procesar enlace de notificación: $err'),
+    );
   }
 
   /// 🧭 Maneja el enlace entrante y abre la sala real de Firestore
@@ -139,6 +166,7 @@ class _DraftClubAppState extends State<DraftClubApp> {
   @override
   void dispose() {
     _sub?.cancel();
+    _notifSub?.cancel(); // 🔔 cancelar suscripción a enlaces de notificaciones
     super.dispose();
   }
 
@@ -186,8 +214,12 @@ class AuthStateHandler extends StatelessWidget {
             if (!profileSnapshot.hasData || !profileSnapshot.data!.exists) {
               return const ProfileGate();
             }
-// ✅ Asegurar xp=0 si no existe
+
+            // ✅ Asegurar xp=0 si no existe
             XPBootstrap.ensureUserXP();
+
+            // 🧩 Actualiza tópicos según ciudad o estado actual (nuevo)
+            TopicManager.syncUserTopics(user.uid);
 
             return const DashboardPage();
           },

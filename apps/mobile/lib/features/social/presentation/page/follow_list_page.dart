@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:draftclub_mobile/features/social/data/social_follow_service.dart';
-import 'package:draftclub_mobile/features/social/presentation/page/user_profile_page.dart';
+import 'package:draftclub_mobile/features/profile/presentation/profile_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -150,22 +150,22 @@ class _UserTileState extends State<_UserTile> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => UserProfilePage(userId: widget.userId),
+            builder: (_) => ProfilePage(userId: widget.userId),
           ),
         );
       },
       leading: CircleAvatar(
         radius: 24,
         backgroundColor: Colors.white12,
-        backgroundImage:
-            (photoUrl.isNotEmpty) ? NetworkImage(photoUrl) : null,
+        backgroundImage: (photoUrl.isNotEmpty) ? NetworkImage(photoUrl) : null,
         child: (photoUrl.isEmpty)
             ? const Icon(Icons.person, color: Colors.white54)
             : null,
       ),
       title: Text(
         name,
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        style:
+            const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
       ),
       subtitle: nickname.isNotEmpty
           ? Text('@$nickname', style: const TextStyle(color: Colors.white54))
@@ -191,8 +191,7 @@ class _UserTileState extends State<_UserTile> {
                     )
                   : Text(
                       _isFollowing ? 'Siguiendo' : 'Seguir',
-                      style:
-                          const TextStyle(color: Colors.white, fontSize: 12),
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
                     ),
             )
           : null,
