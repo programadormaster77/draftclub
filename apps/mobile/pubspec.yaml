@@ -131,6 +131,9 @@ flutter:
     - assets/lottie/
     - assets/audio/    # 🎵 Carpeta añadida para sonidos personalizados
     - assets/audio/referee_whistle.wav
+    - assets/audio/referee_whistle2.wav
+    - assets/audio/referee_whistle.caf
+    - assets/audio/referee_whistle2.caf
 
 flutter_icons:
   android: true

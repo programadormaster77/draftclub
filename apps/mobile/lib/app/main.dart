@@ -37,6 +37,9 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // 🔔 Inicializamos notificaciones locales
+  await LocalNotificationService.initialize();
+
   // 🧩 Inicializa servicios globales de notificaciones
   await LocalNotificationService
       .initialize(); // notificaciones locales + pitido árbitro

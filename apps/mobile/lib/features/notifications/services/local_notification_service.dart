@@ -3,12 +3,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:draftclub_mobile/features/notifications/services/notification_router.dart';
 
+/// ============================================================================
+/// 🔔 LocalNotificationService — Gestión completa de notificaciones locales
+/// ============================================================================
+/// - Inicializa canal y permisos (Android / iOS)
+/// - Reproduce sonido personalizado (referee_whistle.wav / .caf)
+/// - Redirige navegación usando NotificationRouter
+/// ============================================================================
 class LocalNotificationService {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
-  static const String customSound = 'referee_whistle.wav'; // Android
   static const String channelId = 'draftclub_general';
+  static const String kSoundBaseName = 'referee_whistle';
 
   /// 🚀 Inicializa notificaciones locales + canal Android
   static Future<void> initialize() async {
@@ -41,13 +48,14 @@ class LocalNotificationService {
       },
     );
 
+    // ✅ Canal Android con sonido personalizado
     const androidChannel = AndroidNotificationChannel(
       channelId,
       'Notificaciones DraftClub',
       description: 'Alertas generales, salas y mensajes importantes',
       importance: Importance.high,
       playSound: true,
-      sound: RawResourceAndroidNotificationSound('referee_whistle'),
+      sound: RawResourceAndroidNotificationSound(kSoundBaseName),
     );
 
     await _plugin
@@ -55,10 +63,10 @@ class LocalNotificationService {
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(androidChannel);
 
-    debugPrint('✅ LocalNotificationService inicializado');
+    debugPrint('✅ LocalNotificationService inicializado correctamente');
   }
 
-  /// 📣 Mostrar notificación local con sonido
+  /// 📣 Mostrar notificación local con sonido personalizado
   static Future<void> show({
     required String title,
     required String body,
@@ -67,13 +75,16 @@ class LocalNotificationService {
     const android = AndroidNotificationDetails(
       channelId,
       'Notificaciones DraftClub',
-      sound: RawResourceAndroidNotificationSound('referee_whistle'),
+      channelDescription: 'Alertas de partidos, mensajes y eventos',
       importance: Importance.high,
       priority: Priority.high,
+      playSound: true,
+      sound: RawResourceAndroidNotificationSound(kSoundBaseName),
     );
 
     const ios = DarwinNotificationDetails(
-      sound: 'referee_whistle.caf',
+      presentSound: true,
+      sound: '$kSoundBaseName.caf',
     );
 
     await _plugin.show(

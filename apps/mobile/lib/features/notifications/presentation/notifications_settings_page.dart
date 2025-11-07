@@ -105,9 +105,10 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
           SetOptions(merge: true),
         );
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('✅ Preferencias guardadas correctamente'),
+      SnackBar(
+        content: const Text('✅ Preferencias guardadas correctamente'),
         backgroundColor: AppColors.accentBlue,
       ),
     );
@@ -132,6 +133,8 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -147,9 +150,12 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
           : ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                const Text(
+                Text(
                   'Preferencias generales',
-                  style: AppTextStyles.sectionTitle,
+                  style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 _buildSwitchTile(
@@ -178,9 +184,12 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                   onChanged: (v) => setState(() => _marketing = v),
                 ),
                 const Divider(height: 30, color: Colors.white24),
-                const Text(
+                Text(
                   'Sonido',
-                  style: AppTextStyles.sectionTitle,
+                  style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 _buildSwitchTile(
@@ -191,13 +200,12 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                 ),
                 if (_sound)
                   ListTile(
-                    title: const Text(
+                    title: Text(
                       'Vista previa del sonido',
-                      style: AppTextStyles.body,
+                      style: textTheme.bodyLarge,
                     ),
                     leading: const Icon(Icons.volume_up, color: Colors.white70),
                     onTap: () async {
-                      // Reproduce el sonido de prueba
                       await LocalNotificationService.show(
                         title: 'Sonido de prueba',
                         body: 'Así sonará el pitido de árbitro.',
@@ -205,9 +213,12 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                     },
                   ),
                 const Divider(height: 30, color: Colors.white24),
-                const Text(
+                Text(
                   'Modo "No molestar"',
-                  style: AppTextStyles.sectionTitle,
+                  style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 _buildSwitchTile(
@@ -246,25 +257,30 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     );
   }
 
+  // =============================================================
+  // 🔘 COMPONENTES INTERNOS
+  // =============================================================
   Widget _buildSwitchTile({
     required String title,
     required String subtitle,
     required bool value,
     required Function(bool) onChanged,
   }) {
+    final textTheme = Theme.of(context).textTheme;
     return SwitchListTile(
-      title: Text(title, style: AppTextStyles.bodyBold),
-      subtitle: Text(subtitle, style: AppTextStyles.caption),
+      title: Text(title, style: textTheme.bodyLarge),
+      subtitle: Text(subtitle, style: textTheme.bodySmall),
       value: value,
       onChanged: onChanged,
-      activeColor: AppColors.accentBlue,
+      activeTrackColor: AppColors.accentBlue,
     );
   }
 
   Widget _buildTimeSelector(String label, TimeOfDay time, bool isFrom) {
+    final textTheme = Theme.of(context).textTheme;
     return Column(
       children: [
-        Text(label, style: AppTextStyles.caption),
+        Text(label, style: textTheme.bodySmall),
         const SizedBox(height: 6),
         InkWell(
           onTap: () => _pickTime(isFrom),
@@ -277,7 +293,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
             ),
             child: Text(
               _formatTime(time),
-              style: AppTextStyles.bodyBold,
+              style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
           ),
         ),

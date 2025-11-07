@@ -19,7 +19,7 @@ import 'package:draftclub_mobile/features/profile/presentation/profile_page.dart
 /// ====================================================================
 
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key});
+  const DashboardPage({super.key, String? highlightPostId});
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -33,11 +33,11 @@ class _DashboardPageState extends State<DashboardPage> {
   // 📄 PÁGINAS PRINCIPALES
   // ================================================================
   final List<Widget> _pages = const [
-    SocialFeedPage(),  // 🏠 Inicio
-    RoomsPage(),       // ⚽ Salas
-    SizedBox(),        // (+) Crear
+    SocialFeedPage(), // 🏠 Inicio
+    RoomsPage(), // ⚽ Salas
+    SizedBox(), // (+) Crear
     TournamentsPage(), // 🏆 Torneos
-    ProfilePage(),     // 👤 Perfil
+    ProfilePage(), // 👤 Perfil
   ];
 
   // ================================================================
@@ -137,8 +137,8 @@ class _DashboardPageState extends State<DashboardPage> {
                 // 🏆 Crear torneo — futuro módulo
                 // ===========================================================
                 ListTile(
-                  leading: const Icon(Icons.emoji_events,
-                      color: Colors.amberAccent),
+                  leading:
+                      const Icon(Icons.emoji_events, color: Colors.amberAccent),
                   title: const Text(
                     'Crear torneo',
                     style: TextStyle(color: Colors.white, fontSize: 16),
@@ -164,8 +164,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final currentTitle = _titles[_currentIndex];
 
     // Mostrar ícono de chat solo en Inicio o Perfil
-    final showChatIcon =
-        currentTitle == 'Inicio' || currentTitle == 'Perfil';
+    final showChatIcon = currentTitle == 'Inicio' || currentTitle == 'Perfil';
 
     return Scaffold(
       backgroundColor: const Color(0xFF0E0E0E),
