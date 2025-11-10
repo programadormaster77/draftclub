@@ -1,20 +1,28 @@
 {
   "name": "functions",
+  "version": "1.0.0",
+  "description": "DraftClub Firebase Functions (Node.js 20 / TypeScript / ESM)",
+  "type": "module",
   "main": "lib/index.js",
-  "scripts": {
-    "build": "tsc",
-    "deploy": "npm run build && firebase deploy --only functions",
-    "clean": "rimraf lib"
-  },
   "engines": {
-    "node": "18"
+    "node": "20"
+  },
+  "scripts": {
+    "clean": "rimraf lib",
+    "build": "tsc && npx tsc-esm-fix",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "deploy": "npm run build && firebase deploy --only functions",
+    "lint": "eslint . --ext .ts"
   },
   "dependencies": {
-    "firebase-admin": "^12.6.0",
-    "firebase-functions": "^4.6.0"
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^6.6.0"
   },
   "devDependencies": {
-    "typescript": "^5.6.3",
-    "rimraf": "^5.0.5"
+    "@types/node": "^20.11.30",
+    "eslint": "^8.57.0",
+    "rimraf": "^5.0.5",
+    "tsc-esm-fix": "^3.1.2",
+    "typescript": "^5.9.3"
   }
 }

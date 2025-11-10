@@ -1,47 +1,4 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildDeepLink = buildDeepLink;
-exports.clampText = clampText;
-exports.getFollowersOfUser = getFollowersOfUser;
-exports.getUserTokensIfAllowed = getUserTokensIfAllowed;
-exports.isInDndWindow = isInDndWindow;
-exports.cityTopic = cityTopic;
-exports.getUserDoc = getUserDoc;
-exports.getRoomMembers = getRoomMembers;
-const admin = __importStar(require("firebase-admin"));
+import * as admin from "firebase-admin";
 if (!admin.apps.length) {
     admin.initializeApp();
 }
@@ -49,7 +6,7 @@ const db = admin.firestore();
 /**
  * 🔗 Construye deep links estándar usados por el cliente móvil.
  */
-function buildDeepLink(params) {
+export function buildDeepLink(params) {
     const { kind, id } = params;
     if (kind === "room" && id)
         return `draftclub://room/${id}`;
@@ -62,7 +19,7 @@ function buildDeepLink(params) {
 /**
  * 🧹 Limpia y limita un texto a N caracteres.
  */
-function clampText(s, max = 120) {
+export function clampText(s, max = 120) {
     if (!s)
         return "";
     const clean = s.replace(/\s+/g, " ").trim();
@@ -72,7 +29,7 @@ function clampText(s, max = 120) {
  * 👥 Obtiene UIDs de seguidores de un autor.
  * Estructura esperada: follows/{uid}/followers/{followerUid}: { createdAt }
  */
-async function getFollowersOfUser(uid) {
+export async function getFollowersOfUser(uid) {
     // Si tu estructura es follows/{author}/following/{target}, cambia esta consulta.
     // Aquí asumimos subcolección "followers".
     const snap = await db.collection("follows").doc(uid).collection("followers").get().catch(() => null);
@@ -84,7 +41,7 @@ async function getFollowersOfUser(uid) {
  * 🔐 Obtiene tokens FCM válidos del usuario si sus prefs lo permiten.
  * Guarda solo tokens útiles (filtra nulos/duplicados).
  */
-async function getUserTokensIfAllowed(uid, opts) {
+export async function getUserTokensIfAllowed(uid, opts) {
     const doc = await db.collection("users").doc(uid).get();
     if (!doc.exists)
         return [];
@@ -110,7 +67,7 @@ async function getUserTokensIfAllowed(uid, opts) {
  * prefs.dnd: { enabled: boolean, from: "22:00", to: "08:00" }
  * Nota: sin timezone del usuario, se evalúa en hora del servidor.
  */
-function isInDndWindow(prefs, now = new Date()) {
+export function isInDndWindow(prefs, now = new Date()) {
     const dnd = prefs?.dnd;
     if (!dnd?.enabled)
         return false;
@@ -133,7 +90,7 @@ function isInDndWindow(prefs, now = new Date()) {
 /**
  * 📌 Devuelve el tópico normalizado de ciudad.
  */
-function cityTopic(city) {
+export function cityTopic(city) {
     if (!city || typeof city !== "string")
         return null;
     const norm = city.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/\s+/g, "_");
@@ -142,14 +99,14 @@ function cityTopic(city) {
 /**
  * 🔎 Obtiene documento de usuario (útil para leer prefs completas).
  */
-async function getUserDoc(uid) {
+export async function getUserDoc(uid) {
     const doc = await db.collection("users").doc(uid).get();
     return doc.exists ? doc.data() || null : null;
 }
 /**
  * 🧩 Obtiene miembros de una sala (si tu modelo los guarda en 'members' string[])
  */
-async function getRoomMembers(roomId) {
+export async function getRoomMembers(roomId) {
     const doc = await db.collection("rooms").doc(roomId).get();
     if (!doc.exists)
         return [];

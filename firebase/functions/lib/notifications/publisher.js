@@ -1,76 +1,45 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildPayload = buildPayload;
-exports.sendToTokens = sendToTokens;
-exports.sendToTopic = sendToTopic;
-const admin = __importStar(require("firebase-admin"));
-const utils_1 = require("./utils");
-if (!admin.apps.length) {
+/**
+ * ============================================================================
+ * 🛰️ publisher.ts — Utilidad central para enviar notificaciones push
+ * ============================================================================
+ * - Soporta envío a múltiples tokens (Multicast)
+ * - Soporta envío por tópico (global, marketing, torneos, etc.)
+ * ============================================================================
+ */
+import admin from "firebase-admin";
+import { clampText } from "../utils/clampText.js";
+if (!admin.apps || admin.apps.length === 0) {
     admin.initializeApp();
 }
 const messaging = admin.messaging();
 /**
- * 🧰 Construye payload unificado (Android/iOS) con canal y sonido de árbitro.
- * link: deep link "draftclub://..."
+ * 🧩 buildPayload — Crea un mensaje unificado (Android/iOS/Web)
  */
-function buildPayload(params) {
-    const title = (0, utils_1.clampText)(params.title, 80);
-    const body = (0, utils_1.clampText)(params.body, 160);
+export function buildPayload(params) {
+    const title = clampText(params.title, 80);
+    const body = clampText(params.body, 160);
     const link = params.link || "draftclub://home";
     const androidChannel = params.androidChannelId || "draftclub_general";
-    // Todos los valores en data deben ser string
+    // 🔄 Convierte todos los valores a string
     const data = {
         link: String(link),
         ...(Object.fromEntries(Object.entries(params.data || {}).map(([k, v]) => [k, String(v)]))),
     };
-    return {
-        notification: {
-            title,
-            body,
-        },
+    // ⚙️ Creamos un mensaje base (tipo “TopicMessage” genérico)
+    const message = {
+        topic: "general", // evita el error "condition missing"
+        notification: { title, body },
         data,
         android: {
+            priority: "high",
             notification: {
                 channelId: androidChannel,
                 sound: "referee_whistle",
-                priority: "high",
                 clickAction: "FLUTTER_NOTIFICATION_CLICK",
             },
         },
         apns: {
+            headers: { "apns-priority": "10" },
             payload: {
                 aps: {
                     alert: { title, body },
@@ -78,24 +47,43 @@ function buildPayload(params) {
                     contentAvailable: true,
                 },
             },
-            headers: {
-                "apns-priority": "10",
-            },
         },
+    };
+    return message;
+}
+/**
+ * 🚀 sendToTokens — Envía notificación a varios dispositivos
+ * Soporta hasta 500 tokens simultáneamente (MulticastMessage)
+ */
+export async function sendToTokens(tokens, payload) {
+    if (!tokens.length)
+        return { successCount: 0, failureCount: 0, responses: [] };
+    const multicastMessage = {
+        tokens,
+        notification: payload.notification,
+        data: payload.data,
+        android: payload.android,
+        apns: payload.apns,
+    };
+    const response = await messaging.sendEachForMulticast(multicastMessage);
+    return {
+        successCount: response.successCount,
+        failureCount: response.failureCount,
+        responses: response.responses,
     };
 }
 /**
- * 🎯 Envía a tokens específicos (multicast).
+ * 🌎 sendToTopic — Envía una notificación a un tópico global
  */
-async function sendToTokens(tokens, payload) {
-    if (!tokens.length)
-        return { successCount: 0, failureCount: 0 };
-    const res = await messaging.sendEachForMulticast({ tokens, ...payload });
-    return { successCount: res.successCount, failureCount: res.failureCount, responses: res.responses };
-}
-/**
- * 🌍 Envía a un tópico (suscripción previa requerida).
- */
-async function sendToTopic(topic, payload) {
-    return messaging.sendToTopic(topic, payload);
+export async function sendToTopic(topic, payload) {
+    const message = {
+        topic,
+        notification: payload.notification,
+        data: payload.data,
+        android: payload.android,
+        apns: payload.apns,
+    };
+    const response = await messaging.send(message);
+    console.log(`📢 Notificación enviada al tópico "${topic}"`);
+    return response;
 }

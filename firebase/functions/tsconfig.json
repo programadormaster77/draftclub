@@ -1,13 +1,32 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
-    "target": "ES2020",
-    "lib": ["ES2020"],
-    "outDir": "lib",
+    /* ============================================================
+     * 🧠 Firebase Functions — Node 20 / TypeScript / ESM
+     * ============================================================ */
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
     "rootDir": "src",
+    "outDir": "lib",
+
+    /* ============================================================
+     * ⚙️ Configuración avanzada
+     * ============================================================ */
     "strict": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "noEmitOnError": false,
+
+    /* ============================================================
+     * 🧩 Integración con plugin para mantener extensiones .js
+     * ============================================================ */
+    "plugins": [{ "name": "tsc-esm-fix" }]
   },
-  "compileOnSave": true,
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["node_modules"]
 }

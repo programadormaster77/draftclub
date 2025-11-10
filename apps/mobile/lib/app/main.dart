@@ -10,6 +10,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:app_links/app_links.dart';
 import 'package:draftclub_mobile/features/profile/domain/xp_bootstrap.dart';
+import 'package:draftclub_mobile/features/notifications/presentation/admin_notification_page.dart'; // 👈 Agrega este import arriba
 
 // 🌐 Configuración de Firebase
 
@@ -179,6 +180,13 @@ class _DraftClubAppState extends State<DraftClubApp> {
       debugShowCheckedModeBanner: false,
       title: 'DraftClub ⚽',
       theme: AppTheme.darkTheme, // 🎨 Aplica el nuevo tema Arena Pro
+
+      // 🧭 Definimos las rutas disponibles
+      routes: {
+        '/admin_notifications': (context) => const AdminNotificationPage(),
+      },
+
+      // 📍 Pantalla principal según autenticación
       home: const AuthStateHandler(),
     );
   }
@@ -221,9 +229,14 @@ class AuthStateHandler extends StatelessWidget {
             // ✅ Asegurar xp=0 si no existe
             XPBootstrap.ensureUserXP();
 
-            // 🧩 Actualiza tópicos según ciudad o estado actual (nuevo)
+// 🧩 Actualiza tópicos según ciudad o estado actual (nuevo)
             TopicManager.syncUserTopics(user.uid);
 
+// 🧠 Sincroniza o actualiza el token FCM después del login
+// Esto garantiza que cualquier usuario (nuevo o existente) tenga su token en Firestore
+            FcmService.initialize();
+
+// 🚀 Finalmente, muestra el dashboard principal
             return const DashboardPage();
           },
         );

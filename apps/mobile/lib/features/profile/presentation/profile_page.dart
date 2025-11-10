@@ -7,6 +7,8 @@ import '../../social/data/social_follow_service.dart';
 import '../../social/domain/entities/post.dart';
 import '../../social/presentation/page/post_detail_page.dart';
 import '../../social/presentation/page/follow_list_page.dart';
+import 'package:draftclub_mobile/features/notifications/presentation/notifications_settings_page.dart';
+
 import 'edit_profile_page.dart';
 
 /// ===============================================================
@@ -291,15 +293,17 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 const SizedBox(height: 30),
 
-                // 🧩 BOTONES
-                if (isMyProfile)
+//////////////// 🧩 BOTONES ///////////////////
+                //////////////// 🧩 BOTONES ///////////////////
+                if (isMyProfile) ...[
                   ElevatedButton.icon(
                     onPressed: () async {
                       await _refreshAfterReturn(() async {
                         await Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => const EditProfilePage()),
+                            builder: (_) => const EditProfilePage(),
+                          ),
                         );
                       });
                     },
@@ -308,21 +312,78 @@ class _ProfilePageState extends State<ProfilePage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blueAccent,
                       padding: const EdgeInsets.symmetric(
-                          vertical: 14, horizontal: 40),
+                        vertical: 14,
+                        horizontal: 40,
+                      ),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20)),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                     ),
-                  )
-                else
+                  ),
+                  const SizedBox(height: 14),
+
+                  // 🔔 AJUSTES DE NOTIFICACIONES
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NotificationsSettingsPage(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.notifications_active_outlined),
+                    label: const Text('Notificaciones'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E1E1E),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 40,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      side: const BorderSide(
+                        color: Colors.blueAccent,
+                        width: 1,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // 🟡 PANEL DE ADMINISTRADOR (solo si role == 'admin')
+                  if (data['role'] == 'admin')
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/admin_notifications');
+                      },
+                      icon: const Icon(Icons.admin_panel_settings_outlined,
+                          color: Colors.black),
+                      label: const Text('Panel de notificaciones'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.amberAccent,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 14, horizontal: 40),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                    ),
+                ] else
                   ElevatedButton(
                     onPressed: _isLoadingFollow ? null : _toggleFollow,
                     style: ElevatedButton.styleFrom(
                       backgroundColor:
                           _isFollowing ? Colors.grey[800] : Colors.blueAccent,
                       padding: const EdgeInsets.symmetric(
-                          vertical: 14, horizontal: 60),
+                        vertical: 14,
+                        horizontal: 60,
+                      ),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20)),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                     ),
                     child: _isLoadingFollow
                         ? const SizedBox(
@@ -333,8 +394,10 @@ class _ProfilePageState extends State<ProfilePage> {
                               strokeWidth: 2,
                             ),
                           )
-                        : Text(_isFollowing ? 'Siguiendo' : 'Seguir',
-                            style: const TextStyle(color: Colors.white)),
+                        : Text(
+                            _isFollowing ? 'Siguiendo' : 'Seguir',
+                            style: const TextStyle(color: Colors.white),
+                          ),
                   ),
 
                 const SizedBox(height: 40),
@@ -399,8 +462,8 @@ class _UserPostsGrid extends StatelessWidget {
           itemCount: posts.length,
           itemBuilder: (context, i) {
             final post = posts[i];
-            final thumb =
-                post.thumbUrl ?? (post.mediaUrls.isNotEmpty ? post.mediaUrls.first : '');
+            final thumb = post.thumbUrl ??
+                (post.mediaUrls.isNotEmpty ? post.mediaUrls.first : '');
             final isVideo = post.type == 'video' ||
                 thumb.toLowerCase().endsWith('.mp4') ||
                 thumb.toLowerCase().contains('video');
@@ -524,7 +587,9 @@ class _SocialCounter extends StatelessWidget {
       children: [
         Text('$value',
             style: const TextStyle(
-                color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold)),
         const SizedBox(height: 4),
         Text(label,
             style: const TextStyle(color: Colors.white54, fontSize: 13)),

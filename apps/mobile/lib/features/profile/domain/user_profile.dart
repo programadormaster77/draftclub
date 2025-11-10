@@ -1,11 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// ===============================================================
-/// 🧠 UserProfile — Modelo de perfil de usuario
+/// 🧠 UserProfile — Modelo de perfil de usuario (versión extendida con roles)
 /// ===============================================================
 /// Mantiene coherencia con Firestore:
-/// - Nombres camelCase (createdAt, updatedAt, vipFlag)
-/// - Evita guardar `uid` dentro del documento (ya es el ID del doc)
+/// - Campos camelCase (createdAt, updatedAt, vipFlag, role)
+/// - No guarda el `uid` dentro del documento (ya es el ID del doc)
+/// - Retrocompatible con perfiles antiguos sin campo `role`
 /// ===============================================================
 class UserProfile {
   final String uid;
@@ -17,17 +18,18 @@ class UserProfile {
   final String? position; // Ej: 'Delantero', 'Mediocampista'
   final String? preferredFoot; // 'Derecho', 'Izquierdo', 'Ambos'
   final String? city; // Ciudad del jugador
-  final String sex; // 🔹 Nuevo campo obligatorio (Masculino / Femenino)
-  final String rank; // 'Bronce' por defecto
-  final int xp; // 0 por defecto
-  final bool vipFlag; // false por defecto
+  final String sex; // Masculino / Femenino
+  final String rank; // Bronce, Plata, Oro, etc.
+  final int xp; // Experiencia
+  final bool vipFlag; // Usuario VIP
+  final String role; // 👑 user | admin | moderator
   final DateTime createdAt;
   final DateTime updatedAt;
 
   UserProfile({
     required this.uid,
     required this.email,
-    required this.sex, // ✅ requerido
+    required this.sex,
     this.name,
     this.nickname,
     this.photoUrl,
@@ -38,12 +40,15 @@ class UserProfile {
     this.rank = 'Bronce',
     this.xp = 0,
     this.vipFlag = false,
+    this.role = 'user', // 👈 valor por defecto
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
 
-  /// 🔄 Convierte el modelo a un mapa listo para Firestore
+  /// ===============================================================
+  /// 🔄 Conversión a mapa para Firestore
+  /// ===============================================================
   Map<String, dynamic> toMap() {
     return {
       'email': email,
@@ -54,16 +59,19 @@ class UserProfile {
       'position': position,
       'preferredFoot': preferredFoot,
       'city': city,
-      'sex': sex, // ✅ Nuevo campo
+      'sex': sex,
       'rank': rank,
       'xp': xp,
       'vipFlag': vipFlag,
+      'role': role, // 👑 Nuevo campo
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
   }
 
-  /// 🧩 Crea una instancia desde Firestore
+  /// ===============================================================
+  /// 🧩 Construcción desde Firestore (retrocompatible)
+  /// ===============================================================
   factory UserProfile.fromMap(Map<String, dynamic> map, {String? uid}) {
     return UserProfile(
       uid: uid ?? (map['uid'] as String? ?? ''),
@@ -79,8 +87,7 @@ class UserProfile {
       position: map['position'] as String?,
       preferredFoot: map['preferredFoot'] as String?,
       city: map['city'] as String?,
-      sex: map['sex'] as String? ??
-          'Masculino', // ✅ Valor por defecto si no existía
+      sex: map['sex'] as String? ?? 'Masculino',
       rank: map['rank'] as String? ?? 'Bronce',
       xp: (map['xp'] is int)
           ? map['xp'] as int
@@ -88,6 +95,8 @@ class UserProfile {
               ? (map['xp'] as double).toInt()
               : 0,
       vipFlag: map['vipFlag'] as bool? ?? false,
+      role:
+          map['role'] as String? ?? 'user', // 👑 valor por defecto si no existe
       createdAt: (map['createdAt'] is Timestamp)
           ? (map['createdAt'] as Timestamp).toDate()
           : DateTime.now(),

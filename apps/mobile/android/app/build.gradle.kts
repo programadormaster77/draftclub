@@ -29,6 +29,8 @@ android {
         // Compatibilidad con Java moderno
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+         // ✅ Habilita compatibilidad con APIs modernas (Java 8+)
+    isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -68,4 +70,7 @@ dependencies {
 
     // 🔧 Compatibilidad multidex (para proyectos grandes con muchos imports)
     implementation("androidx.multidex:multidex:2.0.1")
+
+    // ✅ Nueva dependencia obligatoria para desugaring
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }
