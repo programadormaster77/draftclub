@@ -142,6 +142,7 @@ flutter:
     - assets/audio/referee_whistle2.caf
     - assets/icons/google_logo.png
     - assets/icons/facebook_logo.png
+    - assets/backgrounds/login_bg.png 
 
 flutter_icons:
   android: true

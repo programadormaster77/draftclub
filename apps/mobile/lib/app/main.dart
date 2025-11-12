@@ -229,14 +229,18 @@ class AuthStateHandler extends StatelessWidget {
             // ✅ Asegurar xp=0 si no existe
             XPBootstrap.ensureUserXP();
 
-// 🧩 Actualiza tópicos según ciudad o estado actual (nuevo)
-            TopicManager.syncUserTopics(user.uid);
+            // ✅ Solo ejecutar una vez por sesión
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              // 🔒 Evita inicializaciones duplicadas
+              if (!FcmService.isInitialized) {
+                await FcmService.initialize();
+              }
 
-// 🧠 Sincroniza o actualiza el token FCM después del login
-// Esto garantiza que cualquier usuario (nuevo o existente) tenga su token en Firestore
-            FcmService.initialize();
+              // 🔒 Solo suscribirse a ciudad una vez
+              await TopicManager.syncUserTopics(user.uid);
+            });
 
-// 🚀 Finalmente, muestra el dashboard principal
+            // 🚀 Finalmente, muestra el dashboard principal
             return const DashboardPage();
           },
         );

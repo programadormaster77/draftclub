@@ -18,6 +18,7 @@ import 'edit_profile_page.dart';
 /// - Incluye botón seguir / editar.
 /// - Contadores dinámicos y parrilla tipo Instagram.
 /// - Refresca automáticamente al volver de otras páginas.
+/// - Mejora estética de estadísticas y AppBar unificado (chat + logout).
 /// ===============================================================
 class ProfilePage extends StatefulWidget {
   final String? userId;
@@ -89,8 +90,18 @@ class _ProfilePageState extends State<ProfilePage> {
         backgroundColor: Colors.black,
         elevation: 2,
         actions: [
+          // 📩 Chat (ajusta la ruta si usas otra)
+          IconButton(
+            tooltip: 'Mensajes',
+            icon: const Icon(Icons.chat_bubble_outline),
+            onPressed: () {
+              Navigator.pushNamed(context, '/chat');
+            },
+          ),
+          // 🔒 Logout (solo en mi perfil)
           if (widget.userId == null)
             IconButton(
+              tooltip: 'Cerrar sesión',
               icon: const Icon(Icons.logout, color: Colors.redAccent),
               onPressed: () async {
                 await AuthService().signOut();
@@ -135,10 +146,14 @@ class _ProfilePageState extends State<ProfilePage> {
           final followers = data['followersCount'] ?? 0;
           final following = data['followingCount'] ?? 0;
           final posts = data['postsCount'] ?? 0;
+
+          // 👉 Estadísticas visibles
           final partidos = (data['matches'] ?? 0).toString();
-          final victorias = (data['wins'] ?? 0).toString();
-          final empates = (data['draws'] ?? 0).toString();
-          final derrotas = (data['losses'] ?? 0).toString();
+          final victoriasConfirmadas =
+              (data['wins'] ?? 0).toString(); // confirmadas por árbitro
+          final torneos = (data['tournaments'] ?? 0).toString();
+
+          // (No mostramos empates/derrotas por decisión de producto)
 
           final rangos = {
             'Bronce': 0,
@@ -190,6 +205,24 @@ class _ProfilePageState extends State<ProfilePage> {
                     textAlign: TextAlign.center,
                     style:
                         const TextStyle(color: Colors.white70, fontSize: 13)),
+
+                const SizedBox(height: 12),
+
+                // 🏅 Chip de rango (opcional visual, no cambia lógica)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2A2320),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF4A3E36)),
+                  ),
+                  child: Text(
+                    rank,
+                    style: const TextStyle(
+                        color: Color(0xFFD0B8A0), fontWeight: FontWeight.w700),
+                  ),
+                ),
 
                 const SizedBox(height: 16),
 
@@ -246,6 +279,13 @@ class _ProfilePageState extends State<ProfilePage> {
                     color: const Color(0xFF1A1A1A),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: Colors.grey.shade800, width: 0.8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.25),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      )
+                    ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -275,7 +315,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 const SizedBox(height: 30),
 
-                // ⚽ ESTADÍSTICAS
+                // ⚽ ESTADÍSTICAS — Solo positivas (3 columnas)
                 GridView.count(
                   crossAxisCount: 3,
                   crossAxisSpacing: 12,
@@ -285,15 +325,17 @@ class _ProfilePageState extends State<ProfilePage> {
                   childAspectRatio: 1,
                   children: [
                     _StatCard(title: 'Partidos', value: partidos),
-                    _StatCard(title: 'Victorias', value: victorias),
-                    _StatCard(title: 'Empates', value: empates),
-                    _StatCard(title: 'Derrotas', value: derrotas),
+                    _StatCard(
+                      title: 'Victorias',
+                      value: victoriasConfirmadas,
+                      subtitle: 'confirmadas por árbitro',
+                    ),
+                    _StatCard(title: 'Torneos', value: torneos),
                   ],
                 ),
 
                 const SizedBox(height: 30),
 
-//////////////// 🧩 BOTONES ///////////////////
                 //////////////// 🧩 BOTONES ///////////////////
                 if (isMyProfile) ...[
                   ElevatedButton.icon(
@@ -400,7 +442,54 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                   ),
 
+                // ===================== ⚙️ ACCIONES INFERIORES =====================
+                const SizedBox(height: 30),
+
+// 📩 Botón de Mensajes
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.chat_bubble_outline),
+                  label: const Text('Mensajes'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 40, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    shadowColor: Colors.blueAccent.withOpacity(0.4),
+                    elevation: 6,
+                  ),
+                  onPressed: () {
+                    Navigator.pushNamed(context, '/chat');
+                  },
+                ),
+
+                const SizedBox(height: 14),
+
+// 🚪 Botón de Cerrar Sesión (solo si es mi perfil)
+                if (isMyProfile)
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Cerrar sesión'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side:
+                          const BorderSide(color: Colors.redAccent, width: 1.5),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 40, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    onPressed: () async {
+                      await AuthService().signOut();
+                    },
+                  ),
+
                 const SizedBox(height: 40),
+
+// ===================== 🖼️ PARRILLA DE POSTS =====================
 
                 // ===================== 🖼️ PARRILLA DE POSTS =====================
                 _UserPostsGrid(userId: userId),
@@ -504,7 +593,7 @@ class _UserPostsGrid extends StatelessWidget {
 
 /// ===============================================================
 /// 🔢 _CounterButton — Contador con acción (clicable)
-/// ===============================================================
+///
 class _CounterButton extends StatelessWidget {
   final String label;
   final int value;
@@ -542,8 +631,13 @@ class _CounterButton extends StatelessWidget {
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;
+  final String? subtitle; // ← NUEVO
 
-  const _StatCard({required this.title, required this.value});
+  const _StatCard({
+    required this.title,
+    required this.value,
+    this.subtitle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -565,6 +659,14 @@ class _StatCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(title,
                 style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            if (subtitle != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                subtitle!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            ],
           ],
         ),
       ),

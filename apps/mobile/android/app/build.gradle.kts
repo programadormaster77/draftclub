@@ -1,3 +1,7 @@
+// ============================================================
+// ⚙️ APP BUILD.GRADLE — DraftClub (Optimizado Kotlin DSL)
+// ============================================================
+
 plugins {
     // Plugins principales
     id("com.android.application")
@@ -11,8 +15,11 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// ============================================================
+// 🧩 Configuración base de Android
+// ============================================================
 android {
-    namespace = "com.example.draftclub_mobile" // <-- usa el nombre real de tu paquete si luego cambiaslo
+    namespace = "com.example.draftclub_mobile"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -22,15 +29,16 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        multiDexEnabled = true // 🧩 evita errores de métodos excedidos
+        multiDexEnabled = true // ✅ evita límite de métodos en builds grandes
     }
 
     compileOptions {
-        // Compatibilidad con Java moderno
+        // Compatibilidad moderna con Java
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-         // ✅ Habilita compatibilidad con APIs modernas (Java 8+)
-    isCoreLibraryDesugaringEnabled = true
+
+        // ✅ Desugaring: soporte de APIs modernas en Android viejos
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -39,13 +47,11 @@ android {
 
     buildTypes {
         release {
-            // Usa tu configuración real de firma si la tienes (para Play Store)
             signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
             isShrinkResources = false
         }
         debug {
-            // Configuración ligera para desarrollo
             isDebuggable = true
         }
     }
@@ -57,20 +63,33 @@ android {
     }
 }
 
+// ============================================================
+// 🧠 Integración Flutter
+// ============================================================
 flutter {
     source = "../.."
 }
 
+// ============================================================
+// 📦 Dependencias
+// ============================================================
 dependencies {
-    // 🔥 Firebase BoM — controla versiones compatibles entre servicios
+    // 🔥 Firebase BoM (gestiona versiones compatibles entre servicios)
     implementation(platform("com.google.firebase:firebase-bom:34.4.0"))
-
-    // 📊 Firebase Analytics (puedes agregar más módulos si los usas)
     implementation("com.google.firebase:firebase-analytics")
 
-    // 🔧 Compatibilidad multidex (para proyectos grandes con muchos imports)
+    // 🔧 Multidex (proyectos grandes)
     implementation("androidx.multidex:multidex:2.0.1")
 
-    // ✅ Nueva dependencia obligatoria para desugaring
+    // ✅ Desugaring para APIs modernas
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+
+    // 🟦 Forzar versiones compatibles de librerías AndroidX (evita conflicto con Facebook SDK)
+    configurations.all {
+        resolutionStrategy {
+            force("androidx.activity:activity:1.8.0")
+            force("androidx.fragment:fragment:1.6.1")
+            force("androidx.appcompat:appcompat:1.6.1")
+        }
+    }
 }

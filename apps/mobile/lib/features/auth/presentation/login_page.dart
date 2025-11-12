@@ -5,10 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:ui';
 
 /// ===============================================================
-/// ⚽ DraftClub — Login/Registro Profesional (vGlobal)
-/// ===============================================================
-/// Inspirado en interfaces de EA Sports FC / Spotify.
-/// Diseño translúcido premium con soporte Google + Facebook.
+/// ⚽ DraftClub — Login/Registro Premium (glass optimizado, fondo visible)
 /// ===============================================================
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -73,9 +70,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // ===============================================================
-  // 🔵 Google Sign-In
-  // ===============================================================
   Future<void> _handleGoogleLogin() async {
     try {
       setState(() => isLoading = true);
@@ -89,84 +83,131 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // ===============================================================
-  // 🔷 Facebook Sign-In
-  // ===============================================================
-  Future<void> _handleFacebookLogin() async {
-    try {
-      setState(() => isLoading = true);
-      final user = await _authService.signInWithFacebook();
-      if (user != null) debugPrint('✅ Facebook: ${user.email}');
-    } catch (_) {
-      setState(() => errorMessage = 'Error al conectar con Facebook.');
-    } finally {
-      if (mounted) setState(() => isLoading = false);
-    }
-  }
-
-  // ===============================================================
-  // 🎨 UI
+  // 🎨 UI — Versión final con transparencia calibrada
   // ===============================================================
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: Colors.black,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Fondo degradado dinámico
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF000000), Color(0xFF020b1a)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
-          ),
-
-          // Efecto blur translúcido (glass)
-          Center(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(26),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                child: Container(
-                  width: size.width * 0.88,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
-                    border: Border.all(color: Colors.white.withOpacity(0.08)),
-                    borderRadius: BorderRadius.circular(26),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.blueAccent.withOpacity(0.25),
-                        blurRadius: 18,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: _buildContent(context),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                // 🏟️ Fondo futbolístico
+                Image.asset(
+                  'assets/backgrounds/login_bg.png',
+                  fit: BoxFit.cover,
+                  alignment: Alignment.center,
                 ),
-              ),
-            ),
-          ).animate().fadeIn(duration: 900.ms).slideY(begin: 0.1),
-        ],
+
+                // 🌈 Iluminación dinámica más viva
+                AnimatedContainer(
+                  duration: const Duration(seconds: 5),
+                  curve: Curves.easeInOut,
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: Alignment.topCenter,
+                      radius: 1.5,
+                      colors: [
+                        Colors.blueAccent.withOpacity(0.35),
+                        Colors.amberAccent.withOpacity(0.12),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.5, 1.0],
+                    ),
+                  ),
+                )
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
+                    .moveY(begin: -0.02, end: 0.02, duration: 5.seconds),
+
+                // 🌌 Capa oscura ligera (para mantener contraste sin apagar fondo)
+                Container(color: Colors.black.withOpacity(0.25)),
+
+                // 💎 Contenedor principal (Glass Blur optimizado)
+                SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: EdgeInsets.only(
+                    top: 30,
+                    bottom: MediaQuery.of(context).viewInsets.bottom + 40,
+                  ),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight * 0.8,
+                      ),
+                      child: IntrinsicHeight(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(28),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(
+                              sigmaX: 10,
+                              sigmaY: 10,
+                            ), // 🔥 Blur más ligero → fondo más visible
+                            child: Container(
+                              width: size.width * 0.88,
+                              constraints: const BoxConstraints(maxWidth: 430),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 28,
+                                vertical: 36,
+                              ),
+                              decoration: BoxDecoration(
+                                // 🔵 Más transparencia → siluetas perceptibles
+                                color: Colors.white.withOpacity(0.04),
+                                borderRadius: BorderRadius.circular(26),
+                                border: Border.all(
+                                  color: Colors.white
+                                      .withOpacity(0.15), // borde visible
+                                  width: 1.0,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.blueAccent.withOpacity(0.18),
+                                    blurRadius: 25,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
+                              ),
+                              child: _buildContent(context),
+                            ),
+                          ),
+                        ).animate().fadeIn(duration: 900.ms).slideY(begin: 0.1),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 
+  // ===============================================================
+  // 🧩 Contenido principal
+  // ===============================================================
   Widget _buildContent(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Logo y nombre
-        Image.asset(
-          'assets/icons/draftclub_logo.png',
-          height: 80,
-        ).animate().fadeIn(duration: 600.ms),
+        Image.asset('assets/icons/draftclub_logo.png', height: 80)
+            .animate()
+            .fadeIn(duration: 600.ms),
+        const SizedBox(height: 10),
+        const Text(
+          'Tu carrera comienza aquí',
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.8,
+          ),
+        ),
         const SizedBox(height: 10),
         const Text(
           'DraftClub',
@@ -182,7 +223,6 @@ class _LoginPageState extends State<LoginPage> {
           style: TextStyle(color: Colors.grey, fontSize: 14),
         ),
         const SizedBox(height: 32),
-
         _buildInputField(
           controller: _emailController,
           label: 'Correo electrónico',
@@ -196,12 +236,8 @@ class _LoginPageState extends State<LoginPage> {
           isPassword: true,
         ),
         const SizedBox(height: 24),
-
-        // Botón principal
         _buildMainButton(),
         const SizedBox(height: 20),
-
-        // Cambiar entre login / registro
         TextButton(
           onPressed: () => setState(() => isLogin = !isLogin),
           child: Text(
@@ -211,7 +247,6 @@ class _LoginPageState extends State<LoginPage> {
             style: const TextStyle(color: Colors.grey, fontSize: 13),
           ),
         ),
-
         const SizedBox(height: 10),
         Row(
           children: const [
@@ -226,27 +261,14 @@ class _LoginPageState extends State<LoginPage> {
             Expanded(child: Divider(color: Colors.white24)),
           ],
         ),
-
         const SizedBox(height: 22),
-
-        // Botones sociales
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _socialButton(
-              asset: 'assets/icons/facebook_logo.png',
-              color: const Color(0xFF1877F2),
-              onTap: _handleFacebookLogin,
-            ),
-            const SizedBox(width: 26),
-            _socialButton(
-              asset: 'assets/icons/google_logo.png',
-              color: const Color(0xFFDB4437),
-              onTap: _handleGoogleLogin,
-            ),
-          ],
+        Center(
+          child: _socialButton(
+            asset: 'assets/icons/google_logo.png',
+            color: const Color(0xFFDB4437),
+            onTap: _handleGoogleLogin,
+          ),
         ),
-
         if (errorMessage.isNotEmpty) ...[
           const SizedBox(height: 20),
           Text(
@@ -260,7 +282,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // ===============================================================
-  // 🧩 Widgets auxiliares
+  // 🔧 Widgets auxiliares
   // ===============================================================
   Widget _buildInputField({
     required TextEditingController controller,

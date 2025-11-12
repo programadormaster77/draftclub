@@ -560,35 +560,13 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
 
         return Scaffold(
           backgroundColor: const Color(0xFF0E0E0E),
-          appBar: AppBar(
-            title: Text(room.name,
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            backgroundColor: Colors.black,
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.amp_stories_rounded,
-                    color: Colors.blueAccent),
-                tooltip: 'Compartir por ID',
-                onPressed: () => _openShareIdSheet(room),
-              ),
-              if (isCreator)
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: Colors.white),
-                  onSelected: (v) {
-                    if (v == 'editar') _openEditModal(room);
-                    if (v == 'eliminar') _confirmDelete(room);
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'editar', child: Text('Editar sala')),
-                    PopupMenuItem(
-                        value: 'eliminar', child: Text('Eliminar sala')),
-                  ],
-                ),
-            ],
-          ),
+
+          // 🚫 Quitamos el AppBar para que no se duplique con el del DashboardPage.
+          // Conservamos el cuerpo tal cual.
           body: _loading
               ? const Center(
-                  child: CircularProgressIndicator(color: Colors.blueAccent))
+                  child: CircularProgressIndicator(color: Colors.blueAccent),
+                )
               : _buildRoomBody(room, isCreator, joined),
         );
       },
