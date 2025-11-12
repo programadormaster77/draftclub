@@ -12,9 +12,9 @@ import 'package:image_picker/image_picker.dart';
 /// ✅ Carga mensajes en tiempo real.
 /// ✅ Envía texto e imágenes.
 /// ✅ Actualiza automáticamente lastMessage y updatedAt.
-/// ✅ Marca el chat como leído al entrar y al recibir mensajes.
+/// ✅ Marca el chat como leído.
 /// ✅ Scroll automático al final.
-/// ✅ Diseño coherente con el tema oscuro DraftClub.
+/// ✅ Maneja campos nulos de forma segura.
 /// ============================================================================
 class ChatPage extends StatefulWidget {
   final String chatId;
@@ -43,11 +43,11 @@ class _ChatPageState extends State<ChatPage> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   bool _sending = false;
+  bool _firstLoad = true;
 
   @override
   void initState() {
     super.initState();
-    // ✅ Marcar como leído al abrir el chat
     _service.markChatAsRead(widget.chatId);
   }
 
@@ -63,7 +63,7 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _sendMessage({String? text, File? imageFile}) async {
     if ((text == null || text.trim().isEmpty) && imageFile == null) return;
     final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null || _sending) return;
 
     setState(() => _sending = true);
 
@@ -71,22 +71,21 @@ class _ChatPageState extends State<ChatPage> {
       String? imageUrl;
       String lastMsgPreview = '';
 
-      // ✅ Subir imagen si aplica
       if (imageFile != null) {
+        final fileName =
+            '${DateTime.now().millisecondsSinceEpoch}_${uid}.jpg';
         final ref = _storage
             .ref()
-            .child('chats/${widget.chatId}/${DateTime.now().millisecondsSinceEpoch}.jpg');
+            .child('chats/${widget.chatId}/$fileName');
         await ref.putFile(imageFile);
         imageUrl = await ref.getDownloadURL();
         lastMsgPreview = '📸 Imagen';
       }
 
-      // ✅ Texto
       if (text != null && text.trim().isNotEmpty) {
         lastMsgPreview = text.trim();
       }
 
-      // ✅ Envía mensaje con ChatService (ya actualiza unread)
       await _service.sendMessage(
         chatId: widget.chatId,
         text: text ?? '',
@@ -95,17 +94,17 @@ class _ChatPageState extends State<ChatPage> {
 
       _msgCtrl.clear();
       _scrollToBottom();
-
-      // ✅ Al enviar, marca el chat como leído (por seguridad)
       _service.markChatAsRead(widget.chatId);
     } catch (e) {
-      debugPrint('Error enviando mensaje: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error al enviar: $e'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      debugPrint('⚠️ Error enviando mensaje: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al enviar mensaje: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     } finally {
       setState(() => _sending = false);
     }
@@ -113,19 +112,19 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(
-        source: ImageSource.gallery, imageQuality: 80);
+    final picked =
+        await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
     if (picked != null) {
       await _sendMessage(imageFile: File(picked.path));
     }
   }
 
   void _scrollToBottom() {
-    Future.delayed(const Duration(milliseconds: 300), () {
+    Future.delayed(const Duration(milliseconds: 200), () {
       if (_scrollCtrl.hasClients) {
         _scrollCtrl.animateTo(
           0,
-          duration: const Duration(milliseconds: 300),
+          duration: const Duration(milliseconds: 250),
           curve: Curves.easeOut,
         );
       }
@@ -172,6 +171,16 @@ class _ChatPageState extends State<ChatPage> {
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _messagesStream(),
               builder: (context, snap) {
+                if (snap.hasError) {
+                  debugPrint("🔥 Error cargando mensajes: ${snap.error}");
+                  return const Center(
+                    child: Text(
+                      'Error al cargar mensajes',
+                      style: TextStyle(color: Colors.redAccent),
+                    ),
+                  );
+                }
+
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator(color: Colors.blueAccent),
@@ -188,10 +197,13 @@ class _ChatPageState extends State<ChatPage> {
                   );
                 }
 
-                // ✅ Marcar como leído si llegan nuevos mensajes
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _service.markChatAsRead(widget.chatId);
-                });
+                if (_firstLoad) {
+                  _firstLoad = false;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _scrollToBottom();
+                    _service.markChatAsRead(widget.chatId);
+                  });
+                }
 
                 return ListView.builder(
                   reverse: true,
@@ -202,10 +214,11 @@ class _ChatPageState extends State<ChatPage> {
                   itemBuilder: (_, i) {
                     final msg = messages[i].data();
                     final isMe = _isMyMessage(msg['senderId']);
-                    final text = msg['text'] ?? '';
-                    final imageUrl = msg['imageUrl'] ?? '';
-                    final createdAt =
-                        (msg['createdAt'] as Timestamp?)?.toDate();
+                    final text = (msg['text'] ?? '') as String;
+                    final imageUrl = (msg['imageUrl'] ?? '') as String;
+                    final createdAt = (msg['createdAt'] is Timestamp)
+                        ? (msg['createdAt'] as Timestamp).toDate()
+                        : null;
 
                     return Align(
                       alignment:
@@ -218,7 +231,7 @@ class _ChatPageState extends State<ChatPage> {
                         ),
                         decoration: BoxDecoration(
                           color: isMe
-                              ? Colors.blueAccent.withOpacity(0.8)
+                              ? Colors.blueAccent.withOpacity(0.85)
                               : Colors.white12,
                           borderRadius: BorderRadius.circular(14),
                         ),
@@ -230,9 +243,13 @@ class _ChatPageState extends State<ChatPage> {
                                 borderRadius: BorderRadius.circular(10),
                                 child: Image.network(
                                   imageUrl,
-                                  width: 200,
-                                  height: 200,
+                                  width: 220,
+                                  height: 220,
                                   fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const Icon(
+                                      Icons.broken_image,
+                                      color: Colors.white30,
+                                      size: 60),
                                 ),
                               ),
                             if (text.isNotEmpty)
@@ -285,8 +302,7 @@ class _ChatPageState extends State<ChatPage> {
                       maxLines: 4,
                       decoration: InputDecoration(
                         hintText: 'Escribe un mensaje...',
-                        hintStyle:
-                            const TextStyle(color: Colors.white38),
+                        hintStyle: const TextStyle(color: Colors.white38),
                         filled: true,
                         fillColor: const Color(0xFF2A2A2A),
                         contentPadding: const EdgeInsets.symmetric(
@@ -306,8 +322,9 @@ class _ChatPageState extends State<ChatPage> {
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.blueAccent),
+                              strokeWidth: 2,
+                              color: Colors.blueAccent,
+                            ),
                           ),
                         )
                       : IconButton(

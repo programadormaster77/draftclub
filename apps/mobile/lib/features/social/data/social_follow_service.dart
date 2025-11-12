@@ -2,12 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// ============================================================================
-/// ❤️ SocialFollowService — Gestión de Seguidores y Seguidos (v2.2)
+/// ❤️ SocialFollowService — Gestión de Seguidores y Seguidos (v3.0 PRO)
 /// ============================================================================
 /// ✅ Centraliza toda la lógica de follow/unfollow.
-/// ✅ Evita duplicados mediante transacciones.
+/// ✅ Actualiza contadores globales (followersCount / followingCount).
 /// ✅ Streams en tiempo real para UI reactiva.
-/// ✅ Incluye comprobaciones de seguridad.
+/// ✅ Previene duplicados y asegura consistencia con transacciones.
+/// ✅ Eficiente para Firestore a gran escala.
 /// ============================================================================
 
 class SocialFollowService {
@@ -19,10 +20,20 @@ class SocialFollowService {
     final me = _auth.currentUser?.uid;
     if (me == null || me == targetUserId) return;
 
-    final myFollowingRef =
-        _firestore.collection('users').doc(me).collection('following').doc(targetUserId);
-    final hisFollowersRef =
-        _firestore.collection('users').doc(targetUserId).collection('followers').doc(me);
+    final myFollowingRef = _firestore
+        .collection('users')
+        .doc(me)
+        .collection('following')
+        .doc(targetUserId);
+
+    final hisFollowersRef = _firestore
+        .collection('users')
+        .doc(targetUserId)
+        .collection('followers')
+        .doc(me);
+
+    final userRef = _firestore.collection('users').doc(me);
+    final targetRef = _firestore.collection('users').doc(targetUserId);
 
     await _firestore.runTransaction((tx) async {
       final current = await tx.get(myFollowingRef);
@@ -31,11 +42,27 @@ class SocialFollowService {
         // 🚫 Dejar de seguir
         tx.delete(myFollowingRef);
         tx.delete(hisFollowersRef);
+
+        // 🔄 Actualizar contadores globales
+        tx.update(userRef, {
+          'followingCount': FieldValue.increment(-1),
+        });
+        tx.update(targetRef, {
+          'followersCount': FieldValue.increment(-1),
+        });
       } else {
         // ✅ Seguir
         final data = {'since': FieldValue.serverTimestamp()};
         tx.set(myFollowingRef, data);
         tx.set(hisFollowersRef, data);
+
+        // 🔄 Actualizar contadores globales
+        tx.update(userRef, {
+          'followingCount': FieldValue.increment(1),
+        });
+        tx.update(targetRef, {
+          'followersCount': FieldValue.increment(1),
+        });
       }
     });
   }
@@ -55,7 +82,7 @@ class SocialFollowService {
     return doc.exists;
   }
 
-  /// 🔹 Obtener stream de seguidores en tiempo real
+  /// 🔹 Stream de IDs de seguidores en tiempo real
   Stream<List<String>> getFollowers(String userId) {
     return _firestore
         .collection('users')
@@ -65,7 +92,7 @@ class SocialFollowService {
         .map((snap) => snap.docs.map((d) => d.id).toList());
   }
 
-  /// 🔹 Obtener stream de seguidos (usuarios que sigo)
+  /// 🔹 Stream de IDs de seguidos (usuarios que sigo)
   Stream<List<String>> getFollowing(String userId) {
     return _firestore
         .collection('users')
@@ -75,7 +102,7 @@ class SocialFollowService {
         .map((snap) => snap.docs.map((d) => d.id).toList());
   }
 
-  /// 🔹 Contar seguidores (una sola lectura, no stream)
+  /// 🔹 Contar seguidores (una sola lectura)
   Future<int> countFollowers(String userId) async {
     final snap = await _firestore
         .collection('users')
@@ -85,7 +112,7 @@ class SocialFollowService {
     return snap.size;
   }
 
-  /// 🔹 Contar seguidos (una sola lectura, no stream)
+  /// 🔹 Contar seguidos (una sola lectura)
   Future<int> countFollowing(String userId) async {
     final snap = await _firestore
         .collection('users')

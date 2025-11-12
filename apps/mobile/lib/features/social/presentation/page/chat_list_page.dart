@@ -10,8 +10,7 @@ import 'package:flutter/material.dart';
 /// ✅ Muestra todos los chats del usuario actual.
 /// ✅ Escucha actualizaciones en tiempo real desde Firestore.
 /// ✅ Muestra nombre, avatar, último mensaje y hora.
-/// ✅ Optimizado para rendimiento (menos lecturas de usuario).
-/// ✅ Navega a ChatPage al tocar una conversación.
+/// ✅ Tolerante a datos incompletos (sin `updatedAt`, etc.)
 /// ============================================================================
 class ChatListPage extends StatelessWidget {
   const ChatListPage({super.key});
@@ -38,7 +37,7 @@ class ChatListPage extends StatelessWidget {
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: service.getUserChats(),
+        stream: _safeChatStream(service),
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(
@@ -47,9 +46,12 @@ class ChatListPage extends StatelessWidget {
           }
 
           if (snap.hasError) {
+            debugPrint("🔥 Error cargando chats: ${snap.error}");
             return const Center(
-              child: Text('Error al cargar los chats',
-                  style: TextStyle(color: Colors.redAccent)),
+              child: Text(
+                'Error al cargar los chats',
+                style: TextStyle(color: Colors.redAccent),
+              ),
             );
           }
 
@@ -82,13 +84,17 @@ class ChatListPage extends StatelessWidget {
                 return const SizedBox.shrink();
               }
 
-              final otherUid =
-                  participants.firstWhere((uid) => uid != currentUid, orElse: () => '');
+              final otherUid = participants.firstWhere(
+                (uid) => uid != currentUid,
+                orElse: () => '',
+              );
 
               if (otherUid.isEmpty) return const SizedBox.shrink();
 
-              final lastMessage = chat['lastMessage'] ?? '';
-              final updatedAt = (chat['updatedAt'] as Timestamp?)?.toDate();
+              final lastMessage = (chat['lastMessage'] ?? '') as String;
+              final updatedAt = (chat['updatedAt'] is Timestamp)
+                  ? (chat['updatedAt'] as Timestamp).toDate()
+                  : null;
 
               return StreamBuilder<DocumentSnapshot>(
                 stream: FirebaseFirestore.instance
@@ -129,8 +135,9 @@ class ChatListPage extends StatelessWidget {
                       ),
                     ),
                     subtitle: Text(
-                      lastMessage,
-                      style: const TextStyle(color: Colors.white60, fontSize: 13),
+                      lastMessage.isNotEmpty ? lastMessage : 'Mensaje vacío',
+                      style:
+                          const TextStyle(color: Colors.white60, fontSize: 13),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -163,6 +170,23 @@ class ChatListPage extends StatelessWidget {
         },
       ),
     );
+  }
+
+  /// ============================================================
+  /// 🛡️ Fallback seguro si `orderBy('updatedAt')` lanza error
+  /// ============================================================
+  Stream<QuerySnapshot> _safeChatStream(ChatService service) {
+    try {
+      return service.getUserChats();
+    } catch (e) {
+      debugPrint('⚠️ Error en stream principal: $e');
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return const Stream.empty();
+      return FirebaseFirestore.instance
+          .collection('chats')
+          .where('participants', arrayContains: uid)
+          .snapshots(); // ✅ sin orderBy, pero evita crash
+    }
   }
 
   /// 🔹 Formatea la hora o día del último mensaje

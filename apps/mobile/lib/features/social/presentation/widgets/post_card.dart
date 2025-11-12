@@ -10,6 +10,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import 'package:visibility_detector/visibility_detector.dart'; // ✅ para auto-pausa por visibilidad
 
 /// ============================================================================
 /// 🖼️ PostCard — Tarjeta del feed social (versión PRO++ completa)
@@ -362,6 +363,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     final medias = widget.post.mediaUrls;
     final hasMedia = medias.isNotEmpty;
 
+    // ⬇️ La UI completa continúa en la Parte 2
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -453,7 +455,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 ),
               ),
 
-            // --------------------- TAGS / MENCIONES (opcional, liviano) ------
+            // --------------------- TAGS / MENCIONES ---------------------
             if (widget.post.tags.isNotEmpty || widget.post.mentions.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
@@ -538,7 +540,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     return '${two(date.day)}/${two(date.month)}/${date.year} ${two(date.hour)}:${two(date.minute)}';
   }
 }
-
 /// ============================================================================
 /// Widgets auxiliares: Avatar/Skeletons/Chips
 /// ============================================================================
@@ -648,7 +649,6 @@ class _MediaCarouselState extends State<_MediaCarousel> {
 
   @override
   Widget build(BuildContext context) {
-    // Aspecto estándar 4:5 para consistencia visual de feed
     return AspectRatio(
       aspectRatio: 4 / 5,
       child: Stack(
@@ -690,7 +690,7 @@ class _MediaCarouselState extends State<_MediaCarousel> {
             child: const Icon(Icons.favorite, color: Colors.white70, size: 88),
           ),
 
-          // Indicadores de página
+          // Indicadores
           Positioned(
             bottom: 10,
             child: Container(
@@ -735,7 +735,7 @@ class _MediaSkeleton extends StatelessWidget {
   }
 }
 
-/// Placeholder cuando no hay medias: muestra ícono + anima heart en double-tap.
+/// Placeholder cuando no hay medias.
 class _EmptyMediaPlaceholder extends StatelessWidget {
   final VoidCallback onDoubleTap;
   final Animation<double> heartScale;
@@ -777,7 +777,7 @@ class _EmptyMediaPlaceholder extends StatelessWidget {
 }
 
 /// ============================================================================
-/// Botón “Seguir” usando SocialFollowService (sin listeners manuales).
+/// Botón “Seguir” usando SocialFollowService.
 /// ============================================================================
 class _FollowButton extends StatefulWidget {
   final String authorId;
@@ -857,8 +857,7 @@ class _FollowButtonState extends State<_FollowButton> {
 }
 
 /// ============================================================================
-/// Player de video minimalista con loop/mute y tap-to-play/pause.
-/// `fill=true` permite ajustar dentro de AspectRatio externo (carrusel).
+/// 🎬 Player de video mejorado: sonido ON/OFF + auto-pausa por visibilidad.
 /// ============================================================================
 class _VideoPreview extends StatefulWidget {
   final String url;
@@ -872,16 +871,20 @@ class _VideoPreview extends StatefulWidget {
 class _VideoPreviewState extends State<_VideoPreview> {
   late final VideoPlayerController _controller;
   bool _initialized = false;
+  bool _muted = false;
+  bool _visible = true;
 
   @override
   void initState() {
     super.initState();
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
       ..setLooping(true)
-      ..setVolume(0)
       ..initialize().then((_) {
         if (!mounted) return;
-        setState(() => _initialized = true);
+        setState(() {
+          _initialized = true;
+          _controller.play(); // 🔁 autoplay
+        });
       });
   }
 
@@ -891,24 +894,30 @@ class _VideoPreviewState extends State<_VideoPreview> {
     super.dispose();
   }
 
-  void _toggle() {
+  void _togglePlay() {
     if (!_initialized) return;
     setState(() {
       _controller.value.isPlaying ? _controller.pause() : _controller.play();
     });
   }
 
+  void _toggleMute() {
+    if (!_initialized) return;
+    setState(() {
+      _muted = !_muted;
+      _controller.setVolume(_muted ? 0 : 1);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (!_initialized) {
-      return const _MediaSkeleton();
-    }
+    if (!_initialized) return const _MediaSkeleton();
 
     final aspect = _controller.value.aspectRatio == 0
         ? 16 / 9
         : _controller.value.aspectRatio;
 
-    final child = Stack(
+    final player = Stack(
       alignment: Alignment.center,
       children: [
         FittedBox(
@@ -920,7 +929,7 @@ class _VideoPreviewState extends State<_VideoPreview> {
           ),
         ),
         GestureDetector(
-          onTap: _toggle,
+          onTap: _togglePlay,
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 180),
             opacity: _controller.value.isPlaying ? 0 : 1,
@@ -928,37 +937,49 @@ class _VideoPreviewState extends State<_VideoPreview> {
                 size: 64, color: Colors.white70),
           ),
         ),
+        // Botón mute/unmute
         Positioned(
           right: 8,
           bottom: 8,
           child: IconButton(
             icon: Icon(
-              _controller.value.isPlaying
-                  ? Icons.pause_circle_filled
-                  : Icons.play_circle_filled,
-              color: Colors.white70,
-              size: 28,
+              _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+              color: Colors.white,
+              size: 26,
             ),
-            onPressed: _toggle,
+            onPressed: _toggleMute,
           ),
         ),
       ],
     );
 
-    if (widget.fill) {
-      // El contenedor padre controla el aspect ratio (carrusel 4:5)
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: child,
-      );
-    }
-
-    return AspectRatio(
-      aspectRatio: aspect,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: child,
-      ),
+    final wrapped = VisibilityDetector(
+      key: Key(widget.url),
+      onVisibilityChanged: (info) {
+        final visible = info.visibleFraction > 0.2;
+        if (visible != _visible && _initialized) {
+          _visible = visible;
+          if (visible) {
+            if (!_controller.value.isPlaying) _controller.play();
+          } else {
+            _controller.pause();
+          }
+        }
+      },
+      child: widget.fill
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: player,
+            )
+          : AspectRatio(
+              aspectRatio: aspect,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: player,
+              ),
+            ),
     );
+
+    return wrapped;
   }
 }

@@ -7,18 +7,20 @@ import '../../social/data/social_follow_service.dart';
 import '../../social/domain/entities/post.dart';
 import '../../social/presentation/page/post_detail_page.dart';
 import '../../social/presentation/page/follow_list_page.dart';
+import '../../social/presentation/widgets/recommended_users_widget.dart';
 import 'package:draftclub_mobile/features/notifications/presentation/notifications_settings_page.dart';
-
 import 'edit_profile_page.dart';
 
-/// ===============================================================
-/// 🧾 ProfilePage — Perfil del jugador (versión PRO con sincronización)
-/// ===============================================================
-/// - Muestra datos en tiempo real desde Firestore.
-/// - Incluye botón seguir / editar.
-/// - Contadores dinámicos y parrilla tipo Instagram.
-/// - Refresca automáticamente al volver de otras páginas.
-/// ===============================================================
+/// ============================================================================
+/// 🧾 ProfilePage — Perfil del jugador (Versión PRO++ 2025)
+/// ============================================================================
+/// ✅ Muestra datos en tiempo real desde Firestore.
+/// ✅ Incluye botón seguir / editar.
+/// ✅ Contadores reactivos y sección de sugerencias.
+/// ✅ Parrilla de publicaciones tipo Instagram.
+/// ✅ Integrado con SocialFollowService v3 (seguimiento sincronizado).
+/// ============================================================================
+
 class ProfilePage extends StatefulWidget {
   final String? userId;
 
@@ -132,8 +134,6 @@ class _ProfilePageState extends State<ProfilePage> {
           final rank = data['rank'] ?? 'Bronce';
           final xp = (data['xp'] ?? 0).toInt();
           final photoUrl = data['photoUrl'];
-          final followers = data['followersCount'] ?? 0;
-          final following = data['followingCount'] ?? 0;
           final posts = data['postsCount'] ?? 0;
           final partidos = (data['matches'] ?? 0).toString();
           final victorias = (data['wins'] ?? 0).toString();
@@ -193,48 +193,68 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 const SizedBox(height: 16),
 
-                // 👥 CONTADORES SOCIALES (clicables)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _CounterButton(
-                      label: 'Seguidores',
-                      value: followers,
-                      onTap: () async {
-                        await _refreshAfterReturn(() async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => FollowListPage(
-                                userId: userId,
-                                showFollowers: true,
-                              ),
+                // 👥 CONTADORES SOCIALES + SUGERENCIAS
+                StreamBuilder<List<String>>(
+                  stream: _followService.getFollowers(userId),
+                  builder: (context, followersSnap) {
+                    final followersCount = followersSnap.data?.length ?? 0;
+                    return StreamBuilder<List<String>>(
+                      stream: _followService.getFollowing(userId),
+                      builder: (context, followingSnap) {
+                        final followingCount =
+                            followingSnap.data?.length ?? 0;
+
+                        return Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _CounterButton(
+                                  label: 'Seguidores',
+                                  value: followersCount,
+                                  onTap: () async {
+                                    await _refreshAfterReturn(() async {
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => FollowListPage(
+                                            userId: userId,
+                                            showFollowers: true,
+                                          ),
+                                        ),
+                                      );
+                                    });
+                                  },
+                                ),
+                                const SizedBox(width: 20),
+                                _CounterButton(
+                                  label: 'Seguidos',
+                                  value: followingCount,
+                                  onTap: () async {
+                                    await _refreshAfterReturn(() async {
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => FollowListPage(
+                                            userId: userId,
+                                            showFollowers: false,
+                                          ),
+                                        ),
+                                      );
+                                    });
+                                  },
+                                ),
+                                const SizedBox(width: 20),
+                                _SocialCounter(label: 'Posts', value: posts),
+                              ],
                             ),
-                          );
-                        });
+                            // 🌟 SUGERENCIAS DE JUGADORES
+                            const RecommendedUsersWidget(),
+                          ],
+                        );
                       },
-                    ),
-                    const SizedBox(width: 20),
-                    _CounterButton(
-                      label: 'Seguidos',
-                      value: following,
-                      onTap: () async {
-                        await _refreshAfterReturn(() async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => FollowListPage(
-                                userId: userId,
-                                showFollowers: false,
-                              ),
-                            ),
-                          );
-                        });
-                      },
-                    ),
-                    const SizedBox(width: 20),
-                    _SocialCounter(label: 'Posts', value: posts),
-                  ],
+                    );
+                  },
                 ),
 
                 const SizedBox(height: 20),
@@ -293,8 +313,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 const SizedBox(height: 30),
 
-//////////////// 🧩 BOTONES ///////////////////
-                //////////////// 🧩 BOTONES ///////////////////
+                // 🧩 BOTONES DE ACCIÓN
                 if (isMyProfile) ...[
                   ElevatedButton.icon(
                     onPressed: () async {
@@ -321,14 +340,13 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ),
                   const SizedBox(height: 14),
-
-                  // 🔔 AJUSTES DE NOTIFICACIONES
                   ElevatedButton.icon(
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const NotificationsSettingsPage(),
+                          builder: (_) =>
+                              const NotificationsSettingsPage(),
                         ),
                       );
                     },
@@ -349,28 +367,6 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ),
                   ),
-
-                  const SizedBox(height: 14),
-
-                  // 🟡 PANEL DE ADMINISTRADOR (solo si role == 'admin')
-                  if (data['role'] == 'admin')
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pushNamed(context, '/admin_notifications');
-                      },
-                      icon: const Icon(Icons.admin_panel_settings_outlined,
-                          color: Colors.black),
-                      label: const Text('Panel de notificaciones'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.amberAccent,
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 14, horizontal: 40),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                    ),
                 ] else
                   ElevatedButton(
                     onPressed: _isLoadingFollow ? null : _toggleFollow,
@@ -402,7 +398,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 const SizedBox(height: 40),
 
-                // ===================== 🖼️ PARRILLA DE POSTS =====================
+                // 🖼️ PARRILLA DE POSTS
                 _UserPostsGrid(userId: userId),
               ],
             ),
@@ -413,9 +409,9 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 }
 
-/// ===============================================================
+/// ============================================================================
 /// 📸 _UserPostsGrid — Grilla de publicaciones del usuario
-/// ===============================================================
+/// ============================================================================
 class _UserPostsGrid extends StatelessWidget {
   final String userId;
   const _UserPostsGrid({required this.userId});
@@ -502,9 +498,9 @@ class _UserPostsGrid extends StatelessWidget {
   }
 }
 
-/// ===============================================================
+/// ============================================================================
 /// 🔢 _CounterButton — Contador con acción (clicable)
-/// ===============================================================
+/// ============================================================================
 class _CounterButton extends StatelessWidget {
   final String label;
   final int value;
@@ -536,9 +532,9 @@ class _CounterButton extends StatelessWidget {
   }
 }
 
-/// ===============================================================
+/// ============================================================================
 /// 📊 _StatCard — Tarjeta reutilizable para estadísticas
-/// ===============================================================
+/// ============================================================================
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;
@@ -572,9 +568,9 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-/// ===============================================================
+/// ============================================================================
 /// 👥 _SocialCounter — Contador simple (sin acción)
-/// ===============================================================
+/// ============================================================================
 class _SocialCounter extends StatelessWidget {
   final String label;
   final int value;

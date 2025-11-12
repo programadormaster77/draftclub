@@ -5,11 +5,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 /// ============================================================================
-/// 📋 FollowListPage — Lista de Seguidores o Seguidos (Versión PRO++)
+/// 📋 FollowListPage — Lista de Seguidores o Seguidos (Versión PRO v3)
 /// ============================================================================
 /// ✅ Muestra lista completa (nombre, nickname, foto, seguir/siguiendo)
-/// ✅ Abre perfil al tocar un usuario.
-/// ✅ Usa SocialFollowService para alternar estados.
+/// ✅ Enlaza a perfiles individuales.
+/// ✅ Actualiza todo en tiempo real.
+/// ✅ Optimizada con streams y control de estado local.
 /// ============================================================================
 
 class FollowListPage extends StatefulWidget {
@@ -77,8 +78,9 @@ class _FollowListPageState extends State<FollowListPage> {
 }
 
 /// ============================================================================
-/// 🔹 Ítem de usuario (foto + nombre + nickname + botón seguir/siguiendo)
+/// 🔹 _UserTile — Ítem de usuario (foto + nombre + nickname + botón seguir)
 /// ============================================================================
+
 class _UserTile extends StatefulWidget {
   final String userId;
   const _UserTile({required this.userId});
@@ -90,32 +92,22 @@ class _UserTile extends StatefulWidget {
 class _UserTileState extends State<_UserTile> {
   final _auth = FirebaseAuth.instance;
   final _followService = SocialFollowService();
+
   bool _isFollowing = false;
   bool _loading = false;
-  Map<String, dynamic>? _userData;
 
   @override
   void initState() {
     super.initState();
-    _loadUser();
+    _checkFollowStatus();
   }
 
-  Future<void> _loadUser() async {
+  Future<void> _checkFollowStatus() async {
     final currentUser = _auth.currentUser;
-    if (currentUser == null) return;
-
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.userId)
-        .get();
-    if (doc.exists) {
-      _userData = doc.data();
-    }
+    if (currentUser == null || currentUser.uid == widget.userId) return;
 
     final following = await _followService.isFollowing(widget.userId);
-    if (mounted) {
-      setState(() => _isFollowing = following);
-    }
+    if (mounted) setState(() => _isFollowing = following);
   }
 
   Future<void> _toggleFollow() async {
@@ -124,6 +116,7 @@ class _UserTileState extends State<_UserTile> {
 
     await _followService.toggleFollow(widget.userId);
     final status = await _followService.isFollowing(widget.userId);
+
     if (mounted) {
       setState(() {
         _isFollowing = status;
@@ -135,66 +128,80 @@ class _UserTileState extends State<_UserTile> {
   @override
   Widget build(BuildContext context) {
     final currentUserId = _auth.currentUser?.uid;
-    if (_userData == null) {
-      return const ListTile(
-        title: Text('Cargando...', style: TextStyle(color: Colors.white54)),
-      );
-    }
 
-    final name = _userData?['name'] ?? _userData?['nickname'] ?? 'Jugador';
-    final nickname = _userData?['nickname'] ?? '';
-    final photoUrl = _userData?['photoUrl'] ?? '';
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.userId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const ListTile(
+            title: Text('Usuario no encontrado',
+                style: TextStyle(color: Colors.white54)),
+          );
+        }
 
-    return ListTile(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ProfilePage(userId: widget.userId),
+        final data = snapshot.data!.data() as Map<String, dynamic>;
+        final name = data['name'] ?? data['nickname'] ?? 'Jugador';
+        final nickname = data['nickname'] ?? '';
+        final photoUrl = data['photoUrl'] ?? '';
+
+        return ListTile(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ProfilePage(userId: widget.userId),
+              ),
+            );
+          },
+          leading: CircleAvatar(
+            radius: 24,
+            backgroundColor: Colors.white12,
+            backgroundImage:
+                (photoUrl.isNotEmpty) ? NetworkImage(photoUrl) : null,
+            child: (photoUrl.isEmpty)
+                ? const Icon(Icons.person, color: Colors.white54)
+                : null,
           ),
+          title: Text(
+            name,
+            style:
+                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          subtitle: nickname.isNotEmpty
+              ? Text('@$nickname',
+                  style: const TextStyle(color: Colors.white54, fontSize: 13))
+              : null,
+          trailing: (currentUserId != null && currentUserId != widget.userId)
+              ? TextButton(
+                  onPressed: _toggleFollow,
+                  style: TextButton.styleFrom(
+                    backgroundColor:
+                        _isFollowing ? Colors.white10 : Colors.blueAccent,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: _loading
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(
+                          _isFollowing ? 'Siguiendo' : 'Seguir',
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12),
+                        ),
+                )
+              : null,
         );
       },
-      leading: CircleAvatar(
-        radius: 24,
-        backgroundColor: Colors.white12,
-        backgroundImage: (photoUrl.isNotEmpty) ? NetworkImage(photoUrl) : null,
-        child: (photoUrl.isEmpty)
-            ? const Icon(Icons.person, color: Colors.white54)
-            : null,
-      ),
-      title: Text(
-        name,
-        style:
-            const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-      ),
-      subtitle: nickname.isNotEmpty
-          ? Text('@$nickname', style: const TextStyle(color: Colors.white54))
-          : null,
-      trailing: (currentUserId != null && currentUserId != widget.userId)
-          ? TextButton(
-              onPressed: _toggleFollow,
-              style: TextButton.styleFrom(
-                backgroundColor:
-                    _isFollowing ? Colors.white10 : Colors.blueAccent,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              child: _loading
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : Text(
-                      _isFollowing ? 'Siguiendo' : 'Seguir',
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-            )
-          : null,
     );
   }
 }
