@@ -8,84 +8,84 @@ import 'package:draftclub_mobile/features/notifications/services/local_notificat
 import 'package:draftclub_mobile/features/notifications/services/notification_router.dart';
 
 /// ============================================================================
-/// 🔔 FcmService — Maneja notificaciones Push (Firebase Cloud Messaging)
+/// 🔔 FcmService — Versión optimizada y estable
 /// ============================================================================
-/// ✅ Solicita permisos (Android/iOS)
-/// ✅ Escucha notificaciones foreground / background / killed
-/// ✅ Sincroniza token automáticamente para TODOS los usuarios (viejos y nuevos)
-/// ✅ Actualiza token cuando cambia
-/// ✅ Envía enlaces (Uri) al NotificationRouter
+/// ✅ Se inicializa solo una vez por sesión
+/// ✅ Elimina loops infinitos y fugas de memoria
+/// ✅ Sin spam de prints
+/// ✅ Registra token solo cuando hay usuario
 /// ============================================================================
+
 class FcmService {
   static final _linkController = StreamController<Uri>.broadcast();
   static Stream<Uri> get linkStream => _linkController.stream;
 
+  static bool _initialized = false; // 🔒 evita reinicialización múltiple
+  static bool get isInitialized => _initialized;
+  static StreamSubscription<User?>? _authListener; // 🔐 escucha sesión activa
+
   /// 🚀 Inicialización principal FCM
   static Future<void> initialize() async {
+    if (_initialized) return;
+    _initialized = true;
+
     final messaging = FirebaseMessaging.instance;
 
     try {
-      // ✅ 1️⃣ Solicitar permisos (solo la primera vez)
-      await messaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
+      // 1️⃣ Solicitar permisos (solo una vez)
+      await messaging.requestPermission(alert: true, badge: true, sound: true);
 
-      // ✅ 2️⃣ Sincronizar token actual (para usuarios existentes o nuevos)
-      await _syncToken();
+      // 2️⃣ Sincronizar token si ya hay usuario
+      await _syncTokenOnce();
 
-      // ✅ 3️⃣ Actualizar token cuando cambia
+      // 3️⃣ Escuchar login/logout para sincronizar token una sola vez
+      _authListener = FirebaseAuth.instance.authStateChanges().listen((user) {
+        if (user != null) {
+          _syncTokenOnce();
+        }
+      });
+
+      // 4️⃣ Listener de token refresh (solo uno)
       FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
-        debugPrint('♻️ Token FCM actualizado automáticamente.');
+        debugPrint('♻️ Token FCM actualizado.');
         await _registerToken(newToken);
       });
 
-      // ✅ 4️⃣ Escuchar mensajes en foreground
-      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        debugPrint('📩 Mensaje FCM foreground: ${message.data}');
-        _handleForegroundNotification(message);
-      });
+      // 5️⃣ Mensajes foreground
+      FirebaseMessaging.onMessage.listen(_handleForegroundNotification);
 
-      // ✅ 5️⃣ Usuario toca notificación (background)
-      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-        _handleNotificationTap(message);
-      });
+      // 6️⃣ Mensajes al tocar notificación
+      FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
 
-      // ✅ 6️⃣ App cerrada (killed)
+      // 7️⃣ Mensaje inicial (app cerrada)
       final initialMsg = await messaging.getInitialMessage();
       if (initialMsg != null) _handleNotificationTap(initialMsg);
 
-      debugPrint('✅ FCM inicializado correctamente');
+      debugPrint('✅ FCM inicializado correctamente (una sola vez)');
     } catch (e) {
       debugPrint('❌ Error inicializando FCM: $e');
     }
   }
 
   /// =========================================================================
-  /// 🔐 _syncToken — Registra el token FCM si hay un usuario autenticado
+  /// 🔐 _syncTokenOnce — Registra token FCM solo si hay usuario activo
   /// =========================================================================
-  static Future<void> _syncToken() async {
+  static Future<void> _syncTokenOnce() async {
     final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
-    if (user == null) {
-      debugPrint('⚠️ Usuario no autenticado todavía, esperando sesión...');
-      // Reintento automático después de 3 s (por si se loguea recién)
-      Future.delayed(const Duration(seconds: 3), _syncToken);
-      return;
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null && token.isNotEmpty) {
+        await _registerToken(token);
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error obteniendo token FCM: $e');
     }
-
-    final token = await FirebaseMessaging.instance.getToken();
-    if (token == null || token.isEmpty) {
-      debugPrint('⚠️ No se pudo obtener token FCM.');
-      return;
-    }
-
-    await _registerToken(token);
   }
 
   /// =========================================================================
-  /// 💾 _registerToken — Guarda o actualiza el token en Firestore
+  /// 💾 _registerToken — Guarda o actualiza token en Firestore
   /// =========================================================================
   static Future<void> _registerToken(String token) async {
     final user = FirebaseAuth.instance.currentUser;
@@ -99,11 +99,13 @@ class FcmService {
       'lastActive': DateTime.now(),
     }, SetOptions(merge: true));
 
-    debugPrint('📡 Token FCM sincronizado correctamente: ${user.uid}');
+    if (kDebugMode) {
+      debugPrint('📡 Token FCM sincronizado correctamente: ${user.uid}');
+    }
   }
 
   /// =========================================================================
-  /// 🟢 Notificación recibida en foreground
+  /// 🟢 Foreground notification
   /// =========================================================================
   static void _handleForegroundNotification(RemoteMessage message) {
     final notification = message.notification;
@@ -112,18 +114,13 @@ class FcmService {
     final title = notification?.title ?? data['title'] ?? 'Nuevo evento';
     final body =
         notification?.body ?? data['body'] ?? 'Tienes una nueva alerta';
-    final link = data['link']; // ej: draftclub://room/xyz123
+    final link = data['link'];
 
-    // Muestra notificación local con sonido de árbitro
-    LocalNotificationService.show(
-      title: title,
-      body: body,
-      payload: link,
-    );
+    LocalNotificationService.show(title: title, body: body, payload: link);
   }
 
   /// =========================================================================
-  /// 🟣 El usuario tocó la notificación (foreground / background / killed)
+  /// 🟣 Tocar notificación → abrir enlace interno
   /// =========================================================================
   static void _handleNotificationTap(RemoteMessage message) {
     final link = message.data['link'];
@@ -136,5 +133,13 @@ class FcmService {
     } catch (e) {
       debugPrint('⚠️ Error procesando link FCM: $e');
     }
+  }
+
+  /// =========================================================================
+  /// 🧹 Limpieza (por si se reinicia sesión)
+  /// =========================================================================
+  static void dispose() {
+    _authListener?.cancel();
+    _initialized = false;
   }
 }

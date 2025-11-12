@@ -170,73 +170,77 @@ class _DashboardPageState extends State<DashboardPage> {
       backgroundColor: const Color(0xFF0E0E0E),
 
       // ===================== APPBAR =====================
-      appBar: currentTitle.isNotEmpty
-          ? AppBar(
-              backgroundColor: Colors.black,
-              elevation: 2,
-              centerTitle: false,
-              title: Text(
-                currentTitle,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              actions: showChatIcon
-                  ? [
-                      StreamBuilder<int>(
-                        stream: _chatService.getUnreadCount(),
-                        builder: (context, snapshot) {
-                          final unread = snapshot.data ?? 0;
-                          return Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.chat_bubble_outline,
-                                    color: Colors.white70),
-                                tooltip: 'Mensajes',
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => const ChatListPage(),
-                                    ),
-                                  );
-                                },
-                              ),
-                              if (unread > 0)
-                                Positioned(
-                                  right: 10,
-                                  top: 8,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.redAccent,
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    constraints: const BoxConstraints(
-                                      minWidth: 18,
-                                      minHeight: 18,
-                                    ),
-                                    child: Text(
-                                      unread.toString(),
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
+      appBar: _currentIndex ==
+              4 // 👈 ajusta este número según la posición de tu pestaña "Perfil"
+          ? null // 🔕 no mostrar AppBar en la pestaña de Perfil
+          : (currentTitle.isNotEmpty
+              ? AppBar(
+                  backgroundColor: Colors.black,
+                  elevation: 2,
+                  centerTitle: false,
+                  title: Text(
+                    currentTitle,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  actions: showChatIcon
+                      ? [
+                          StreamBuilder<int>(
+                            stream: _chatService.getUnreadCount(),
+                            builder: (context, snapshot) {
+                              final unread = snapshot.data ?? 0;
+                              return Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.chat_bubble_outline,
+                                        color: Colors.white70),
+                                    tooltip: 'Mensajes',
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => const ChatListPage(),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  if (unread > 0)
+                                    Positioned(
+                                      right: 10,
+                                      top: 8,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.redAccent,
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                        constraints: const BoxConstraints(
+                                          minWidth: 18,
+                                          minHeight: 18,
+                                        ),
+                                        child: Text(
+                                          unread.toString(),
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ),
-                            ],
-                          );
-                        },
-                      ),
-                    ]
-                  : null,
-            )
-          : null,
+                                ],
+                              );
+                            },
+                          ),
+                        ]
+                      : null,
+                )
+              : null),
 
       // ===================== CUERPO =====================
       body: AnimatedSwitcher(

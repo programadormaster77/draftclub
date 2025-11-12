@@ -385,141 +385,67 @@ class _RoomsPageState extends State<RoomsPage>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0E0E0E),
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: const Text('Salas'),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.blueAccent,
-          labelColor: Colors.white,
-          tabs: const [
-            Tab(text: 'Públicas'),
-            Tab(text: 'Mis salas'),
-            Tab(text: 'Buscar'),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon:
-                const Icon(Icons.add_circle_outline, color: Colors.blueAccent),
-            tooltip: 'Crear nueva sala',
-            onPressed: () async {
-              final created = await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const CreateRoomPage()),
-              );
-              if (created == true && mounted) {
-                setState(() => _roomsFuture = _fetchRooms());
-              }
-            },
-          ),
-        ],
-      ),
-      body: TabBarView(
-        controller: _tabController,
+
+      // 👇 Eliminamos el AppBar local, porque el Dashboard ya muestra "Salas"
+      // y mantenemos la TabBar dentro del cuerpo.
+      body: Column(
         children: [
-          _buildPublicTab(),
-          _buildMyRoomsTab(),
-          const FindRoomPage(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPublicTab() {
-    if (_bootstrapping) {
-      return const Center(
-          child: CircularProgressIndicator(color: Colors.blueAccent));
-    }
-
-    return Column(
-      children: [
-        const SizedBox(height: 10),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: _FiltersCard(
-            useNearby: _useNearby,
-            onToggleNearby: (v) {
-              setState(() {
-                _useNearby = v;
-                _roomsFuture = _fetchRooms();
-              });
-            },
-            currentCityLabel: _filters.cityName ?? _myCity ?? 'Seleccionar…',
-            onPickCity: _pickCity,
-            onClearCity: _clearCity,
-            dateLabel: _filters.date == null
-                ? 'Fecha (opcional)'
-                : '${_filters.date!.day.toString().padLeft(2, '0')}/${_filters.date!.month.toString().padLeft(2, '0')}/${_filters.date!.year}',
-            onPickDate: _pickDate,
-            onClearDate: _clearDate,
+          // =======================================================
+          // 🔹 TabBar superior (antes estaba dentro del AppBar)
+          // =======================================================
+          Container(
+            color: Colors.black,
+            child: TabBar(
+              controller: _tabController,
+              indicatorColor: Colors.blueAccent,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white70,
+              tabs: const [
+                Tab(text: 'Públicas'),
+                Tab(text: 'Mis salas'),
+                Tab(text: 'Buscar'),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
-        Expanded(
-          child: RefreshIndicator(
-            color: Colors.blueAccent,
-            onRefresh: _onRefresh,
-            child: FutureBuilder<List<Room>>(
-              future: _roomsFuture,
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: Colors.blueAccent),
-                  );
-                }
-                if (snap.hasError) {
-                  return Center(
-                    child: Text(
-                      'Error: ${snap.error}',
-                      style: const TextStyle(color: Colors.redAccent),
-                    ),
-                  );
-                }
-                final rooms = snap.data ?? const <Room>[];
 
-                if (rooms.isEmpty) {
-                  return _EmptyState(
-                    title: 'No hay salas públicas según tus filtros',
-                    message:
-                        'Prueba otra fecha, cambia la ciudad o crea tu propia sala.',
-                    actionText: 'Crear una sala',
-                    onAction: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const CreateRoomPage()),
-                      );
-                    },
-                  );
-                }
-
-                return ListView.builder(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
-                  itemCount: rooms.length,
-                  itemBuilder: (_, i) {
-                    final r = rooms[i];
-                    return RoomCard(
-                      room: r,
-                      userLat: _filters.userLat,
-                      userLng: _filters.userLng,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => RoomDetailPage(room: r),
-                          ),
-                        );
-                      },
-                    );
-                  },
+          // =======================================================
+          // 🔹 Botón para crear sala (antes estaba en AppBar.actions)
+          // =======================================================
+          Container(
+            color: const Color(0xFF0E0E0E),
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              icon: const Icon(Icons.add_circle_outline,
+                  color: Colors.blueAccent, size: 28),
+              tooltip: 'Crear nueva sala',
+              onPressed: () async {
+                final created = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CreateRoomPage()),
                 );
+                if (created == true && mounted) {
+                  setState(() => _roomsFuture = _fetchRooms());
+                }
               },
             ),
           ),
-        ),
-      ],
+
+          // =======================================================
+          // 🔹 Contenido principal con las pestañas
+          // =======================================================
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildMyRoomsTab(),
+                _buildMyRoomsTab(),
+                const FindRoomPage(),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

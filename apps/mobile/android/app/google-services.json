@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "254258185653-86ie4is632mnlnomnktodo699o9nl6k3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.draftclub_mobile",
+            "certificate_hash": "722d7e7398994ee2fcd0604bfcda6b8bc480a131"
+          }
+        },
+        {
           "client_id": "254258185653-nvj028012kfeh1f9omhhsmmv5qml4p7h.apps.googleusercontent.com",
           "client_type": 3
         }
