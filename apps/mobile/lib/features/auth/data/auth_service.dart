@@ -1,14 +1,16 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 /// ===============================================================
-/// 🔐 AuthService — Servicio central de autenticación
+/// 🔐 AuthService — Servicio central de autenticación (versión global)
 /// ===============================================================
-/// Maneja el flujo de:
-///  - Registro de usuarios
-///  - Inicio de sesión
-///  - Cierre de sesión
-///  - Escucha en tiempo real del estado de autenticación
+/// 🔹 Compatibilidad total con email/password.
+/// 🔹 Añadido soporte completo para Google y Facebook.
+/// 🔹 Crea automáticamente el documento base `users/<uid>`
+///     en Firestore al registrarse o autenticarse por primera vez.
 /// ===============================================================
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -19,6 +21,10 @@ class AuthService {
   /// 🧩 Obtiene el usuario actual
   User? get currentUser => _auth.currentUser;
 
+  // ===============================================================
+  // 🧱 REGISTRO / LOGIN TRADICIONAL (EMAIL + PASSWORD)
+  // ===============================================================
+
   /// 🆕 Crear un nuevo usuario con email y contraseña
   Future<User?> signUp(String email, String password) async {
     try {
@@ -26,7 +32,14 @@ class AuthService {
         email: email.trim(),
         password: password.trim(),
       );
-      return result.user;
+
+      final user = result.user;
+      if (user != null) {
+        await _createUserDocument(user);
+        debugPrint('✅ Usuario creado y documento base en Firestore listo.');
+      }
+
+      return user;
     } on FirebaseAuthException catch (e) {
       debugPrint('⚠️ Error en signUp: ${e.code} — ${e.message}');
       throw Exception(_mapFirebaseError(e.code));
@@ -43,7 +56,14 @@ class AuthService {
         email: email.trim(),
         password: password.trim(),
       );
-      return result.user;
+
+      final user = result.user;
+      if (user != null) {
+        await _createUserDocument(user);
+        debugPrint('✅ Sesión iniciada y documento Firestore verificado.');
+      }
+
+      return user;
     } on FirebaseAuthException catch (e) {
       debugPrint('⚠️ Error en signIn: ${e.code} — ${e.message}');
       throw Exception(_mapFirebaseError(e.code));
@@ -53,10 +73,95 @@ class AuthService {
     }
   }
 
-  /// 🚪 Cerrar sesión del usuario actual
+  // ===============================================================
+  // 🔵 LOGIN CON GOOGLE
+  // ===============================================================
+
+  Future<User?> signInWithGoogle() async {
+    try {
+      final googleSignIn = GoogleSignIn();
+      final googleUser = await googleSignIn.signIn();
+
+      if (googleUser == null) {
+        debugPrint('🟡 Inicio de sesión con Google cancelado por el usuario.');
+        return null;
+      }
+
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final result = await _auth.signInWithCredential(credential);
+      final user = result.user;
+
+      if (user != null) {
+        await _createUserDocument(user);
+        debugPrint('✅ Sesión iniciada con Google: ${user.email}');
+      }
+
+      return user;
+    } on FirebaseAuthException catch (e) {
+      debugPrint('⚠️ Error Google Sign-In: ${e.code} — ${e.message}');
+      throw Exception('Error al iniciar sesión con Google.');
+    } catch (e) {
+      debugPrint('⚠️ Error desconocido en Google Sign-In: $e');
+      throw Exception('Error al autenticar con Google.');
+    }
+  }
+
+  // ===============================================================
+  // 🔷 LOGIN CON FACEBOOK
+  // ===============================================================
+
+  Future<User?> signInWithFacebook() async {
+    try {
+      final LoginResult result = await FacebookAuth.instance.login(
+        permissions: ['email', 'public_profile'],
+      );
+
+      if (result.status == LoginStatus.success) {
+        final AccessToken token = result.accessToken!;
+        final facebookCredential =
+            FacebookAuthProvider.credential(token.tokenString);
+
+        final userCred = await _auth.signInWithCredential(facebookCredential);
+        final user = userCred.user;
+
+        if (user != null) {
+          await _createUserDocument(user);
+          debugPrint('✅ Sesión iniciada con Facebook: ${user.email}');
+        }
+
+        return user;
+      } else if (result.status == LoginStatus.cancelled) {
+        debugPrint('🟡 Inicio de sesión con Facebook cancelado.');
+        return null;
+      } else {
+        debugPrint('⚠️ Error Facebook Login: ${result.message}');
+        throw Exception(
+            'Error desconocido en el inicio de sesión con Facebook.');
+      }
+    } on FirebaseAuthException catch (e) {
+      debugPrint('⚠️ Error FacebookAuth: ${e.code} — ${e.message}');
+      throw Exception('Error al iniciar sesión con Facebook.');
+    } catch (e) {
+      debugPrint('⚠️ Error general en Facebook Sign-In: $e');
+      throw Exception('Ocurrió un error al autenticar con Facebook.');
+    }
+  }
+
+  // ===============================================================
+  // 🚪 CIERRE DE SESIÓN
+  // ===============================================================
+
   Future<void> signOut() async {
     try {
       await _auth.signOut();
+      await GoogleSignIn().signOut();
+      await FacebookAuth.instance.logOut();
+
       debugPrint('✅ Sesión cerrada correctamente.');
     } on FirebaseAuthException catch (e) {
       debugPrint('⚠️ Error al cerrar sesión: ${e.code} — ${e.message}');
@@ -67,7 +172,32 @@ class AuthService {
     }
   }
 
-  /// 🧠 Traductor de errores de FirebaseAuth a mensajes más claros
+  // ===============================================================
+  // 🧩 Creación / verificación del documento Firestore del usuario
+  // ===============================================================
+
+  Future<void> _createUserDocument(User user) async {
+    final userDoc =
+        FirebaseFirestore.instance.collection('users').doc(user.uid);
+    final snapshot = await userDoc.get();
+
+    if (!snapshot.exists) {
+      await userDoc.set({
+        'uid': user.uid,
+        'email': user.email,
+        'name': user.displayName ?? '',
+        'photoUrl': user.photoURL ?? '',
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      debugPrint('🧾 Documento base creado en Firestore para ${user.email}');
+    }
+  }
+
+  // ===============================================================
+  // 🧠 Traductor de errores Firebase → mensajes legibles
+  // ===============================================================
+
   String _mapFirebaseError(String code) {
     switch (code) {
       case 'invalid-email':

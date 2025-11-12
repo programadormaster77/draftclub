@@ -202,6 +202,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
         ),
       );
 
+      // 🚀 Redirigir al Dashboard después de completar el perfil
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/dashboard');
+      }
+
       Navigator.pop(context);
     } catch (e) {
       debugPrint('⚠️ Error al guardar perfil: $e');
