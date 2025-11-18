@@ -10,7 +10,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:app_links/app_links.dart';
 import 'package:draftclub_mobile/features/profile/domain/xp_bootstrap.dart';
-import 'package:draftclub_mobile/features/notifications/presentation/admin_notification_page.dart'; // 👈 Agrega este import arriba
+import 'package:draftclub_mobile/features/notifications/presentation/admin_notification_page.dart';
 
 // 🌐 Configuración de Firebase
 
@@ -28,8 +28,11 @@ import 'package:draftclub_mobile/features/rooms/models/room_model.dart';
 import 'package:draftclub_mobile/features/notifications/services/fcm_service.dart';
 import 'package:draftclub_mobile/features/notifications/services/local_notification_service.dart';
 
-/// ============================================================================
+// 🛒 IMPORTANTE → necesarias para Navigator.push()
+import 'package:draftclub_mobile/features/locker/presentation/pages/locker_cart_page.dart';
+import 'package:draftclub_mobile/features/locker/admin/locker_admin_page.dart';
 
+/// ============================================================================
 /// 🚀 PUNTO DE ENTRADA PRINCIPAL DE LA APLICACIÓN
 /// ============================================================================
 Future<void> main() async {
@@ -41,13 +44,11 @@ Future<void> main() async {
   // 🔔 Inicializamos notificaciones locales
   await LocalNotificationService.initialize();
 
-  // 🧩 Inicializa servicios globales de notificaciones
-  await LocalNotificationService
-      .initialize(); // notificaciones locales + pitido árbitro
-  await FcmService
-      .initialize(); // registro FCM + handlers foreground/background
+  // 🧩 Inicializa servicios globales
+  await LocalNotificationService.initialize();
+  await FcmService.initialize();
 
-  // ✅ ProviderScope: habilita Riverpod en toda la app
+  // ProviderScope global
   runApp(
     const ProviderScope(
       child: DraftClubApp(),
@@ -68,26 +69,23 @@ class DraftClubApp extends StatefulWidget {
 class _DraftClubAppState extends State<DraftClubApp> {
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _sub;
-  StreamSubscription<Uri>?
-      _notifSub; // 🔔 nuevo: escucha enlaces desde notificaciones
+  StreamSubscription<Uri>? _notifSub;
 
   @override
   void initState() {
     super.initState();
     _initAppLinks();
-    _listenNotificationLinks(); // nuevo
+    _listenNotificationLinks();
   }
 
-  // 🔗 Inicializa el sistema de enlaces "draftclub://room/<ID>"
+  // 🔗 Inicializa el sistema de deep links
   Future<void> _initAppLinks() async {
     try {
       _appLinks = AppLinks();
 
-      // Si la app se abrió desde un enlace (app cerrada)
       final initialUri = await _appLinks.getInitialLink();
       if (initialUri != null) _handleIncomingLink(initialUri);
 
-      // Si la app ya está abierta y llega un nuevo enlace
       _sub = _appLinks.uriLinkStream.listen(
         (Uri uri) => _handleIncomingLink(uri),
         onError: (err) => debugPrint('⚠️ Error al procesar deep link: $err'),
@@ -97,7 +95,6 @@ class _DraftClubAppState extends State<DraftClubApp> {
     }
   }
 
-  // 🔔 Escucha enlaces generados por taps en notificaciones (foreground/background)
   void _listenNotificationLinks() {
     _notifSub = FcmService.linkStream.listen(
       (Uri uri) {
@@ -109,7 +106,7 @@ class _DraftClubAppState extends State<DraftClubApp> {
     );
   }
 
-  /// 🧭 Maneja el enlace entrante y abre la sala real de Firestore
+  /// 🧭 Manejo de enlaces entrantes
   Future<void> _handleIncomingLink(Uri uri) async {
     debugPrint('🔗 Enlace recibido: $uri');
 
@@ -118,7 +115,6 @@ class _DraftClubAppState extends State<DraftClubApp> {
           uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
 
       if (roomId != null && mounted) {
-        // Loader mientras obtenemos la sala
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -134,7 +130,7 @@ class _DraftClubAppState extends State<DraftClubApp> {
               .get();
 
           if (!mounted) return;
-          Navigator.of(context).pop(); // Cierra loader
+          Navigator.of(context).pop();
 
           if (!snap.exists) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -150,9 +146,7 @@ class _DraftClubAppState extends State<DraftClubApp> {
           final room = Room.fromMap(data);
 
           Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => RoomDetailPage(room: room),
-            ),
+            MaterialPageRoute(builder: (_) => RoomDetailPage(room: room)),
           );
         } catch (e) {
           if (mounted) Navigator.of(context).pop();
@@ -170,7 +164,7 @@ class _DraftClubAppState extends State<DraftClubApp> {
   @override
   void dispose() {
     _sub?.cancel();
-    _notifSub?.cancel(); // 🔔 cancelar suscripción a enlaces de notificaciones
+    _notifSub?.cancel();
     super.dispose();
   }
 
@@ -179,14 +173,10 @@ class _DraftClubAppState extends State<DraftClubApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'DraftClub ⚽',
-      theme: AppTheme.darkTheme, // 🎨 Aplica el nuevo tema Arena Pro
-
-      // 🧭 Definimos las rutas disponibles
+      theme: AppTheme.darkTheme,
       routes: {
         '/admin_notifications': (context) => const AdminNotificationPage(),
       },
-
-      // 📍 Pantalla principal según autenticación
       home: const AuthStateHandler(),
     );
   }
@@ -226,21 +216,16 @@ class AuthStateHandler extends StatelessWidget {
               return const ProfileGate();
             }
 
-            // ✅ Asegurar xp=0 si no existe
             XPBootstrap.ensureUserXP();
 
-            // ✅ Solo ejecutar una vez por sesión
             WidgetsBinding.instance.addPostFrameCallback((_) async {
-              // 🔒 Evita inicializaciones duplicadas
               if (!FcmService.isInitialized) {
                 await FcmService.initialize();
               }
 
-              // 🔒 Solo suscribirse a ciudad una vez
               await TopicManager.syncUserTopics(user.uid);
             });
 
-            // 🚀 Finalmente, muestra el dashboard principal
             return const DashboardPage();
           },
         );

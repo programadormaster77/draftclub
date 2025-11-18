@@ -8,11 +8,14 @@ import 'package:draftclub_mobile/features/rooms/presentation/create_room_page.da
 import 'package:draftclub_mobile/features/tournaments/presentation/tournaments_page.dart';
 import 'package:draftclub_mobile/features/profile/presentation/profile_page.dart';
 
+// ⭐ NUEVO IMPORT NECESARIO PARA LOCKER
+import 'package:draftclub_mobile/features/locker/presentation/pages/locker_page.dart';
+
 /// ====================================================================
 /// 🧭 DashboardPage — Control global de navegación inferior (Versión PRO++)
 /// ====================================================================
 /// 🔹 Centro principal de la app después del login.
-/// 🔹 Secciones: Feed, Salas, Crear (+), Torneos, Perfil.
+/// 🔹 Secciones: Feed, Salas, Crear (+), Locker (nuevo), Perfil.
 /// 🔹 Ícono 💬 con contador de mensajes no leídos (solo en Inicio y Perfil).
 /// 🔹 Transición fluida hacia ChatListPage.
 /// 🔹 Diseño limpio, coherente y profesional.
@@ -30,24 +33,24 @@ class _DashboardPageState extends State<DashboardPage> {
   int _currentIndex = 0;
 
   // ================================================================
-  // 📄 PÁGINAS PRINCIPALES
+  // 📄 PÁGINAS PRINCIPALES — ACTUALIZADAS
   // ================================================================
   final List<Widget> _pages = const [
     SocialFeedPage(), // 🏠 Inicio
     RoomsPage(), // ⚽ Salas
     SizedBox(), // (+) Crear
-    TournamentsPage(), // 🏆 Torneos
+    LockerPage(), // 🛒 Locker (nuevo)
     ProfilePage(), // 👤 Perfil
   ];
 
   // ================================================================
-  // 🏷️ TÍTULOS APPBAR
+  // 🏷️ TÍTULOS APPBAR — ACTUALIZADOS
   // ================================================================
   final List<String> _titles = [
     'Inicio',
     'Salas',
     '',
-    'Torneos',
+    'Locker', // 🛒 reemplaza “Torneos”
     'Perfil',
   ];
 
@@ -63,8 +66,8 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // ================================================================
-  // 🧩 MODAL DE CREACIÓN DE CONTENIDO
-  // ================================================================
+// 🧩 MODAL DE CREACIÓN DE CONTENIDO
+// ================================================================
   void _openCreateModal() {
     showModalBottomSheet(
       context: context,
@@ -134,6 +137,26 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
 
                 // ===========================================================
+                // 🛍️ Publicar producto — Locker (Marketplace)
+                // ===========================================================
+                ListTile(
+                  leading: const Icon(Icons.store_mall_directory_rounded,
+                      color: Colors.purpleAccent),
+                  title: const Text(
+                    'Publicar producto (Locker)',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  subtitle: const Text(
+                    'Sube productos de tu tienda o artículos deportivos',
+                    style: TextStyle(color: Colors.white38, fontSize: 13),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, '/locker/admin/create');
+                  },
+                ),
+
+                // ===========================================================
                 // 🏆 Crear torneo — futuro módulo
                 // ===========================================================
                 ListTile(
@@ -170,9 +193,8 @@ class _DashboardPageState extends State<DashboardPage> {
       backgroundColor: const Color(0xFF0E0E0E),
 
       // ===================== APPBAR =====================
-      appBar: _currentIndex ==
-              4 // 👈 ajusta este número según la posición de tu pestaña "Perfil"
-          ? null // 🔕 no mostrar AppBar en la pestaña de Perfil
+      appBar: _currentIndex == 4
+          ? null
           : (currentTitle.isNotEmpty
               ? AppBar(
                   backgroundColor: Colors.black,
@@ -280,10 +302,11 @@ class _DashboardPageState extends State<DashboardPage> {
               icon: Icon(Icons.add_circle, size: 38, color: Colors.blueAccent),
               label: '',
             ),
+            // ⭐ REEMPLAZO COMPLETO DE TORNEOS POR LOCKER
             BottomNavigationBarItem(
-              icon: Icon(Icons.emoji_events_outlined),
-              activeIcon: Icon(Icons.emoji_events, color: Colors.blueAccent),
-              label: 'Torneos',
+              icon: Icon(Icons.storefront_outlined),
+              activeIcon: Icon(Icons.storefront, color: Colors.blueAccent),
+              label: 'Locker',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.person_outline),
