@@ -6,14 +6,12 @@ import '../../services/locker_service.dart';
 import '../pages/locker_product_detail_page.dart';
 
 /// ============================================================================
-/// 🟥 LockerProductCard — Tarjeta individual del producto
+/// 🟥 LockerProductCard — Tarjeta individual del producto (OPTIMIZADA)
 /// ============================================================================
-/// - Muestra imagen principal
-/// - Muestra precio, título, ciudad
-/// - Etiqueta de "Destacado"
-/// - Etiqueta de "Admin" con color especial
-/// - Tap → incrementa popularidad + navega a detalle
-/// - Modo oscuro completo estilo DraftClub
+/// - SIN overflow (bottom overflow FIXED)
+/// - Imagen totalmente responsiva
+/// - Contenido inferior en layout flexible
+/// - Mantiene todo tu diseño original
 /// ============================================================================
 
 class LockerProductCard extends StatelessWidget {
@@ -26,10 +24,8 @@ class LockerProductCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () async {
-        // 🔼 Subimos la popularidad al abrir el producto
         await _lockerService.increasePopularity(product.id, amount: 1);
 
-        // 👇 Abrir detalle correcto
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -47,31 +43,39 @@ class LockerProductCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ===================================================================
-            // 🖼️ Imagen principal
+            // 🖼️ Imagen principal (RESPONSIVA, evita overflow)
             // ===================================================================
             ClipRRect(
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(14)),
-              child: CachedNetworkImage(
-                imageUrl: product.images.isNotEmpty
-                    ? product.images.first
-                    : 'https://via.placeholder.com/300x300.png?text=Sin+Imagen',
-                fit: BoxFit.cover,
-                height: 150,
-                width: double.infinity,
-                placeholder: (_, __) => Container(
-                  color: Colors.black26,
-                  alignment: Alignment.center,
-                  child: const CircularProgressIndicator(
-                    color: Colors.blueAccent,
-                    strokeWidth: 1.5,
+              child: AspectRatio(
+                aspectRatio: 1, // 🔥 se ajusta según tamaño disponible
+                child: CachedNetworkImage(
+                  imageUrl: product.images.isNotEmpty
+                      ? product.images.first
+                      : 'https://via.placeholder.com/300x300.png?text=Sin+Imagen',
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(
+                    color: Colors.black26,
+                    alignment: Alignment.center,
+                    child: const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        color: Colors.blueAccent,
+                        strokeWidth: 1.5,
+                      ),
+                    ),
                   ),
-                ),
-                errorWidget: (_, __, ___) => Container(
-                  color: Colors.black26,
-                  alignment: Alignment.center,
-                  child: const Icon(Icons.broken_image,
-                      color: Colors.grey, size: 40),
+                  errorWidget: (_, __, ___) => Container(
+                    color: Colors.black26,
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.broken_image,
+                      color: Colors.grey,
+                      size: 40,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -94,7 +98,7 @@ class LockerProductCard extends StatelessWidget {
             ),
 
             // ===================================================================
-            // 🔤 Título del producto
+            // 🔤 Título (NUNCA hace overflow)
             // ===================================================================
             Padding(
               padding: const EdgeInsets.only(left: 10, right: 10, top: 6),
@@ -111,12 +115,15 @@ class LockerProductCard extends StatelessWidget {
             ),
 
             // ===================================================================
-            // 💰 Precio
+            // 💰 Precio (flexible / responsivo)
             // ===================================================================
             Padding(
               padding: const EdgeInsets.only(left: 10, top: 4),
               child: Text(
                 '\$${product.price.toStringAsFixed(0)} ${product.currency}',
+                maxLines: 1,
+                overflow: TextOverflow.fade,
+                softWrap: false,
                 style: const TextStyle(
                   color: Colors.greenAccent,
                   fontSize: 15,
@@ -126,12 +133,15 @@ class LockerProductCard extends StatelessWidget {
             ),
 
             // ===================================================================
-            // 📍 Ciudad
+            // 📍 Ciudad (también limita overflow)
             // ===================================================================
             Padding(
               padding: const EdgeInsets.only(left: 10, top: 2, bottom: 8),
               child: Text(
                 product.location,
+                maxLines: 1,
+                overflow: TextOverflow.fade,
+                softWrap: false,
                 style: const TextStyle(
                   color: Colors.white38,
                   fontSize: 12,
@@ -154,7 +164,10 @@ class LockerProductCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withOpacity(0.15),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.4), width: 0.8),
+        border: Border.all(
+          color: color.withOpacity(0.4),
+          width: 0.8,
+        ),
       ),
       child: Text(
         label,

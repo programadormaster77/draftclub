@@ -1,16 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// ============================================================================
-/// 🧱 LockerProductModel — Modelo principal de producto
+/// 🧱 LockerProductModel — Modelo principal de producto (con cityData)
 /// ============================================================================
-/// Representa toda la estructura necesaria para productos del Locker:
-/// - Categorías
-/// - Publicación de admin / usuario / tienda
-/// - Productos patrocinados
-/// - Búsqueda inteligente
-/// - Control de visibilidad interna
-/// ============================================================================
-
 class LockerProductModel {
   final String id;
   final String title;
@@ -32,14 +24,21 @@ class LockerProductModel {
   final String size;
 
   /// 🏪 Tipo de tienda
-  /// - ninguna
-  /// - usuario
-  /// - tienda-local
-  /// - tienda-oficial
   final String storeType;
 
-  /// 📍 Ubicación (ciudad)
+  /// 📍 Ubicación (ciudad) - cadena legible
   final String location;
+
+  /// 🗺️ Información detallada de la ciudad (mapa), puede ser null
+  /// Ejemplo guardado:
+  /// {
+  ///   "name": "Bogotá, Colombia",
+  ///   "placeId": "ChIJKcumLf2bP44RFDmjIFVjnSM",
+  ///   "lat": 4.710988599999999,
+  ///   "lng": -74.072092,
+  ///   "ciudad": "Bogota"
+  /// }
+  final Map<String, dynamic>? cityData;
 
   /// 🔗 Tipo de producto (local | external)
   final String type;
@@ -54,7 +53,7 @@ class LockerProductModel {
   /// 📦 Stock
   final int stock;
 
-  /// 👁️ Visibilidad interna (solo admin puede ocultarlo)
+  /// 👁️ Visibilidad interna
   final bool visibility;
 
   /// ⭐ Destacado
@@ -74,7 +73,7 @@ class LockerProductModel {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  /// 💰 Producto patrocinado (admin / campañas)
+  /// 💰 Producto patrocinado
   final bool isSponsored;
 
   const LockerProductModel({
@@ -90,6 +89,7 @@ class LockerProductModel {
     required this.size,
     required this.storeType,
     required this.location,
+    required this.cityData,
     required this.type,
     required this.externalLink,
     required this.tags,
@@ -119,6 +119,11 @@ class LockerProductModel {
       return [];
     }
 
+    Map<String, dynamic>? safeMap(dynamic raw) {
+      if (raw is Map) return Map<String, dynamic>.from(raw);
+      return null;
+    }
+
     return LockerProductModel(
       id: doc.id,
       title: data['title'] ?? '',
@@ -132,6 +137,7 @@ class LockerProductModel {
       size: data['size'] ?? '',
       storeType: data['storeType'] ?? 'ninguna',
       location: data['location'] ?? 'Global',
+      cityData: safeMap(data['cityData']),
       type: data['type'] ?? 'local',
       externalLink: data['externalLink'],
       tags: safeList(data['tags']),
@@ -167,6 +173,7 @@ class LockerProductModel {
       'size': size,
       'storeType': storeType,
       'location': location,
+      'cityData': cityData,
       'type': type,
       'externalLink': externalLink,
       'tags': tags,
@@ -185,7 +192,7 @@ class LockerProductModel {
   }
 
   /// ========================================================================
-  /// 🔍 buildSearchKeywords
+  /// 🔍 buildSearchKeywords (helper)
   /// ========================================================================
   static List<String> buildSearchKeywords({
     required String title,

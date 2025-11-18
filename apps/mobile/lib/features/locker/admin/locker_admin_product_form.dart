@@ -62,6 +62,11 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
   List<String> images = [];
   bool isLoading = false;
 
+// ======= NUEVAS VARIABLES PARA UBICACIÓN =======
+  Map<String, dynamic>? cityData;
+  final TextEditingController _locationController = TextEditingController();
+// ==============================================
+
   @override
   void initState() {
     super.initState();
@@ -181,6 +186,8 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
       storeType: storeType,
 
       location: location,
+      cityData:
+          cityData, // ← AÑADE ESTO (puede ser null si aún no seleccionaron)
       type: type,
       externalLink: type == 'external' ? externalLink : null,
 
