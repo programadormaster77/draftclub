@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:go_router/go_router.dart'; // 👈 NECESARIO PARA context.push()
+
 import '../../auth/data/auth_service.dart';
 import '../../social/data/social_follow_service.dart';
 import '../../social/domain/entities/post.dart';
@@ -13,13 +15,6 @@ import 'edit_profile_page.dart';
 
 /// ============================================================================
 /// 🧾 ProfilePage — Perfil del jugador (Versión PRO++ 2025)
-/// ============================================================================
-/// ✅ Muestra datos en tiempo real desde Firestore.
-/// ✅ Incluye botón seguir / editar.
-/// ✅ Contadores reactivos y sección de sugerencias.
-/// ✅ Parrilla de publicaciones tipo Instagram.
-/// ✅ Integrado con SocialFollowService v3 (seguimiento sincronizado).
-/// - Mejora estética de estadísticas y AppBar unificado (chat + logout).
 /// ============================================================================
 
 class ProfilePage extends StatefulWidget {
@@ -92,14 +87,15 @@ class _ProfilePageState extends State<ProfilePage> {
         backgroundColor: Colors.black,
         elevation: 2,
         actions: [
-          // 📩 Chat (ajusta la ruta si usas otra)
+          // 📩 Chat — corregido para GoRouter
           IconButton(
             tooltip: 'Mensajes',
             icon: const Icon(Icons.chat_bubble_outline),
             onPressed: () {
-              Navigator.pushNamed(context, '/chat');
+              context.push('/chat'); // 👈 CAMBIO REALIZADO
             },
           ),
+
           // 🔒 Logout (solo en mi perfil)
           if (widget.userId == null)
             IconButton(
@@ -147,13 +143,10 @@ class _ProfilePageState extends State<ProfilePage> {
           final photoUrl = data['photoUrl'];
           final posts = data['postsCount'] ?? 0;
 
-          // 👉 Estadísticas visibles
           final partidos = (data['matches'] ?? 0).toString();
           final victoriasConfirmadas =
-              (data['wins'] ?? 0).toString(); // confirmadas por árbitro
+              (data['wins'] ?? 0).toString();
           final torneos = (data['tournaments'] ?? 0).toString();
-
-          // (No mostramos empates/derrotas por decisión de producto)
 
           final rangos = {
             'Bronce': 0,
@@ -208,7 +201,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 const SizedBox(height: 12),
 
-                // 🏅 Chip de rango (opcional visual, no cambia lógica)
+                // 🏅 Chip de rango
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -226,7 +219,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 const SizedBox(height: 16),
 
-                // 👥 CONTADORES SOCIALES + SUGERENCIAS
+                // CONTADORES SOCIALES
                 StreamBuilder<List<String>>(
                   stream: _followService.getFollowers(userId),
                   builder: (context, followersSnap) {
@@ -281,7 +274,8 @@ class _ProfilePageState extends State<ProfilePage> {
                                 _SocialCounter(label: 'Posts', value: posts),
                               ],
                             ),
-                            // 🌟 SUGERENCIAS DE JUGADORES
+
+                            // 🌟 Sugerencias de jugadores
                             const RecommendedUsersWidget(),
                           ],
                         );
@@ -335,7 +329,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 const SizedBox(height: 30),
 
-                // ⚽ ESTADÍSTICAS — Solo positivas (3 columnas)
+                // ⚽ ESTADÍSTICAS
                 GridView.count(
                   crossAxisCount: 3,
                   crossAxisSpacing: 12,
@@ -356,8 +350,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 const SizedBox(height: 30),
 
-                // 🧩 BOTONES DE ACCIÓN
-                //////////////// 🧩 BOTONES ///////////////////
+                // BOTONES DE ACCIÓN
                 if (isMyProfile) ...[
                   ElevatedButton.icon(
                     onPressed: () async {
@@ -384,6 +377,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ),
                   const SizedBox(height: 14),
+
                   ElevatedButton.icon(
                     onPressed: () {
                       Navigator.push(
@@ -440,10 +434,9 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                   ),
 
-                // ===================== ⚙️ ACCIONES INFERIORES =====================
                 const SizedBox(height: 30),
 
-// 📩 Botón de Mensajes
+                // 📩 MENSAJES — corregido
                 ElevatedButton.icon(
                   icon: const Icon(Icons.chat_bubble_outline),
                   label: const Text('Mensajes'),
@@ -459,13 +452,13 @@ class _ProfilePageState extends State<ProfilePage> {
                     elevation: 6,
                   ),
                   onPressed: () {
-                    Navigator.pushNamed(context, '/chat');
+                    context.push('/chat'); // 👈 SEGUNDO CAMBIO
                   },
                 ),
 
                 const SizedBox(height: 14),
 
-// 🚪 Botón de Cerrar Sesión (solo si es mi perfil)
+                // 🚪 LOGOUT
                 if (isMyProfile)
                   OutlinedButton.icon(
                     icon: const Icon(Icons.logout),
@@ -487,7 +480,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 const SizedBox(height: 40),
 
-                // 🖼️ PARRILLA DE POSTS
+                // 🖼️ GRID DE POSTS
                 _UserPostsGrid(userId: userId),
               ],
             ),
@@ -501,6 +494,7 @@ class _ProfilePageState extends State<ProfilePage> {
 /// ============================================================================
 /// 📸 _UserPostsGrid — Grilla de publicaciones del usuario
 /// ============================================================================
+
 class _UserPostsGrid extends StatelessWidget {
   final String userId;
   const _UserPostsGrid({required this.userId});
@@ -588,8 +582,9 @@ class _UserPostsGrid extends StatelessWidget {
 }
 
 /// ============================================================================
-/// 🔢 _CounterButton — Contador con acción (clicable)
-///=============
+/// 🔢 _CounterButton
+/// ============================================================================
+
 class _CounterButton extends StatelessWidget {
   final String label;
   final int value;
@@ -622,12 +617,13 @@ class _CounterButton extends StatelessWidget {
 }
 
 /// ============================================================================
-/// 📊 _StatCard — Tarjeta reutilizable para estadísticas
+/// 📊 _StatCard
 /// ============================================================================
+
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;
-  final String? subtitle; // ← NUEVO
+  final String? subtitle;
 
   const _StatCard({
     required this.title,
@@ -671,8 +667,9 @@ class _StatCard extends StatelessWidget {
 }
 
 /// ============================================================================
-/// 👥 _SocialCounter — Contador simple (sin acción)
+/// 👥 _SocialCounter
 /// ============================================================================
+
 class _SocialCounter extends StatelessWidget {
   final String label;
   final int value;
