@@ -12,12 +12,15 @@ import '../features/social/social_routes.dart';
 // 🛒 Módulo Locker (Marketplace)
 import '../features/locker/locker_routes.dart';
 
+// 💬 Módulo Chat (Mensajería)
+import '../features/chat/presentation/chat_page.dart';
+
 /// ===============================================================
 /// 🚦 Router global de DraftClub
 /// ===============================================================
 /// Control central de navegación:
 /// - Maneja login / profile gate.
-/// - Integra todos los módulos (feed, social, locker).
+/// - Integra todos los módulos (feed, social, locker, chat).
 /// - Prepara base para reglas futuras (auth, deep links, app_links, etc).
 ///
 /// Compatible con go_router v14+.
@@ -31,7 +34,7 @@ final GoRouter router = GoRouter(
   // ===============================================================
   routes: [
     // ---------------------------------------------------------------
-    // 🟦 LOGIN (punto de entrada)
+    // 🟦 LOGIN
     // ---------------------------------------------------------------
     GoRoute(
       path: '/',
@@ -40,8 +43,7 @@ final GoRouter router = GoRouter(
     ),
 
     // ---------------------------------------------------------------
-    // 🟦 Puerta lógica tras login
-    // Maneja la redirección al feed, onboarding, etc.
+    // 🟦 Profile Gate (decide a dónde enviarte después de login)
     // ---------------------------------------------------------------
     GoRoute(
       path: '/profile-gate',
@@ -50,7 +52,7 @@ final GoRouter router = GoRouter(
     ),
 
     // ---------------------------------------------------------------
-    // 🟦 FEED (pantalla principal del MVP)
+    // 🟦 FEED PRINCIPAL
     // ---------------------------------------------------------------
     GoRoute(
       path: '/feed',
@@ -59,33 +61,50 @@ final GoRouter router = GoRouter(
     ),
 
     // ---------------------------------------------------------------
-    // 🟪 MÓDULO SOCIAL (comentarios, posts, perfiles sociales)
+    // 💬 CHAT (NUEVO — evita el error de "no generator for /chat")
+    // ---------------------------------------------------------------
+    GoRoute(
+      path: '/chat',
+      name: 'chat',
+      builder: (context, state) {
+        final chatId = state.uri.queryParameters['chatId'];
+        return ChatPage(chatId: chatId);
+      },
+    ),
+
+    // ---------------------------------------------------------------
+    // 🟥 CHAT INDIVIDUAL (con ID en path /chat/1234)
+    // ---------------------------------------------------------------
+    GoRoute(
+      path: '/chat/:chatId',
+      name: 'chat-detail',
+      builder: (context, state) {
+        final chatId = state.pathParameters['chatId']!;
+        return ChatPage(chatId: chatId);
+      },
+    ),
+
+    // ---------------------------------------------------------------
+    // 🟪 MÓDULO SOCIAL
     // ---------------------------------------------------------------
     ...socialRoutes,
 
     // ---------------------------------------------------------------
-    // 🛒 MÓDULO LOCKER (Marketplace completo)
+    // 🛒 MÓDULO LOCKER
     // ---------------------------------------------------------------
     ...lockerRoutes,
   ],
 
   // ===============================================================
-  // 🔁 REDIRECCIONES CONDICIONALES (si activas auth)
+  // 🔁 REDIRECCIONES OPCIONALES (auth)
   // ===============================================================
   redirect: (context, state) {
-    // ⚠️ Inactivo por ahora, pero 100% funcional si quieres activarlo luego.
-    //
-    // final user = FirebaseAuth.instance.currentUser;
-    // final isLoggingIn = state.matchedLocation == '/';
-    //
-    // if (user == null && !isLoggingIn) return '/';
-    // if (user != null && isLoggingIn) return '/profile-gate';
-    //
+    // Desactivado de momento
     return null;
   },
 
   // ===============================================================
-  // 🧪 DEBUG / PÁGINA DE ERROR GLOBAL
+  // 🧪 DEBUG / ERROR GLOBAL
   // ===============================================================
   debugLogDiagnostics: true,
 
