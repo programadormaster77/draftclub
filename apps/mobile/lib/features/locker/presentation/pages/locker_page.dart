@@ -44,6 +44,22 @@ class _LockerPageState extends State<LockerPage> {
     if (mounted) setState(() {});
   }
 
+  double _calculateAspectRatio(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+
+    // 🔥 Cada tarjeta tendrá el ancho menos márgenes del grid
+    final cardWidth = (width - 14 * 3) / 2;
+
+    // 🔥 Calculamos la altura REAL aproximada de tu tarjeta
+    // Imagen (proporción 1:1) → igual al ancho
+    // Espacio debajo: tags + título + precio + ciudad + padding
+    const extraHeight = 110;
+
+    final cardHeight = cardWidth + extraHeight;
+
+    return cardWidth / cardHeight;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLoading = controller.isLoading;
@@ -108,7 +124,7 @@ class _LockerPageState extends State<LockerPage> {
             // 🏷️ Barra de categorías
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.only(bottom: 12),
+                padding: EdgeInsets.only(bottom: 12),
                 child: LockerCategoryFilterBar(
                   selectedCategory: category,
                   onCategorySelected: controller.setCategory,
@@ -131,7 +147,7 @@ class _LockerPageState extends State<LockerPage> {
                   child: Text(
                     "Ocurrió un error:\n$error",
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white70),
+                    style: TextStyle(color: Colors.white70),
                   ),
                 ),
               ),
@@ -150,7 +166,7 @@ class _LockerPageState extends State<LockerPage> {
             // 🛒 GRID DE PRODUCTOS
             if (!isLoading && products.isNotEmpty)
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
+                padding: EdgeInsets.symmetric(horizontal: 14),
                 sliver: SliverGrid(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
@@ -159,11 +175,13 @@ class _LockerPageState extends State<LockerPage> {
                     },
                     childCount: products.length,
                   ),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     crossAxisSpacing: 14,
                     mainAxisSpacing: 14,
-                    childAspectRatio: 0.68,
+
+                    /// ✅ ALTURA FIJA / RESPONSIVA (SIN OVERFLOW)
+                    mainAxisExtent: MediaQuery.of(context).size.height * 0.39,
                   ),
                 ),
               ),

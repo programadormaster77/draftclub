@@ -12,6 +12,10 @@ import '../../social/presentation/page/follow_list_page.dart';
 import '../../social/presentation/widgets/recommended_users_widget.dart';
 import 'package:draftclub_mobile/features/notifications/presentation/notifications_settings_page.dart';
 import 'edit_profile_page.dart';
+import 'package:draftclub_mobile/features/social/presentation/page/chat_list_page.dart';
+import 'package:draftclub_mobile/features/social/data/chat_service.dart';
+import 'package:draftclub_mobile/features/social/presentation/page/chat_page.dart';
+import 'package:draftclub_mobile/features/social/data/chat_service.dart';
 
 /// ============================================================================
 /// 🧾 ProfilePage — Perfil del jugador (Versión PRO++ 2025)
@@ -63,6 +67,51 @@ class _ProfilePageState extends State<ProfilePage> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _openDirectChat(
+      String otherUserId, String otherName, String otherPhoto) async {
+    final myUid = _auth.currentUser?.uid;
+    if (myUid == null) return;
+
+    // Crear chat si no existe
+    final chatDoc = await FirebaseFirestore.instance
+        .collection('chats')
+        .where('participants', arrayContains: myUid)
+        .get();
+
+    String? existingChatId;
+
+    for (var doc in chatDoc.docs) {
+      final participants = (doc['participants'] as List).cast<String>();
+      if (participants.contains(otherUserId)) {
+        existingChatId = doc.id;
+        break;
+      }
+    }
+
+    // Si no existe → créalo
+    if (existingChatId == null) {
+      final newChat = await FirebaseFirestore.instance.collection('chats').add({
+        'participants': [myUid, otherUserId],
+        'lastMessage': '',
+        'updatedAt': Timestamp.now(),
+      });
+      existingChatId = newChat.id;
+    }
+
+    // Abrir chat
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatPage(
+          chatId: existingChatId!,
+          otherUserId: otherUserId,
+          otherName: otherName,
+          otherPhoto: otherPhoto,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUser = _auth.currentUser;
@@ -87,16 +136,16 @@ class _ProfilePageState extends State<ProfilePage> {
         backgroundColor: Colors.black,
         elevation: 2,
         actions: [
-          // 📩 Chat — corregido para GoRouter
           IconButton(
             tooltip: 'Mensajes',
             icon: const Icon(Icons.chat_bubble_outline),
             onPressed: () {
-              context.push('/chat'); // 👈 CAMBIO REALIZADO
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ChatListPage()),
+              );
             },
           ),
-
-          // 🔒 Logout (solo en mi perfil)
           if (widget.userId == null)
             IconButton(
               tooltip: 'Cerrar sesión',
@@ -144,8 +193,7 @@ class _ProfilePageState extends State<ProfilePage> {
           final posts = data['postsCount'] ?? 0;
 
           final partidos = (data['matches'] ?? 0).toString();
-          final victoriasConfirmadas =
-              (data['wins'] ?? 0).toString();
+          final victoriasConfirmadas = (data['wins'] ?? 0).toString();
           final torneos = (data['tournaments'] ?? 0).toString();
 
           final rangos = {
@@ -227,8 +275,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     return StreamBuilder<List<String>>(
                       stream: _followService.getFollowing(userId),
                       builder: (context, followingSnap) {
-                        final followingCount =
-                            followingSnap.data?.length ?? 0;
+                        final followingCount = followingSnap.data?.length ?? 0;
 
                         return Column(
                           children: [
@@ -377,14 +424,12 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ),
                   const SizedBox(height: 14),
-
                   ElevatedButton.icon(
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) =>
-                              const NotificationsSettingsPage(),
+                          builder: (_) => const NotificationsSettingsPage(),
                         ),
                       );
                     },
@@ -405,7 +450,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ),
                   ),
-                ] else
+                ] else ...[
                   ElevatedButton(
                     onPressed: _isLoadingFollow ? null : _toggleFollow,
                     style: ElevatedButton.styleFrom(
@@ -434,31 +479,78 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                   ),
 
+                  const SizedBox(height: 20),
+
+                  // 📩 ENVIAR MENSAJE — CHAT DIRECTO (CORREGIDO)
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    label: const Text('Enviar mensaje'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueAccent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 40, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      shadowColor: Colors.blueAccent.withOpacity(0.4),
+                      elevation: 6,
+                    ),
+                    onPressed: () async {
+                      final chatService = ChatService();
+                      final otherUid = userId;
+
+                      // Crear o recuperar chat privado
+                      final chatId =
+                          await chatService.createOrGetChat(otherUid);
+                      if (chatId == null) return;
+
+                      if (!mounted) return;
+
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ChatPage(
+                            chatId: chatId,
+                            otherUserId: otherUid,
+                            otherName: data['name'] ?? 'Jugador',
+                            otherPhoto: data['photoUrl'] ?? '',
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+
                 const SizedBox(height: 30),
 
-                // 📩 MENSAJES — corregido
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.chat_bubble_outline),
-                  label: const Text('Mensajes'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 40, vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
+// 📩 MENSAJES — SOLO PARA TU PROPIO PERFIL
+                if (isMyProfile)
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    label: const Text('Mensajes'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueAccent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 40, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      shadowColor: Colors.blueAccent.withOpacity(0.4),
+                      elevation: 6,
                     ),
-                    shadowColor: Colors.blueAccent.withOpacity(0.4),
-                    elevation: 6,
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ChatListPage()),
+                      );
+                    },
                   ),
-                  onPressed: () {
-                    context.push('/chat'); // 👈 SEGUNDO CAMBIO
-                  },
-                ),
 
                 const SizedBox(height: 14),
 
-                // 🚪 LOGOUT
+// 🚪 LOGOUT
                 if (isMyProfile)
                   OutlinedButton.icon(
                     icon: const Icon(Icons.logout),
@@ -480,7 +572,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 const SizedBox(height: 40),
 
-                // 🖼️ GRID DE POSTS
+// 🖼️ GRID DE POSTS
                 _UserPostsGrid(userId: userId),
               ],
             ),

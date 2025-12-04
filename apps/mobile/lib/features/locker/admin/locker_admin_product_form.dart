@@ -8,21 +8,6 @@ import '../services/locker_service.dart';
 /// ============================================================================
 /// 📝 LockerAdminProductForm
 /// ============================================================================
-/// Formulario para:
-/// - Crear productos
-/// - Editar productos
-///
-/// Incluye:
-/// - Subida de imágenes
-/// - Categorías
-/// - Tipo local/external
-/// - Tipo de tienda (storeType)
-/// - Producto patrocinado (isSponsored)
-/// - Destacado
-///
-/// Totalmente compatible con LockerProductModel actualizado.
-/// ============================================================================
-
 class LockerAdminProductForm extends StatefulWidget {
   final LockerProductModel? existingProduct;
 
@@ -35,6 +20,74 @@ class LockerAdminProductForm extends StatefulWidget {
 class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
   final _formKey = GlobalKey<FormState>();
   final LockerService _lockerService = LockerService();
+
+  // ============================
+  // LISTAS DE OPCIONES NUEVAS
+  // ============================
+  final List<String> categories = [
+    'Guayos',
+    'Balones',
+    'Camisetas',
+    'Conjuntos',
+    'Sudaderas',
+    'Accesorios',
+    'Fitness',
+    'Porteros',
+    'Equipos',
+    'Mujer',
+    'Hombre',
+    'Unisex',
+    'Ofertas',
+  ];
+
+  final Map<String, List<String>> subcategoriesMap = {
+    'Guayos': ['FG', 'AG', 'MG', 'IC', 'TF'],
+    'Balones': ['Profesional', 'Entrenamiento', 'Futsal'],
+    'Camisetas': ['Jugador', 'Aficionado', 'Entrenamiento', 'Retro'],
+    'Conjuntos': ['Entrenamiento', 'Competición', 'Infantil'],
+    'Sudaderas': ['Capucha', 'Cremallera', 'Térmica'],
+    'Accesorios': ['Canilleras', 'Medias', 'Gorras', 'Mochilas'],
+    'Fitness': ['Pesas', 'Bandas', 'Guantes', 'Ropa fitness'],
+    'Porteros': ['Guantes', 'Pantalón', 'Camiseta'],
+    'Equipos': ['Colombia', 'Europa', 'MLS'],
+    'Mujer': ['Camisetas', 'Sudaderas', 'Conjuntos'],
+    'Hombre': ['Camisetas', 'Sudaderas', 'Conjuntos'],
+    'Unisex': ['Camisetas', 'Sudaderas'],
+    'Ofertas': ['Descuentos', 'Liquidación'],
+  };
+
+  final List<String> genders = ['Caballero', 'Dama', 'Unisex', 'Infantil'];
+
+  final List<String> clothingSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+
+  final List<String> shoeSizes = [
+    '20',
+    '21',
+    '22',
+    '23',
+    '24',
+    '25',
+    '26',
+    '27',
+    '28',
+    '29',
+    '30',
+    '31',
+    '32',
+    '33',
+    '34',
+    '35',
+    '36',
+    '37',
+    '38',
+    '39',
+    '40',
+    '41',
+    '42',
+    '43',
+    '44',
+    '45',
+  ];
 
   // Campos principales
   String title = '';
@@ -62,10 +115,10 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
   List<String> images = [];
   bool isLoading = false;
 
-// ======= NUEVAS VARIABLES PARA UBICACIÓN =======
+  // ======= NUEVAS VARIABLES PARA UBICACIÓN =======
   Map<String, dynamic>? cityData;
   final TextEditingController _locationController = TextEditingController();
-// ==============================================
+  // ==============================================
 
   @override
   void initState() {
@@ -93,28 +146,17 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
   }
 
   // ===========================================================================
-// Subir imágenes  (REEMPLAZAR TODA ESTA FUNCIÓN)
-// ===========================================================================
+  // Subir imágenes
+  // ===========================================================================
   Future<void> pickImage() async {
     try {
       final ImagePicker picker = ImagePicker();
-      final XFile? picked = await picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85, // optimiza carga
-      );
+      final XFile? picked =
+          await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
 
-      if (picked == null) {
-        print("⚠ No se seleccionó ninguna imagen.");
-        return;
-      }
+      if (picked == null) return;
 
       final File file = File(picked.path);
-
-      // Validar que el archivo existe
-      if (!file.existsSync()) {
-        print("❌ El archivo de imagen no existe.");
-        return;
-      }
 
       final String fileName =
           'locker_${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -124,29 +166,19 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
           .child('locker_products')
           .child(fileName);
 
-      // Cargar con metadata para evitar errores en Android/iOS
       final UploadTask uploadTask = ref.putFile(
         file,
-        SettableMetadata(
-          contentType: 'image/jpeg',
-        ),
+        SettableMetadata(contentType: 'image/jpeg'),
       );
 
       final TaskSnapshot snap = await uploadTask;
       final String downloadUrl = await snap.ref.getDownloadURL();
 
-      setState(() {
-        images.add(downloadUrl);
-      });
-
-      print("✔ Imagen subida correctamente: $downloadUrl");
+      setState(() => images.add(downloadUrl));
     } catch (e) {
-      print("❌ Error al subir imagen: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error al subir imagen: $e")),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error al subir imagen: $e")),
+      );
     }
   }
 
@@ -155,53 +187,43 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
   // ===========================================================================
   Future<void> saveProduct() async {
     if (!_formKey.currentState!.validate()) return;
+
     if (images.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Debes subir al menos una imagen")),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text("Debes subir imágenes")));
       return;
     }
 
     setState(() => isLoading = true);
 
-    final double parsedPrice = double.tryParse(price) ?? 0;
+    final double parsedPrice = double.tryParse(price.replaceAll('.', '')) ?? 0;
 
     final product = LockerProductModel(
       id: widget.existingProduct?.id ?? '',
       ownerUid: 'admin-0001',
       ownerRole: 'admin',
-
       title: title,
       description: description,
       price: parsedPrice,
       currency: currency,
       images: images,
-
       mainCategory: mainCategory,
       subCategory: subCategory,
       gender: gender,
       size: size,
-
-      /// 🏪 Store type
       storeType: storeType,
-
       location: location,
-      cityData:
-          cityData, // ← AÑADE ESTO (puede ser null si aún no seleccionaron)
+      cityData: cityData,
       type: type,
       externalLink: type == 'external' ? externalLink : null,
-
       tags: tags,
       searchKeywords: _buildSearchKeywords(),
-
       stock: 10,
-      visibility: true, // 🔥 Campo requerido por el modelo
+      visibility: true,
       featured: featured,
-      isSponsored: isSponsored, // 🔥 Campo requerido por el modelo
-
+      isSponsored: isSponsored,
       popularity: widget.existingProduct?.popularity ?? 0,
       boostScore: widget.existingProduct?.boostScore ?? 0,
-
       createdAt: widget.existingProduct?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -215,16 +237,15 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
 
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error al guardar: $e")),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Error al guardar: $e")));
     }
 
     setState(() => isLoading = false);
   }
 
   // ===========================================================================
-  // Build keywords
+  // Keywords
   // ===========================================================================
   List<String> _buildSearchKeywords() {
     final parts = [
@@ -239,13 +260,142 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
     final keywords = <String>[];
 
     for (final p in parts) {
-      if (p.isEmpty) continue;
-
-      final normalized = p.toLowerCase().trim();
-      keywords.add(normalized);
+      if (p.isNotEmpty) keywords.add(p.toLowerCase().trim());
     }
 
     return keywords.toSet().toList();
+  }
+
+  // ===========================================================================
+  // Lista inteligente de tallas
+  // ===========================================================================
+  List<String> _availableSizes() {
+    if (mainCategory == 'Guayos') return shoeSizes;
+
+    if (['Camisetas', 'Conjuntos', 'Sudaderas', 'Hombre', 'Mujer', 'Unisex']
+        .contains(mainCategory)) {
+      return clothingSizes;
+    }
+
+    return [];
+  }
+
+  // ===========================================================================
+  // Formato de precio
+  // ===========================================================================
+  String _formatNumber(int number) {
+    String s = number.toString();
+    String result = '';
+    int count = 0;
+
+    for (int i = s.length - 1; i >= 0; i--) {
+      result = s[i] + result;
+      count++;
+      if (count == 3 && i != 0) {
+        result = '.$result';
+        count = 0;
+      }
+    }
+    return result;
+  }
+
+  // ===========================================================================
+  // PICKER UNIVERSAL (dentro de la clase, ahora funciona)
+  // ===========================================================================
+  Widget _picker({
+    required String label,
+    required String value,
+    required VoidCallback onTap,
+    bool enabled = true,
+  }) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: AbsorbPointer(
+        child: _input(
+          label: label,
+          initial: value.isEmpty ? "Seleccionar..." : value,
+          onChanged: (_) {},
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // BOTTOM SHEET SELECTOR (dentro de la clase, ahora funciona)
+  // ===========================================================================
+  Future<String?> _openPicker(String title, List<String> items) async {
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.black87,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 18,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold)),
+              const Divider(color: Colors.white24),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: items.length,
+                  itemBuilder: (_, i) {
+                    return ListTile(
+                      title: Text(items[i],
+                          style: const TextStyle(color: Colors.white)),
+                      onTap: () => Navigator.pop(sheetContext, items[i]),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget selectorInput({
+    required String label,
+    required String value,
+    required VoidCallback onTap,
+    bool enabled = true,
+  }) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: enabled ? Colors.white24 : Colors.white10,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                value.isEmpty ? label : value,
+                style: TextStyle(
+                  color: value.isEmpty ? Colors.white54 : Colors.white,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            Icon(Icons.keyboard_arrow_down, color: Colors.white54),
+          ],
+        ),
+      ),
+    );
   }
 
   // ===========================================================================
@@ -277,9 +427,9 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              /// =================================================================
-              /// IMÁGENES
-              /// =================================================================
+              // ====================
+              // IMÁGENES
+              // ====================
               Text("Imágenes", style: _sectionTitle()),
               const SizedBox(height: 8),
               Row(
@@ -291,9 +441,9 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
 
               const SizedBox(height: 22),
 
-              /// =================================================================
-              /// INFORMACIÓN BÁSICA
-              /// =================================================================
+              // ====================
+              // INFORMACIÓN BÁSICA
+              // ====================
               Text("Información básica", style: _sectionTitle()),
 
               _input(
@@ -310,10 +460,27 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
                 maxLines: 4,
               ),
 
-              _input(
-                label: "Precio",
-                initial: price,
-                onChanged: (v) => price = v,
+              TextFormField(
+                controller: TextEditingController(text: price),
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: "Precio",
+                  labelStyle: const TextStyle(color: Colors.white54),
+                  filled: true,
+                  fillColor: const Color(0xFF1A1A1A),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                onChanged: (value) {
+                  final clean = value.replaceAll('.', '');
+                  if (clean.isEmpty) {
+                    setState(() => price = '');
+                    return;
+                  }
+                  final number = int.parse(clean);
+                  setState(() => price = _formatNumber(number));
+                },
               ),
 
               _input(
@@ -324,35 +491,70 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
 
               const SizedBox(height: 22),
 
-              /// =================================================================
-              /// CATEGORÍAS
-              /// =================================================================
+              // ====================
+// CATEGORÍAS
+// ====================
               Text("Categorías", style: _sectionTitle()),
 
-              _input(
+// CATEGORÍA PRINCIPAL
+              selectorInput(
                 label: "Categoría principal",
-                initial: mainCategory,
-                onChanged: (v) => mainCategory = v,
+                value: mainCategory,
+                onTap: () async {
+                  final selected =
+                      await _openPicker("Categoría principal", categories);
+
+                  if (selected != null) {
+                    setState(() {
+                      mainCategory = selected;
+                      subCategory = '';
+                      size = '';
+                    });
+                  }
+                },
               ),
 
-              _input(
+// SUBCATEGORÍA
+              selectorInput(
                 label: "Subcategoría",
-                initial: subCategory,
-                onChanged: (v) => subCategory = v,
+                value: subCategory,
+                enabled: mainCategory.isNotEmpty,
+                onTap: () async {
+                  final list = subcategoriesMap[mainCategory] ?? [];
+                  final selected = await _openPicker("Subcategoría", list);
+                  if (selected != null) {
+                    setState(() => subCategory = selected);
+                  }
+                },
               ),
 
-              _input(
+// GÉNERO
+              selectorInput(
                 label: "Género",
-                initial: gender,
-                onChanged: (v) => gender = v,
+                value: gender,
+                onTap: () async {
+                  final selected = await _openPicker("Género", genders);
+                  if (selected != null) {
+                    setState(() => gender = selected);
+                  }
+                },
               ),
 
-              _input(
+// TALLA
+              selectorInput(
                 label: "Talla",
-                initial: size,
-                onChanged: (v) => size = v,
+                value: size,
+                enabled: _availableSizes().isNotEmpty,
+                onTap: () async {
+                  final selected =
+                      await _openPicker("Talla", _availableSizes());
+                  if (selected != null) {
+                    setState(() => size = selected);
+                  }
+                },
               ),
 
+// UBICACIÓN (TEMPORAL - SECCIÓN B LA REEMPLAZA)
               _input(
                 label: "Ubicación (ciudad)",
                 initial: location,
@@ -361,9 +563,9 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
 
               const SizedBox(height: 22),
 
-              /// =================================================================
-              /// TIPO DE TIENDA
-              /// =================================================================
+// ====================
+// TIPO DE TIENDA
+// ====================
               Text("Tipo de tienda", style: _sectionTitle()),
 
               DropdownButtonFormField<String>(
@@ -392,9 +594,9 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
 
               const SizedBox(height: 22),
 
-              /// =================================================================
-              /// TIPO DE PRODUCTO
-              /// =================================================================
+// ====================
+// TIPO DE PRODUCTO
+// ====================
               Text("Tipo de producto", style: _sectionTitle()),
 
               DropdownButtonFormField<String>(
@@ -427,9 +629,9 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
 
               const SizedBox(height: 22),
 
-              /// =================================================================
-              /// TAGS
-              /// =================================================================
+// ====================
+// TAGS
+// ====================
               Text("Tags (separados por coma)", style: _sectionTitle()),
 
               _input(
@@ -441,9 +643,9 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
 
               const SizedBox(height: 22),
 
-              /// =================================================================
-              /// DESTACADO / PATROCINADO
-              /// =================================================================
+// ====================
+// DESTACADO / PATROCINADO
+// ====================
               SwitchListTile(
                 title: const Text("Destacar producto",
                     style: TextStyle(color: Colors.white)),
@@ -469,9 +671,8 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
   }
 
   // ===========================================================================
-// WIDGETS
-// ===========================================================================
-
+  // WIDGETS
+  // ===========================================================================
   TextStyle _sectionTitle() => const TextStyle(
         color: Colors.white70,
         fontSize: 16,
@@ -517,11 +718,11 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
             borderRadius: BorderRadius.circular(8),
             color: Colors.black26,
           ),
-          clipBehavior: Clip.hardEdge, // ← evita errores al recortar imagen
+          clipBehavior: Clip.hardEdge,
           child: Image.network(
             url,
             fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) =>
+            errorBuilder: (_, __, ___) =>
                 const Icon(Icons.broken_image, color: Colors.white),
           ),
         ),
@@ -529,9 +730,7 @@ class _LockerAdminProductFormState extends State<LockerAdminProductForm> {
           right: 2,
           top: 2,
           child: InkWell(
-            onTap: () {
-              setState(() => images.remove(url));
-            },
+            onTap: () => setState(() => images.remove(url)),
             child: Container(
               padding: const EdgeInsets.all(3),
               decoration: const BoxDecoration(

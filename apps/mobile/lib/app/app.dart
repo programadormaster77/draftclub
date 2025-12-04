@@ -10,7 +10,7 @@ class DraftClubApp extends StatelessWidget {
     return MaterialApp.router(
       title: 'DraftClub',
       theme: appTheme,
-      routerConfig: router,
+      routerConfig: router, // ✔️ YA RECONOCIDO
       debugShowCheckedModeBanner: false,
     );
   }

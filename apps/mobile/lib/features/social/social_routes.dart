@@ -1,7 +1,9 @@
 import 'package:go_router/go_router.dart';
+
+// FEED
 import 'package:draftclub_mobile/features/social/presentation/page/social_feed_page.dart';
 
-// ⬇️ IMPORTA AQUÍ TUS PÁGINAS DE CHAT
+// CHATS
 import 'package:draftclub_mobile/features/social/presentation/page/chat_list_page.dart';
 import 'package:draftclub_mobile/features/social/presentation/page/chat_page.dart';
 
@@ -9,7 +11,6 @@ import 'package:draftclub_mobile/features/social/presentation/page/chat_page.dar
 /// 🌐 Rutas del módulo Social + Mensajería
 /// ===============================================================
 final List<GoRoute> socialRoutes = [
-
   // 📰 FEED SOCIAL
   GoRoute(
     path: '/social',
@@ -24,13 +25,22 @@ final List<GoRoute> socialRoutes = [
     builder: (context, state) => const ChatListPage(),
   ),
 
-  // 💭 CHAT INDIVIDUAL
+  // 💭 CHAT INDIVIDUAL (4 parámetros obligatorios)
   GoRoute(
-    path: '/chat/:userId',
+    path: '/chat/:chatId/:otherUserId/:otherName/:otherPhoto',
     name: 'chat_page',
     builder: (context, state) {
-      final userId = state.pathParameters['userId']!;
-      return ChatPage(userId: userId);
+      final chatId = state.pathParameters['chatId']!;
+      final otherUserId = state.pathParameters['otherUserId']!;
+      final otherName = state.pathParameters['otherName']!;
+      final otherPhoto = state.pathParameters['otherPhoto']!;
+
+      return ChatPage(
+        chatId: chatId,
+        otherUserId: otherUserId,
+        otherName: otherName,
+        otherPhoto: otherPhoto,
+      );
     },
   ),
 ];

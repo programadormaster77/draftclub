@@ -5,15 +5,6 @@ import '../../data/locker_product_model.dart';
 import '../../services/locker_service.dart';
 import '../pages/locker_product_detail_page.dart';
 
-/// ============================================================================
-/// 🟥 LockerProductCard — Tarjeta individual del producto (OPTIMIZADA)
-/// ============================================================================
-/// - SIN overflow (bottom overflow FIXED)
-/// - Imagen totalmente responsiva
-/// - Contenido inferior en layout flexible
-/// - Mantiene todo tu diseño original
-/// ============================================================================
-
 class LockerProductCard extends StatelessWidget {
   final LockerProductModel product;
   LockerProductCard({super.key, required this.product});
@@ -39,17 +30,21 @@ class LockerProductCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: Colors.white10, width: 0.6),
         ),
+
+        /// 🔥 Este Column ya no necesita Expanded.
+        /// Se ajusta solo al espacio disponible del grid.
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ===================================================================
-            // 🖼️ Imagen principal (RESPONSIVA, evita overflow)
-            // ===================================================================
+            // ============================================================
+            // 🖼️ IMAGEN RESPONSIVA
+            // ============================================================
             ClipRRect(
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(14)),
               child: AspectRatio(
-                aspectRatio: 1, // 🔥 se ajusta según tamaño disponible
+                aspectRatio: 1,
                 child: CachedNetworkImage(
                   imageUrl: product.images.isNotEmpty
                       ? product.images.first
@@ -70,82 +65,75 @@ class LockerProductCard extends StatelessWidget {
                   errorWidget: (_, __, ___) => Container(
                     color: Colors.black26,
                     alignment: Alignment.center,
-                    child: const Icon(
-                      Icons.broken_image,
-                      color: Colors.grey,
-                      size: 40,
-                    ),
+                    child: const Icon(Icons.broken_image,
+                        color: Colors.grey, size: 40),
                   ),
                 ),
               ),
             ),
 
-            // ===================================================================
-            // 🏷️ Etiquetas (Destacado / Admin / VIP)
-            // ===================================================================
+            // ============================================================
+            // 📦 CONTENIDO INFERIOR FLEXIBLE (NO OVERFLOW)
+            // ============================================================
             Padding(
-              padding: const EdgeInsets.only(top: 8, left: 10, right: 10),
-              child: Row(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (product.featured)
-                    _buildTag('Destacado', Colors.blueAccent),
-                  if (product.ownerRole == 'admin')
-                    _buildTag('ADMIN', Colors.amberAccent),
-                  if (product.ownerRole == 'vip')
-                    _buildTag('VIP', Colors.purpleAccent),
+                  // TAGS
+                  Row(
+                    children: [
+                      if (product.featured)
+                        _buildTag('Destacado', Colors.blueAccent),
+                      if (product.ownerRole == 'admin')
+                        _buildTag('ADMIN', Colors.amberAccent),
+                      if (product.ownerRole == 'vip')
+                        _buildTag('VIP', Colors.purpleAccent),
+                    ],
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  // TÍTULO
+                  Text(
+                    product.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+
+                  const SizedBox(height: 4),
+
+                  // PRECIO
+                  Text(
+                    '\$${product.price.toStringAsFixed(0)} ${product.currency}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.greenAccent,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+
+                  const SizedBox(height: 4),
+
+                  // UBICACIÓN (SIEMPRE CABE)
+                  Text(
+                    product.location,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
-              ),
-            ),
-
-            // ===================================================================
-            // 🔤 Título (NUNCA hace overflow)
-            // ===================================================================
-            Padding(
-              padding: const EdgeInsets.only(left: 10, right: 10, top: 6),
-              child: Text(
-                product.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-
-            // ===================================================================
-            // 💰 Precio (flexible / responsivo)
-            // ===================================================================
-            Padding(
-              padding: const EdgeInsets.only(left: 10, top: 4),
-              child: Text(
-                '\$${product.price.toStringAsFixed(0)} ${product.currency}',
-                maxLines: 1,
-                overflow: TextOverflow.fade,
-                softWrap: false,
-                style: const TextStyle(
-                  color: Colors.greenAccent,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-
-            // ===================================================================
-            // 📍 Ciudad (también limita overflow)
-            // ===================================================================
-            Padding(
-              padding: const EdgeInsets.only(left: 10, top: 2, bottom: 8),
-              child: Text(
-                product.location,
-                maxLines: 1,
-                overflow: TextOverflow.fade,
-                softWrap: false,
-                style: const TextStyle(
-                  color: Colors.white38,
-                  fontSize: 12,
-                ),
               ),
             ),
           ],
@@ -154,9 +142,6 @@ class LockerProductCard extends StatelessWidget {
     );
   }
 
-  /// ======================================================================
-  /// 🏷️ Constructor de etiquetas
-  /// ======================================================================
   Widget _buildTag(String label, Color color) {
     return Container(
       margin: const EdgeInsets.only(right: 6),
