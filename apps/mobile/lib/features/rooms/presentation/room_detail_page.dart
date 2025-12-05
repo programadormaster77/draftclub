@@ -179,6 +179,9 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
   // ✏️ Editar sala (modal) — coherente con CreateRoomPage
   // ================================================================
   Future<void> _openEditModal(Room room) async {
+    // ===============================
+    // 📍 Controles existentes
+    // ===============================
     final addressCtrl = TextEditingController(text: room.exactAddress ?? '');
     final dateCtrl = TextEditingController(
       text: room.eventAt != null
@@ -195,17 +198,31 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
     String sex = _normalizeSex(room.sex);
     Map<String, dynamic>? selectedAddress;
 
+    // ===============================
+    // 🆕 Controles NUEVOS
+    // ===============================
+    final nameCtrl = TextEditingController(text: room.name);
+    final teamsCtrl = TextEditingController(text: room.teams.toString());
+    final playersCtrl =
+        TextEditingController(text: room.playersPerTeam.toString());
+    final subsCtrl = TextEditingController(text: room.substitutes.toString());
+
     await showDialog(
       context: context,
       builder: (_) {
         return StatefulBuilder(builder: (context, setModalState) {
           return AlertDialog(
             backgroundColor: const Color(0xFF1C1C1C),
-            title: const Text('Editar sala',
-                style: TextStyle(color: Colors.white)),
+            title: const Text(
+              'Editar sala',
+              style: TextStyle(color: Colors.white),
+            ),
             content: SingleChildScrollView(
               child: Column(
                 children: [
+                  // ==========================
+                  // 📍 Dirección exacta
+                  // ==========================
                   GestureDetector(
                     onTap: () => _openAddressPicker(addressCtrl, (data) {
                       setModalState(() {
@@ -226,7 +243,12 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
                       ),
                     ),
                   ),
+
                   const SizedBox(height: 10),
+
+                  // ==========================
+                  // 🚻 Género del partido
+                  // ==========================
                   DropdownButtonFormField<String>(
                     value: sex,
                     dropdownColor: const Color(0xFF2A2A2A),
@@ -253,7 +275,12 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
                     ],
                     onChanged: (v) => setModalState(() => sex = v ?? 'mixto'),
                   ),
+
                   const SizedBox(height: 10),
+
+                  // ==========================
+                  // 📅 Fecha
+                  // ==========================
                   TextField(
                     controller: dateCtrl,
                     readOnly: true,
@@ -270,12 +297,18 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
                         lastDate: DateTime(2100),
                       );
                       if (date != null) {
-                        setModalState(() =>
-                            dateCtrl.text = date.toString().split(' ')[0]);
+                        setModalState(() {
+                          dateCtrl.text = date.toString().split(' ')[0];
+                        });
                       }
                     },
                   ),
+
                   const SizedBox(height: 10),
+
+                  // ==========================
+                  // ⏰ Hora
+                  // ==========================
                   TextField(
                     controller: timeCtrl,
                     readOnly: true,
@@ -293,16 +326,83 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
                       );
                       if (time != null) {
                         setModalState(
-                            () => timeCtrl.text = time.format(context));
+                          () => timeCtrl.text = time.format(context),
+                        );
                       }
                     },
                   ),
+
                   const SizedBox(height: 10),
+
+                  // ==========================
+                  // 🔓 Sala pública / privada
+                  // ==========================
                   SwitchListTile(
-                    title: const Text('Sala pública',
-                        style: TextStyle(color: Colors.white)),
+                    title: const Text(
+                      'Sala pública',
+                      style: TextStyle(color: Colors.white),
+                    ),
                     value: isPublic,
                     onChanged: (val) => setModalState(() => isPublic = val),
+                  ),
+
+                  const Divider(color: Colors.white24, height: 24),
+
+                  // ==========================
+                  // 🏷 Nombre de la sala
+                  // ==========================
+                  TextField(
+                    controller: nameCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'Nombre de la sala',
+                      labelStyle: TextStyle(color: Colors.white70),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // ==========================
+                  // ⚽ Número de equipos
+                  // ==========================
+                  TextField(
+                    controller: teamsCtrl,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'Número de equipos',
+                      labelStyle: TextStyle(color: Colors.white70),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // ==========================
+                  // 👥 Jugadores por equipo
+                  // ==========================
+                  TextField(
+                    controller: playersCtrl,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'Jugadores por equipo',
+                      labelStyle: TextStyle(color: Colors.white70),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // ==========================
+                  // 🔄 Suplentes
+                  // ==========================
+                  TextField(
+                    controller: subsCtrl,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'Suplentes permitidos',
+                      labelStyle: TextStyle(color: Colors.white70),
+                    ),
                   ),
                 ],
               ),
@@ -310,14 +410,19 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancelar',
-                    style: TextStyle(color: Colors.white70)),
+                child: const Text(
+                  'Cancelar',
+                  style: TextStyle(color: Colors.white70),
+                ),
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent),
+                  backgroundColor: Colors.blueAccent,
+                ),
                 onPressed: () async {
                   Navigator.pop(context);
+
+                  // 1️⃣ Guardamos lo que ya tenías (dirección, fecha, hora, público, género)
                   await _saveEdits(
                     room,
                     addressCtrl.text,
@@ -327,6 +432,50 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
                     sex,
                     selectedAddress,
                   );
+
+                  // 2️⃣ Actualizamos los NUEVOS campos: nombre, equipos, jugadores, suplentes
+                  try {
+                    int? parseInt(String text) {
+                      text = text.trim();
+                      if (text.isEmpty) return null;
+                      return int.tryParse(text);
+                    }
+
+                    final updateData = <String, dynamic>{};
+
+                    final newName = nameCtrl.text.trim();
+                    if (newName.isNotEmpty && newName != room.name) {
+                      updateData['name'] = newName;
+                    }
+
+                    final newTeams = parseInt(teamsCtrl.text);
+                    if (newTeams != null && newTeams > 0) {
+                      updateData['teams'] = newTeams;
+                    }
+
+                    final newPlayersPerTeam = parseInt(playersCtrl.text);
+                    if (newPlayersPerTeam != null && newPlayersPerTeam > 0) {
+                      updateData['playersPerTeam'] = newPlayersPerTeam;
+                    }
+
+                    final newSubs = parseInt(subsCtrl.text);
+                    if (newSubs != null && newSubs >= 0) {
+                      updateData['substitutes'] = newSubs;
+                    }
+
+                    if (updateData.isNotEmpty) {
+                      await _roomService.updateRoom(room.id, updateData);
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                              'Error al actualizar detalles adicionales: $e'),
+                        ),
+                      );
+                    }
+                  }
                 },
                 child: const Text('Guardar'),
               ),
@@ -582,6 +731,26 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 🔧 Botón para editar sala (solo el creador)
+          if (isCreator)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => _openEditModal(room),
+                icon:
+                    const Icon(Icons.edit, color: Colors.blueAccent, size: 20),
+                label: const Text(
+                  'Editar sala',
+                  style: TextStyle(color: Colors.blueAccent),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.blueAccent,
+                ),
+              ),
+            ),
+
+          const SizedBox(height: 10),
+
           // Tarjeta encabezado
           Container(
             padding: const EdgeInsets.all(20),

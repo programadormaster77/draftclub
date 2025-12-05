@@ -34,6 +34,52 @@ class RoomService {
   DocumentReference<Map<String, dynamic>> _roomRef(String roomId) =>
       _roomsCol.doc(roomId);
 
+  /// ============================================================
+  /// 🧩 Sincronizar cantidad de equipos tras editar la sala
+  /// ============================================================
+  Future<void> syncTeamsCount({
+    required String roomId,
+    required int newTeams,
+  }) async {
+    final col = _firestore.collection('rooms').doc(roomId).collection('teams');
+
+    // Traemos los equipos actuales
+    final snap = await col.orderBy('index', descending: false).get();
+    final existing = snap.docs;
+    final currentCount = existing.length;
+
+    // 👉 Si el número no cambió, no hacemos nada
+    if (currentCount == newTeams) return;
+
+    // 🟩 CASO 1: necesitamos MÁS equipos (añadir)
+    if (newTeams > currentCount) {
+      for (int i = currentCount + 1; i <= newTeams; i++) {
+        await col.add({
+          'name': 'Equipo $i',
+          'index': i,
+          'createdAt': FieldValue.serverTimestamp(),
+          // si ya usas players en tus docs, dejamos la lista vacía
+          'players': <String>[],
+        });
+      }
+      return;
+    }
+
+    // 🟥 CASO 2: hay equipos de MÁS (opcional: eliminar los últimos vacíos)
+    if (newTeams < currentCount) {
+      // Ordenamos por index y borramos solo los que estén "sobrando" y sin jugadores
+      for (final doc in existing.reversed) {
+        final data = doc.data();
+        final idx = (data['index'] ?? 0) as int;
+        final players = (data['players'] as List?) ?? const [];
+
+        if (idx > newTeams && players.isEmpty) {
+          await doc.reference.delete();
+        }
+      }
+    }
+  }
+
   // ===================================================================
   // 🏗️ Crear una nueva sala + equipos automáticos
   // ===================================================================

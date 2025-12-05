@@ -23,6 +23,9 @@ class Message {
   final String? rank; // rango o nivel del jugador
   final Timestamp timestamp; // orden y hora del mensaje
 
+  /// 🔊 Duración en segundos para mensajes de audio
+  final int? duration; // 👈 NUEVO — requerido por audio player
+
   Message({
     required this.id,
     required this.roomId,
@@ -34,6 +37,7 @@ class Message {
     this.type = 'text',
     this.avatarUrl,
     this.rank,
+    this.duration, // 👈 NUEVO
   });
 
   /// ==================== 🔄 Conversión a Map ====================
@@ -48,11 +52,11 @@ class Message {
         'avatarUrl': avatarUrl,
         'rank': rank,
         'timestamp': timestamp,
+        'duration': duration, // 👈 NUEVO
       };
 
   /// ==================== 🧩 Creación desde Firestore ====================
   factory Message.fromMap(Map<String, dynamic> map) {
-    // Compatibilidad: Firestore puede guardar 'timestamp' o 'createdAt'
     final dynamic timeField = map['timestamp'] ?? map['createdAt'];
     final Timestamp safeTimestamp =
         timeField is Timestamp ? timeField : Timestamp.fromDate(DateTime.now());
@@ -68,6 +72,9 @@ class Message {
       avatarUrl: (map['avatarUrl'] ?? '') as String?,
       rank: (map['rank'] ?? 'Bronce') as String?,
       timestamp: safeTimestamp,
+
+      /// 🔉 Duración del audio (si aplica)
+      duration: map['duration'] != null ? map['duration'] as int : null,
     );
   }
 
