@@ -726,12 +726,28 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
   // 🧩 Cuerpo de la pantalla de detalle
   // ================================================================
   Widget _buildRoomBody(Room room, bool isCreator, bool joined) {
+    final now = DateTime.now();
+
+    bool canCloseMatch = false;
+
+    if (isCreator &&
+        !room.isClosed &&
+        room.eventAt != null &&
+        room.players.length >= 6) {
+      final eventPlus12h = room.eventAt!.add(const Duration(hours: 12));
+      if (now.isAfter(eventPlus12h)) {
+        canCloseMatch = true;
+      }
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 🔧 Botón para editar sala (solo el creador)
+          // ============================================================
+          // 🔧 BOTÓN DE EDITAR SALA
+          // ============================================================
           if (isCreator)
             Align(
               alignment: Alignment.centerRight,
@@ -743,15 +759,39 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
                   'Editar sala',
                   style: TextStyle(color: Colors.blueAccent),
                 ),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.blueAccent,
+              ),
+            ),
+
+          // ============================================================
+          // 🏁 BOTÓN “CERRAR PARTIDO”
+          // ============================================================
+          if (canCloseMatch)
+            Container(
+              margin: const EdgeInsets.only(top: 10),
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.flag, color: Colors.white),
+                label: const Text(
+                  'Cerrar partido',
+                  style: TextStyle(fontSize: 16),
                 ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () => _openCloseMatchModal(room),
               ),
             ),
 
           const SizedBox(height: 10),
 
-          // Tarjeta encabezado
+          // ============================================================
+          // TARJETA PRINCIPAL
+          // ============================================================
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -784,7 +824,9 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
 
           const SizedBox(height: 20),
 
-          // Info base
+          // ============================================================
+          // INFORMACIÓN GENERAL
+          // ============================================================
           _buildInfoRow(Icons.location_on, 'Ciudad', room.city),
           if (room.exactAddress != null && room.exactAddress!.isNotEmpty)
             _buildInfoRow(Icons.home_work, 'Dirección', room.exactAddress!)
@@ -809,6 +851,7 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
                 ),
               ),
             ),
+
           _buildInfoRow(Icons.group, 'Equipos', '${room.teams} equipos'),
           _buildInfoRow(
               Icons.person, 'Jugadores por equipo', '${room.playersPerTeam}'),
@@ -831,7 +874,9 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
 
           const SizedBox(height: 12),
 
-          // ID de la sala (con copiar rápido)
+          // ============================================================
+          // ID DE LA SALA
+          // ============================================================
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
@@ -878,9 +923,8 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
                   },
                   icon: const Icon(Icons.copy, color: Colors.white70),
                 ),
-                const SizedBox(width: 4),
                 IconButton(
-                  tooltip: 'Compartir por ID',
+                  tooltip: 'Compartir',
                   onPressed: () => _openShareIdSheet(room),
                   icon: const Icon(Icons.ios_share, color: Colors.blueAccent),
                 ),
@@ -890,7 +934,9 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
 
           const SizedBox(height: 30),
 
-          // Acciones principales
+          // ============================================================
+          // BOTONES PRINCIPALES
+          // ============================================================
           _buildActionButtons(room, isCreator, joined),
         ],
       ),
@@ -1036,6 +1082,108 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
         if (mounted) setState(() => _loading = false);
       }
     }
+  }
+
+  Future<void> _openCloseMatchModal(Room room) async {
+    final teamsSnap = await FirebaseFirestore.instance
+        .collection('rooms')
+        .doc(room.id)
+        .collection('teams')
+        .get();
+
+    final teams = teamsSnap.docs;
+
+    if (teams.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No hay equipos registrados en esta sala.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    String? selectedTeamId;
+
+    await showDialog(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1C1C1C),
+          title: const Text('Cerrar partido',
+              style: TextStyle(color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Selecciona el equipo ganador:',
+                style: TextStyle(color: Colors.white70),
+              ),
+              const SizedBox(height: 10),
+              ...teams.map((t) {
+                final data = t.data();
+                final id = t.id;
+                final name = data['name'] ?? 'Equipo';
+                return RadioListTile<String>(
+                  activeColor: Colors.blueAccent,
+                  value: id,
+                  groupValue: selectedTeamId,
+                  onChanged: (v) {
+                    selectedTeamId = v;
+                    (context as Element).markNeedsBuild();
+                  },
+                  title:
+                      Text(name, style: const TextStyle(color: Colors.white)),
+                );
+              }),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar',
+                  style: TextStyle(color: Colors.white70)),
+            ),
+            ElevatedButton(
+              style:
+                  ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+              onPressed: selectedTeamId == null
+                  ? null
+                  : () async {
+                      final winnerDoc =
+                          teams.firstWhere((t) => t.id == selectedTeamId);
+                      final winnerName = winnerDoc['name'];
+
+                      await _roomService.updateRoom(room.id, {
+                        'isClosed': true,
+                        'winnerTeamId': selectedTeamId,
+                        'winnerTeamName': winnerName,
+                        'closedAt': Timestamp.now(),
+                      });
+
+                      // Notificación en el chat
+                      await _sendSystemMessage(
+                        room.id,
+                        '🏆 El equipo **$winnerName** ganó este partido.',
+                      );
+
+                      if (!mounted) return;
+                      Navigator.pop(context);
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content:
+                              Text('Partido cerrado — Ganador: $winnerName'),
+                          backgroundColor: Colors.greenAccent,
+                        ),
+                      );
+                    },
+              child: const Text('Guardar resultado'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   // ================================================================

@@ -329,6 +329,9 @@ class _PlayersList extends StatelessWidget {
   }
 }
 
+// ====================================================================
+// 🎨 _PlayerCard — Versión PRO (minimalista + neón + apodo)
+// ====================================================================
 class _PlayerCard extends StatelessWidget {
   final String uid;
   final String name;
@@ -354,6 +357,7 @@ class _PlayerCard extends StatelessWidget {
     required this.teamId,
   });
 
+  // 🎖 Color según rango
   Color _rankColor(String rank) {
     switch (rank.toLowerCase()) {
       case 'oro':
@@ -365,174 +369,199 @@ class _PlayerCard extends StatelessWidget {
       case 'diamante':
         return const Color(0xFF7DF9FF);
       default:
-        return const Color(0xFFCD7F32); // Bronce
+        return const Color(0xFFCD7F32);
     }
+  }
+
+  // 🔍 Detecta nickname o fallback
+  String _detectNickname(Map<String, dynamic> data) {
+    return (data['nickname'] ?? data['apodo'] ?? data['name'] ?? "Jugador")
+        .toString();
+  }
+
+  // 🔍 Detecta URL de foto (4 estándares distintos)
+  String _detectAvatar(Map<String, dynamic> data) {
+    return (data['photoUrl'] ??
+            data['avatar'] ??
+            data['fotourl'] ??
+            data['pothoUrl'] ??
+            "")
+        .toString();
   }
 
   @override
   Widget build(BuildContext context) {
     final rankColor = _rankColor(rank);
-    final service = TeamService();
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1B1B1B),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white12, width: 0.6),
-        boxShadow: [
-          BoxShadow(
-            color: accent.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Avatar
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [
-                  accent.withOpacity(0.85),
-                  Colors.black.withOpacity(0.6)
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream:
+          FirebaseFirestore.instance.collection("users").doc(uid).snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const SizedBox.shrink();
+        }
+
+        final data = snap.data!.data() ?? {};
+        final nickname = _detectNickname(data);
+        final photo = _detectAvatar(data);
+
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: accent.withOpacity(0.35), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withOpacity(0.18),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
               ),
-              border: Border.all(color: accent.withOpacity(0.7), width: 1.2),
-              boxShadow: [
-                BoxShadow(
-                  color: accent.withOpacity(0.25),
-                  blurRadius: 6,
-                  spreadRadius: 1,
-                ),
-              ],
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: avatar.isNotEmpty
-                ? Image.network(
-                    avatar,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        _FallbackAvatar(name: name, accent: accent),
-                  )
-                : _FallbackAvatar(name: name, accent: accent),
+            ],
           ),
-          const SizedBox(width: 10),
+          child: Row(
+            children: [
+              // ================= AVATAR =================
+              Container(
+                width: 48,
+                height: 48,
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [accent, accent.withOpacity(0.3)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: CircleAvatar(
+                  backgroundColor: Colors.black,
+                  backgroundImage:
+                      photo.isNotEmpty ? NetworkImage(photo) : null,
+                  child: photo.isEmpty
+                      ? Text(
+                          nickname.characters.first.toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                      : null,
+                ),
+              ),
 
-          // Datos
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: 6,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+              const SizedBox(width: 12),
+
+              // ================= INFO =================
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Apodo (principal)
                     Text(
-                      name,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, color: Colors.white),
+                      nickname,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                    ),
-                    _Badge(text: badgeText, color: accent),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        '$rank${position.isNotEmpty ? ' • $position' : ''}',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                  ],
-                ),
-              ],
-            ),
-          ),
 
-          // Menú de acciones
-          if (isAdmin)
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, color: Colors.white70),
-              onSelected: (value) async {
-                String? feedback;
-                if (value == 'titular') {
-                  feedback = await service.promoteToStarter(
-                    roomId: roomId,
-                    teamId: teamId,
-                    uid: uid,
-                  );
-                } else if (value == 'suplente') {
-                  feedback = await service.demoteToBench(
-                    roomId: roomId,
-                    teamId: teamId,
-                    uid: uid,
-                  );
-                } else if (value == 'expulsar') {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (_) => AlertDialog(
-                      backgroundColor: const Color(0xFF1B1B1B),
-                      title: const Text('¿Expulsar jugador?',
-                          style: TextStyle(color: Colors.white)),
-                      content: Text(
-                        'Esta acción no se puede deshacer.\n\nJugador: $name',
-                        style: const TextStyle(color: Colors.white70),
+                    // Nombre + posición
+                    Text(
+                      "$name${position.isNotEmpty ? " • $position" : ""}",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
                       ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(false),
-                          child: const Text('Cancelar'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.of(context).pop(true),
-                          child: const Text('Expulsar'),
-                        ),
+                    ),
+
+                    const SizedBox(height: 4),
+
+                    // BADGES
+                    Row(
+                      children: [
+                        _Badge(text: badgeText, color: accent),
+                        const SizedBox(width: 6),
+                        _Badge(text: rank, color: rankColor),
                       ],
                     ),
-                  );
-                  if (confirm == true) {
-                    feedback = await service.removePlayerFromTeam(
-                      roomId: roomId,
-                      teamId: teamId,
-                      uid: uid,
-                    );
-                  }
-                }
-
-                if (feedback != null && context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(feedback), backgroundColor: accent),
-                  );
-                }
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'titular', child: Text('Mover a Titular')),
-                PopupMenuItem(
-                    value: 'suplente', child: Text('Mover a Suplente')),
-                PopupMenuItem(
-                  value: 'expulsar',
-                  child: Text('Expulsar jugador',
-                      style: TextStyle(color: Colors.redAccent)),
+                  ],
                 ),
-              ],
-            ),
-        ],
-      ),
+              ),
+
+              // ================= MENÚ ADMIN =================
+              if (isAdmin)
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Colors.white54),
+                  onSelected: (value) async {
+                    final service = TeamService();
+                    if (value == "titular") {
+                      await service.promoteToStarter(
+                        roomId: roomId,
+                        teamId: teamId,
+                        uid: uid,
+                      );
+                    } else if (value == "suplente") {
+                      await service.demoteToBench(
+                        roomId: roomId,
+                        teamId: teamId,
+                        uid: uid,
+                      );
+                    } else if (value == "expulsar") {
+                      final ok = await showDialog<bool>(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                          backgroundColor: const Color(0xFF1C1C1C),
+                          title: const Text("¿Expulsar jugador?",
+                              style: TextStyle(color: Colors.white)),
+                          content: Text(
+                            "Jugador: $name",
+                            style: const TextStyle(color: Colors.white70),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: const Text("Cancelar"),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(context, true),
+                              child: const Text("Expulsar"),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (ok == true) {
+                        await service.removePlayerFromTeam(
+                          roomId: roomId,
+                          teamId: teamId,
+                          uid: uid,
+                        );
+                      }
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                        value: "titular", child: Text("Mover a titular")),
+                    PopupMenuItem(
+                        value: "suplente", child: Text("Mover a suplente")),
+                    PopupMenuItem(
+                      value: "expulsar",
+                      child: Text("Expulsar jugador",
+                          style: TextStyle(color: Colors.redAccent)),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

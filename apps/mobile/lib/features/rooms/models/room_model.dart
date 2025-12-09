@@ -6,8 +6,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// 🔹 Compatible con Firestore.
 /// 🔹 Incluye ubicación completa (ciudad, país, coordenadas, dirección exacta).
 /// 🔹 Añadido campo `sex` (Masculino / Femenino / Mixto).
-/// 🔹 Ahora incluye soporte para `lat/lng` exactos y `updatedAt`.
-/// 🔹 Ideal para integración con RoomService, CreateRoomPage y RoomDetailPage.
+/// 🔹 Ahora incluye soporte para cierre de partido y ganador.
+/// 🔹 TOTALMENTE compatible con tu base de datos actual.
 /// ====================================================================
 class Room {
   final String id;
@@ -23,17 +23,23 @@ class Room {
   final double? cityLat;
   final double? cityLng;
 
-  // 📍 Coordenadas exactas (nueva compatibilidad)
+  // 📍 Coordenadas exactas
   final double? lat;
   final double? lng;
 
-  final String? countryCode; // 🇨🇴 Código ISO del país
-  final String? exactAddress; // 📍 Dirección exacta del partido
-  final String? sex; // 🚻 Tipo de partido (Masculino / Femenino / Mixto)
+  final String? countryCode;
+  final String? exactAddress;
+  final String? sex;
   final DateTime createdAt;
-  final DateTime? updatedAt; // 🕒 Nueva marca opcional
-  final DateTime? eventAt; // 📅 Fecha/hora del partido
-  final List<String> players; // 👥 Lista de jugadores
+  final DateTime? updatedAt;
+  final DateTime? eventAt;
+  final List<String> players;
+
+  // 🆕 NUEVOS CAMPOS (para sistema de cierre y resultados)
+  final bool isClosed; // partido ya cerrado
+  final String? winnerTeamId; // id del equipo ganador
+  final String? winnerTeamName; // nombre visible del equipo ganador
+  final DateTime? closedAt; // fecha/hora de cierre
 
   Room({
     required this.id,
@@ -55,6 +61,10 @@ class Room {
     this.eventAt,
     this.updatedAt,
     this.players = const [],
+    this.isClosed = false, // por defecto NO está cerrada
+    this.winnerTeamId,
+    this.winnerTeamName,
+    this.closedAt,
   });
 
   // ================================================================
@@ -82,6 +92,12 @@ class Room {
       if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
       if (eventAt != null) 'eventAt': Timestamp.fromDate(eventAt!),
       'players': players,
+
+      // 🆕 NUEVOS CAMPOS
+      'isClosed': isClosed,
+      if (winnerTeamId != null) 'winnerTeamId': winnerTeamId,
+      if (winnerTeamName != null) 'winnerTeamName': winnerTeamName,
+      if (closedAt != null) 'closedAt': Timestamp.fromDate(closedAt!),
     };
   }
 
@@ -113,6 +129,14 @@ class Room {
       eventAt = eventField.toDate();
     } else if (eventField is String) {
       eventAt = DateTime.tryParse(eventField);
+    }
+
+    DateTime? closedAt;
+    final closedField = map['closedAt'];
+    if (closedField is Timestamp) {
+      closedAt = closedField.toDate();
+    } else if (closedField is String) {
+      closedAt = DateTime.tryParse(closedField);
     }
 
     int parseInt(dynamic value, [int defaultValue = 0]) {
@@ -150,6 +174,12 @@ class Room {
       updatedAt: updatedAt,
       eventAt: eventAt,
       players: List<String>.from(map['players'] ?? []),
+
+      // 🆕 NUEVOS CAMPOS
+      isClosed: map['isClosed'] ?? false,
+      winnerTeamId: map['winnerTeamId'],
+      winnerTeamName: map['winnerTeamName'],
+      closedAt: closedAt,
     );
   }
 
@@ -176,6 +206,12 @@ class Room {
     DateTime? updatedAt,
     DateTime? eventAt,
     List<String>? players,
+
+    // nuevos
+    bool? isClosed,
+    String? winnerTeamId,
+    String? winnerTeamName,
+    DateTime? closedAt,
   }) {
     return Room(
       id: id ?? this.id,
@@ -197,28 +233,34 @@ class Room {
       updatedAt: updatedAt ?? this.updatedAt,
       eventAt: eventAt ?? this.eventAt,
       players: players ?? this.players,
+
+      // nuevos
+      isClosed: isClosed ?? this.isClosed,
+      winnerTeamId: winnerTeamId ?? this.winnerTeamId,
+      winnerTeamName: winnerTeamName ?? this.winnerTeamName,
+      closedAt: closedAt ?? this.closedAt,
     );
   }
 
   // ================================================================
-  // 🧩 Métodos utilitarios (para UI y lógica)
+  // 🧩 Métodos utilitarios
   // ================================================================
   int get maxPlayers => (teams * playersPerTeam) + substitutes;
   bool get isFull => players.length >= maxPlayers;
   bool containsPlayer(String userId) => players.contains(userId);
 
-  /// Devuelve una versión amigable de la fecha del partido
+  bool get hasResult => isClosed && winnerTeamId != null;
+
   String get formattedEventDate {
     if (eventAt == null) return 'Sin fecha';
     final e = eventAt!;
     return '${e.day.toString().padLeft(2, '0')}/${e.month.toString().padLeft(2, '0')}/${e.year}';
   }
 
-  /// Retorna `true` si tiene coordenadas válidas
   bool get hasLocation =>
       (lat != null && lng != null) || (cityLat != null && cityLng != null);
 
   @override
   String toString() =>
-      'Room($name, ciudad: $city, sexo: $sex, pública: $isPublic)';
+      'Room($name, ciudad: $city, sexo: $sex, pública: $isPublic, cerrada: $isClosed)';
 }

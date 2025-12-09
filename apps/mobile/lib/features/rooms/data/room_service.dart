@@ -601,6 +601,130 @@ class RoomService {
   }
 
   // ===================================================================
+  // 🏁 Cerrar partido + crear notificaciones de resultado por jugador
+  // ===================================================================
+  Future<void> closeMatchAndCreateResultNotifications({
+    required String roomId,
+    required String winnerTeamId,
+    required String winnerTeamName,
+  }) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw Exception('Usuario no autenticado');
+
+    // 1️⃣ Traer la sala
+    final roomSnap = await _roomRef(roomId).get();
+    if (!roomSnap.exists) {
+      throw Exception('La sala no existe');
+    }
+
+    final room = Room.fromMap(roomSnap.data()!);
+
+    // 2️⃣ Validar permisos (solo creador por ahora)
+    if (room.creatorId != uid) {
+      throw Exception('Solo el creador de la sala puede cerrarla.');
+    }
+
+    // 3️⃣ Evitar doble cierre
+    if (room.isClosed) {
+      throw Exception('Esta sala ya está cerrada.');
+    }
+
+    // 4️⃣ Cargar equipos y jugadores de la sala
+    final teamsSnap = await _roomRef(roomId).collection('teams').get();
+
+    if (teamsSnap.docs.isEmpty) {
+      throw Exception('No hay equipos registrados en esta sala.');
+    }
+
+    final Set<String> winnerPlayerIds = {};
+    final Set<String> loserPlayerIds = {};
+
+    for (final doc in teamsSnap.docs) {
+      final data = doc.data();
+      final teamId = doc.id;
+      final players = List<String>.from(data['players'] ?? const <String>[]);
+
+      if (teamId == winnerTeamId) {
+        winnerPlayerIds.addAll(players);
+      } else {
+        loserPlayerIds.addAll(players);
+      }
+    }
+
+    // Por seguridad, no queremos jugadores duplicados en ambas listas
+    loserPlayerIds.removeWhere(winnerPlayerIds.contains);
+
+    // 5️⃣ Mensajes de resultado
+    const String winnerTitle = 'Victoria absoluta ⚽';
+    final String winnerBody =
+        'Tu equipo $winnerTeamName dominó la cancha en "${room.name}". '
+        '¡Sigue así, crack, esto apenas comienza!';
+
+    const String loserTitle = 'No se dio esta vez... 💔';
+    final String loserBody =
+        'La victoria no llegó hoy en "${room.name}", pero el fútbol siempre da revancha. '
+        'No bajes la cabeza, sigan luchando.';
+
+    // 6️⃣ Escribir todo en un batch:
+    //     - sala cerrada
+    //     - notificaciones de resultado por usuario
+    final batch = _firestore.batch();
+    final serverNow = FieldValue.serverTimestamp();
+
+    // ✅ Actualizar sala como cerrada
+    batch.update(_roomRef(roomId), {
+      'isClosed': true,
+      'winnerTeamId': winnerTeamId,
+      'winnerTeamName': winnerTeamName,
+      'closedAt': serverNow,
+    });
+
+    // ✅ Notificaciones para GANADORES
+    for (final playerId in winnerPlayerIds) {
+      final notifRef = _firestore
+          .collection('users')
+          .doc(playerId)
+          .collection('matchResults')
+          .doc(roomId); // usamos roomId como id único
+
+      batch.set(notifRef, {
+        'roomId': roomId,
+        'winnerTeamId': winnerTeamId,
+        'winnerTeamName': winnerTeamName,
+        'isWinner': true,
+        'title': winnerTitle,
+        'body': winnerBody,
+        'type': 'match_result',
+        'createdAt': serverNow,
+        'seen': false,
+      });
+    }
+
+    // ✅ Notificaciones para PERDEDORES
+    for (final playerId in loserPlayerIds) {
+      final notifRef = _firestore
+          .collection('users')
+          .doc(playerId)
+          .collection('matchResults')
+          .doc(roomId); // mismo id: el resultado es el mismo partido
+
+      batch.set(notifRef, {
+        'roomId': roomId,
+        'winnerTeamId': winnerTeamId,
+        'winnerTeamName': winnerTeamName,
+        'isWinner': false,
+        'title': loserTitle,
+        'body': loserBody,
+        'type': 'match_result',
+        'createdAt': serverNow,
+        'seen': false,
+      });
+    }
+
+    await batch.commit();
+  }
+
+  // ===================================================================
   // 🌎 Normalizador
   // ===================================================================
   String? _toIsoFromName(String? name) {

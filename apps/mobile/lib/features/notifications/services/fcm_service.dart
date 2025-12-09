@@ -135,6 +135,79 @@ class FcmService {
     }
   }
 
+  // =========================================================================
+  // 🏆 Notificación — Equipo GANADOR
+  // =========================================================================
+  static Future<void> sendWinNotification({
+    required String roomId,
+    required String teamName,
+    required List<String> winnerUids,
+  }) async {
+    for (final uid in winnerUids) {
+      await _sendPersonalNotification(
+        uid: uid,
+        title: '🏆 ¡Victoria absoluta!',
+        body: 'Tu equipo $teamName ganó el partido. Crack total.',
+        link: 'draftclub://victory?roomId=$roomId',
+      );
+    }
+  }
+
+  // =========================================================================
+  // 😞 Notificación — Equipo PERDEDOR
+  // =========================================================================
+  static Future<void> sendLoseNotification({
+    required String roomId,
+    required String teamName,
+    required List<String> loserUids,
+  }) async {
+    for (final uid in loserUids) {
+      await _sendPersonalNotification(
+        uid: uid,
+        title: '⚽ No fue el día…',
+        body: 'La victoria no llegó, pero el fútbol siempre da revancha.',
+        link: 'draftclub://defeat?roomId=$roomId',
+      );
+    }
+  }
+
+  // =========================================================================
+  // 📩 Enviar notificación a un usuario específico (tokens múltiples)
+  // =========================================================================
+  static Future<void> _sendPersonalNotification({
+    required String uid,
+    required String title,
+    required String body,
+    required String link,
+  }) async {
+    try {
+      final userDoc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+
+      if (!userDoc.exists) return;
+
+      final tokens = List<String>.from(userDoc['fcmTokens'] ?? []);
+      if (tokens.isEmpty) return;
+
+      for (final token in tokens) {
+        await FirebaseMessaging.instance.sendMessage(
+          to: token,
+          data: {
+            'title': title,
+            'body': body,
+            'link': link,
+          },
+        );
+      }
+
+      if (kDebugMode) {
+        debugPrint('📨 Notificación enviada a $uid → $title');
+      }
+    } catch (e) {
+      debugPrint('❌ Error enviando notificación a $uid: $e');
+    }
+  }
+
   /// =========================================================================
   /// 🧹 Limpieza (por si se reinicia sesión)
   /// =========================================================================
