@@ -5,8 +5,10 @@
  * Centraliza todas las funciones backend de DraftClub.
  * ============================================================================
  */
+
 import admin from "firebase-admin";
 import { sendAdminNotification } from "./admin/notifications/sendAdminNotification.js";
+import { sendMatchResultNotification } from "./admin/notifications/sendMatchResultNotification.js";
 
 // ✅ Inicialización segura (una sola vez)
 if (!admin.apps || admin.apps.length === 0) {
@@ -15,3 +17,4 @@ if (!admin.apps || admin.apps.length === 0) {
 
 // 🚀 Exportar las funciones activas
 export { sendAdminNotification };
+export { sendMatchResultNotification };

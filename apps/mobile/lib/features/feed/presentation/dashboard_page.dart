@@ -11,6 +11,10 @@ import 'package:draftclub_mobile/features/profile/presentation/profile_page.dart
 // ⭐ NUEVO IMPORT NECESARIO PARA LOCKER
 import 'package:draftclub_mobile/features/locker/presentation/pages/locker_page.dart';
 
+// ⭐⭐ NUEVOS IMPORTS PARA LEER match_history
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 /// ====================================================================
 /// 🧭 DashboardPage — Control global de navegación inferior (Versión PRO++)
 /// ====================================================================
@@ -31,6 +35,119 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   final ChatService _chatService = ChatService();
   int _currentIndex = 0;
+
+  // ================================================================
+  // 🆕 PASO 2 — MOSTRAR TARJETA DE ÚLTIMO PARTIDO AL ENTRAR A LA APP
+  // ================================================================
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLastMatchAndShowCard(); // 👈 aquí se dispara la revisión de historial
+  }
+
+  /// Lee el último partido del usuario en `users/{uid}/match_history`
+  /// y si `wasSeen == false`, muestra la tarjeta de victoria/derrota
+  /// y lo marca como visto.
+  Future<void> _checkLastMatchAndShowCard() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('match_history')
+          .orderBy('timestamp',
+              descending: true) // usamos el campo que guardaste
+          .limit(1)
+          .get();
+
+      if (snap.docs.isEmpty) return;
+
+      final doc = snap.docs.first;
+      final data = doc.data();
+
+      final wasSeen = (data['wasSeen'] ?? false) as bool;
+      if (wasSeen == true) {
+        return; // ya se mostró antes, no se repite
+      }
+
+      final bool teamWon = (data['teamWon'] ?? false) as bool;
+      final String teamName = (data['teamNameWon'] ?? 'Tu equipo')
+          .toString(); // mismo campo que guardas
+
+      // Esperamos un poco a que se pinte el Dashboard y luego mostramos la tarjeta
+      if (!mounted) return;
+      Future.delayed(const Duration(milliseconds: 700), () {
+        if (!mounted) return;
+        if (teamWon) {
+          _showVictoryCard(teamName);
+        } else {
+          _showDefeatCard(teamName);
+        }
+      });
+
+      // Marcar como visto
+      await doc.reference.update({'wasSeen': true});
+    } catch (e) {
+      debugPrint('⚠️ Error leyendo match_history en Dashboard: $e');
+    }
+  }
+
+  /// Tarjeta simple de victoria (puedes mejorar el diseño luego)
+  void _showVictoryCard(String teamName) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF050812),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text(
+          '🏆 ¡Victoria!',
+          style:
+              TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Tu equipo **$teamName** ganó su último partido.\n\nSigue sumando partidos para subir de nivel en DraftClub.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child:
+                const Text('Cerrar', style: TextStyle(color: Colors.white54)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Tarjeta simple de derrota
+  void _showDefeatCard(String teamName) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF120508),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text(
+          '❌ Derrota',
+          style:
+              TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'El equipo **$teamName** ganó ese partido.\n\nNo pasa nada, sigue jugando para mejorar tus estadísticas.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Entendido',
+                style: TextStyle(color: Colors.white54)),
+          ),
+        ],
+      ),
+    );
+  }
 
   // ================================================================
   // 📄 PÁGINAS PRINCIPALES — ACTUALIZADAS
@@ -66,8 +183,8 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // ================================================================
-// 🧩 MODAL DE CREACIÓN DE CONTENIDO
-// ================================================================
+  // 🧩 MODAL DE CREACIÓN DE CONTENIDO
+  // ================================================================
   void _openCreateModal() {
     showModalBottomSheet(
       context: context,
@@ -302,7 +419,6 @@ class _DashboardPageState extends State<DashboardPage> {
               icon: Icon(Icons.add_circle, size: 38, color: Colors.blueAccent),
               label: '',
             ),
-            // ⭐ REEMPLAZO COMPLETO DE TORNEOS POR LOCKER
             BottomNavigationBarItem(
               icon: Icon(Icons.storefront_outlined),
               activeIcon: Icon(Icons.storefront, color: Colors.blueAccent),

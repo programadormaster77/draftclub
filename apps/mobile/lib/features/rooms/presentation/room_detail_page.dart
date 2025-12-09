@@ -730,13 +730,21 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
 
     bool canCloseMatch = false;
 
-    if (isCreator &&
-        !room.isClosed &&
-        room.eventAt != null &&
-        room.players.length >= 6) {
-      final eventPlus12h = room.eventAt!.add(const Duration(hours: 12));
-      if (now.isAfter(eventPlus12h)) {
-        canCloseMatch = true;
+    if (!room.isClosed && room.eventAt != null) {
+      final eventTime = room.eventAt!;
+      final now = DateTime.now();
+
+      if (isCreator) {
+        // 🟢 Administrador: puede cerrar apenas llegue la hora exacta
+        if (now.isAfter(eventTime)) {
+          canCloseMatch = true;
+        }
+      } else {
+        // 🔵 Usuario normal: puede cerrar 1 hora después del partido
+        final eventPlus1h = eventTime.add(const Duration(hours: 1));
+        if (now.isAfter(eventPlus1h)) {
+          canCloseMatch = true;
+        }
       }
     }
 
@@ -1108,81 +1116,307 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
     await showDialog(
       context: context,
       builder: (_) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1C1C1C),
-          title: const Text('Cerrar partido',
-              style: TextStyle(color: Colors.white)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Selecciona el equipo ganador:',
-                style: TextStyle(color: Colors.white70),
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1C1C1C),
+              title: const Text(
+                'Cerrar partido',
+                style: TextStyle(color: Colors.white),
               ),
-              const SizedBox(height: 10),
-              ...teams.map((t) {
-                final data = t.data();
-                final id = t.id;
-                final name = data['name'] ?? 'Equipo';
-                return RadioListTile<String>(
-                  activeColor: Colors.blueAccent,
-                  value: id,
-                  groupValue: selectedTeamId,
-                  onChanged: (v) {
-                    selectedTeamId = v;
-                    (context as Element).markNeedsBuild();
-                  },
-                  title:
-                      Text(name, style: const TextStyle(color: Colors.white)),
-                );
-              }),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar',
-                  style: TextStyle(color: Colors.white70)),
-            ),
-            ElevatedButton(
-              style:
-                  ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-              onPressed: selectedTeamId == null
-                  ? null
-                  : () async {
-                      final winnerDoc =
-                          teams.firstWhere((t) => t.id == selectedTeamId);
-                      final winnerName = winnerDoc['name'];
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Selecciona el equipo ganador:',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 10),
 
-                      await _roomService.updateRoom(room.id, {
-                        'isClosed': true,
-                        'winnerTeamId': selectedTeamId,
-                        'winnerTeamName': winnerName,
-                        'closedAt': Timestamp.now(),
-                      });
+                    ...teams.map((t) {
+                      final data = t.data() as Map<String, dynamic>;
+                      final id = t.id;
+                      final name = data['name'] ?? 'Equipo';
 
-                      // Notificación en el chat
-                      await _sendSystemMessage(
-                        room.id,
-                        '🏆 El equipo **$winnerName** ganó este partido.',
-                      );
-
-                      if (!mounted) return;
-                      Navigator.pop(context);
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content:
-                              Text('Partido cerrado — Ganador: $winnerName'),
-                          backgroundColor: Colors.greenAccent,
+                      return RadioListTile<String>(
+                        activeColor: Colors.blueAccent,
+                        value: id,
+                        groupValue: selectedTeamId,
+                        onChanged: (v) {
+                          setStateDialog(() {
+                            selectedTeamId = v;
+                          });
+                        },
+                        title: Text(
+                          name,
+                          style: const TextStyle(color: Colors.white),
                         ),
                       );
-                    },
-              child: const Text('Guardar resultado'),
-            ),
-          ],
+                    }).toList(),
+
+                    const SizedBox(height: 10),
+
+                    // 🟥 Botón eliminar sala
+                    TextButton(
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        await _confirmDelete(room);
+                      },
+                      child: const Text(
+                        'Eliminar sala',
+                        style: TextStyle(color: Colors.redAccent),
+                      ),
+                    )
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    'Cancelar',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ),
+
+                // 🟩 Guardar resultado
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                  ),
+                  onPressed: selectedTeamId == null
+                      ? null
+                      : () async {
+                          Navigator.pop(context);
+                          await _processMatchResult(room, selectedTeamId!);
+                        },
+                  child: const Text('Guardar resultado'),
+                ),
+              ],
+            );
+          },
         );
       },
+    );
+  }
+
+  // ================================================================
+  // 🧮 Lógica de cierre de partido
+  // ================================================================
+  Future<void> _processMatchResult(Room room, String winnerTeamId) async {
+    final teamsSnap = await FirebaseFirestore.instance
+        .collection('rooms')
+        .doc(room.id)
+        .collection('teams')
+        .get();
+
+    final uid = _auth.currentUser!.uid;
+    final isCreator = room.creatorId == uid;
+
+    final winnerDoc = teamsSnap.docs.firstWhere((t) => t.id == winnerTeamId);
+    final winnerData = winnerDoc.data() as Map<String, dynamic>;
+    final winnerName = winnerData['name'] ?? 'Equipo';
+
+    // 🔥 VALIDAR MÍNIMOS SOLO PARA USUARIOS NORMALES
+    for (var t in teamsSnap.docs) {
+      final data = t.data() as Map<String, dynamic>;
+      final players = List<String>.from(data['players'] ?? []);
+      if (!isCreator && players.length < 4) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Cada equipo debe tener mínimo 4 jugadores para cerrar el partido.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
+    }
+
+    // 🏁 Cerrar sala en Firestore
+    await _roomService.updateRoom(room.id, {
+      'isClosed': true,
+      'winnerTeamId': winnerTeamId,
+      'winnerTeamName': winnerName,
+      'closedAt': Timestamp.now(),
+    });
+
+    // 📝 Mensaje del sistema
+    await _sendSystemMessage(
+      room.id,
+      '🏆 El equipo **$winnerName** ganó este partido.',
+    );
+
+    // ==============================
+    // ⚽ SUMAR PARTIDOS A TODOS
+    // ==============================
+    for (var t in teamsSnap.docs) {
+      final data = t.data() as Map<String, dynamic>;
+      final players = List<String>.from(data['players'] ?? []);
+
+      for (final playerId in players) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(playerId)
+            .update({
+          'matchesPlayed': FieldValue.increment(1),
+          'xp': FieldValue.increment(20), // 🟦 20 XP por partido
+        });
+
+        // Actualizar nivel automáticamente
+        await _updateUserLevel(playerId);
+      }
+    }
+
+    // ==============================
+    // 🔔 Notificaciones Push
+    // ==============================
+    for (var t in teamsSnap.docs) {
+      final data = t.data() as Map<String, dynamic>;
+      final players = List<String>.from(data['players'] ?? []);
+      final isWinner = (t.id == winnerTeamId);
+
+      for (final playerId in players) {
+        await _sendResultNotification(playerId, isWinner, room.name);
+      }
+    }
+
+    // ==============================
+    // 🎴 Tarjeta animada
+    // ==============================
+    final isUserWinner = winnerTeamId == _getUserTeamId(uid, teamsSnap.docs);
+
+    if (isUserWinner) {
+      _showVictoryCard(winnerName);
+    } else {
+      _showDefeatCard(winnerName);
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Partido cerrado correctamente'),
+        backgroundColor: Colors.greenAccent,
+      ),
+    );
+
+// 🚀 Sacar al usuario de la sala primero
+
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted) {
+        Navigator.pop(context); // salir del RoomDetailPage
+      }
+    });
+
+    // 📝 Guardar resultado del partido para cada jugador (match_history)
+    final matchId = room.id; // usamos id de sala como id único del partido
+
+    for (var t in teamsSnap.docs) {
+      final data = t.data() as Map<String, dynamic>;
+      final players = List<String>.from(data['players'] ?? []);
+      final isWinner = (t.id == winnerTeamId);
+
+      for (final playerId in players) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(playerId)
+            .collection('match_history')
+            .doc(matchId)
+            .set({
+          'matchId': matchId,
+          'roomName': room.name,
+          'createdAt': Timestamp.now(),
+          'winner': isWinner,
+          'teamName': winnerName,
+          'xp': 20,
+          'seen': false, // 👈 ESTE ES EL CAMPO CORRECTO
+        }, SetOptions(merge: true));
+      }
+    }
+
+// 🧨 Eliminar la sala en segundo plano después de mostrar tarjeta y notifs
+    Future.delayed(const Duration(seconds: 4), () async {
+      await _roomService.deleteRoom(room.id);
+    });
+  }
+
+  String? _getUserTeamId(
+    String uid,
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> teams,
+  ) {
+    for (var t in teams) {
+      final data = t.data();
+      final players = List<String>.from(data['players'] ?? []);
+      if (players.contains(uid)) return t.id;
+    }
+    return null;
+  }
+
+  Future<void> _updateUserLevel(String uid) async {
+    final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+    final snap = await userRef.get();
+    final data = snap.data() as Map<String, dynamic>? ?? {};
+    final xp = (data['xp'] ?? 0) as int;
+
+    int level = 1;
+    if (xp > 100) level = 2;
+    if (xp > 250) level = 3;
+    if (xp > 500) level = 4;
+    if (xp > 1000) level = 5;
+
+    await userRef.update({'level': level});
+  }
+
+  Future<void> _sendResultNotification(
+      String uid, bool winner, String roomName) async {
+    final userSnap =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final data = userSnap.data() as Map<String, dynamic>? ?? {};
+    final tokens = List<String>.from(data['fcmTokens'] ?? []);
+
+    for (final token in tokens) {
+      await FirebaseFirestore.instance.collection('notifications').add({
+        'token': token,
+        'title': winner ? '🏆 ¡Ganaste!' : '❌ Partido perdido',
+        'body': winner
+            ? 'Tu equipo ganó el partido en la sala $roomName'
+            : 'Otro equipo ganó el partido en la sala $roomName',
+        'sentAt': Timestamp.now(),
+      });
+    }
+  }
+
+  void _showVictoryCard(String teamName) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: Colors.black,
+        title: const Text(
+          '🏆 ¡Victoria!',
+          style: TextStyle(color: Colors.greenAccent),
+        ),
+        content: Text(
+          'Tu equipo $teamName ganó el partido.',
+          style: const TextStyle(color: Colors.white),
+        ),
+      ),
+    );
+  }
+
+  void _showDefeatCard(String teamName) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: Colors.black,
+        title: const Text(
+          '❌ Derrota',
+          style: TextStyle(color: Colors.redAccent),
+        ),
+        content: Text(
+          'El equipo $teamName ganó, pero no fue el tuyo.',
+          style: const TextStyle(color: Colors.white),
+        ),
+      ),
     );
   }
 
@@ -1199,10 +1433,16 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
           Text(
             '$label: ',
             style: const TextStyle(
-                color: Colors.white70, fontWeight: FontWeight.bold),
+              color: Colors.white70,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           Expanded(
-              child: Text(value, style: const TextStyle(color: Colors.white))),
+            child: Text(
+              value,
+              style: const TextStyle(color: Colors.white),
+            ),
+          ),
         ],
       ),
     );

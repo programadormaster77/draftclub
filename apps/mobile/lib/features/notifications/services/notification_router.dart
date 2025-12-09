@@ -4,6 +4,8 @@ import 'package:draftclub_mobile/features/rooms/presentation/room_detail_page.da
 import 'package:draftclub_mobile/features/rooms/models/room_model.dart';
 import 'package:draftclub_mobile/features/feed/presentation/dashboard_page.dart';
 import 'package:draftclub_mobile/features/profile/presentation/profile_page.dart';
+import 'package:draftclub_mobile/features/notifications/presentation/victory_card_page.dart';
+import 'package:draftclub_mobile/features/notifications/presentation/defeat_card_page.dart';
 
 /// ============================================================================
 /// 🔀 NotificationRouter — Maneja navegación desde notificaciones push/local
@@ -42,6 +44,24 @@ class NotificationRouter {
         final uid = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
         if (uid != null) {
           await _openUserProfile(context, uid);
+          return;
+        }
+      }
+
+      // Ejemplo: draftclub://victory?roomId=123
+      if (uri.scheme == 'draftclub' && uri.host == 'victory') {
+        final roomId = uri.queryParameters['roomId'];
+        if (roomId != null) {
+          await _openVictoryCard(context, roomId);
+          return;
+        }
+      }
+
+      // Ejemplo: draftclub://defeat?roomId=123
+      if (uri.scheme == 'draftclub' && uri.host == 'defeat') {
+        final roomId = uri.queryParameters['roomId'];
+        if (roomId != null) {
+          await _openDefeatCard(context, roomId);
           return;
         }
       }
@@ -108,6 +128,26 @@ class NotificationRouter {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ProfilePage(userId: userId),
+      ),
+    );
+  }
+
+  /// 🏆 Abre carta animada de victoria
+  static Future<void> _openVictoryCard(
+      BuildContext context, String roomId) async {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => VictoryCardPage(roomId: roomId),
+      ),
+    );
+  }
+
+  /// 😞 Abre carta animada de derrota
+  static Future<void> _openDefeatCard(
+      BuildContext context, String roomId) async {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DefeatCardPage(roomId: roomId),
       ),
     );
   }
