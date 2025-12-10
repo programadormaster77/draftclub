@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:uuid/uuid.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import '../models/room_model.dart';
 import 'team_service.dart';
@@ -722,6 +723,31 @@ class RoomService {
     }
 
     await batch.commit();
+
+    // 7️⃣ Actualizar estadísticas de usuarios (partidos + XP + rango)
+    try {
+      final Set<String> allPlayers = {
+        ...winnerPlayerIds,
+        ...loserPlayerIds,
+      };
+
+      if (allPlayers.isNotEmpty) {
+        final function = FirebaseFunctions.instance.httpsCallable(
+          'updateUserStats',
+          options: HttpsCallableOptions(timeout: Duration(seconds: 20)),
+        );
+
+        await function.call({
+          'userIds': allPlayers.toList(),
+          'xpGained': 100, // XP que definimos
+        });
+
+        print(
+            "✓ Estadísticas actualizadas con éxito para ${allPlayers.length} jugadores.");
+      }
+    } catch (e) {
+      print("❌ Error llamando función updateUserStats: $e");
+    }
   }
 
   // ===================================================================

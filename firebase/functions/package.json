@@ -9,10 +9,9 @@
   },
   "scripts": {
     "clean": "rimraf lib",
-    "build": "tsc && npx tsc-esm-fix",
+    "build": "tsc",
     "serve": "npm run build && firebase emulators:start --only functions",
-    "deploy": "npm run build && firebase deploy --only functions",
-    "lint": "eslint . --ext .ts"
+    "deploy": "npm run build && firebase deploy --only functions"
   },
   "dependencies": {
     "firebase-admin": "^13.6.0",
@@ -20,9 +19,9 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
-    "eslint": "^8.57.0",
     "rimraf": "^5.0.5",
     "tsc-esm-fix": "^3.1.2",
+    "eslint": "^8.57.0",
     "typescript": "^5.9.3"
   }
 }

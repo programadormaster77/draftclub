@@ -8,7 +8,7 @@
  */
 
 import admin from "firebase-admin";
-import { clampText } from "../utils/clampText";
+import { clampText } from "../utils/clampText.js";
 
 if (!admin.apps || admin.apps.length === 0) {
   admin.initializeApp();

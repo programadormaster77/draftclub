@@ -2,16 +2,15 @@
  * ============================================================================
  * 🧠 DraftClub — Cloud Functions Index (Node.js 20 / ESM / Firebase v6+)
  * ============================================================================
- * Centraliza todas las funciones backend de DraftClub.
- * ============================================================================
  */
 import admin from "firebase-admin";
-import { sendAdminNotification } from "./admin/notifications/sendAdminNotification.js";
-import { sendMatchResultNotification } from "./admin/notifications/sendMatchResultNotification.js";
-// ✅ Inicialización segura (una sola vez)
-if (!admin.apps || admin.apps.length === 0) {
+// Inicializar Firebase una sola vez
+if (!admin.apps.length) {
     admin.initializeApp();
 }
-// 🚀 Exportar las funciones activas
-export { sendAdminNotification };
-export { sendMatchResultNotification };
+// IMPORTS 100% SEGUROS
+import * as sendAdminNotification from "./admin/notifications/sendAdminNotification.js";
+import { sendMatchResultNotification } from "./admin/notifications/sendMatchResultNotification.js";
+import * as updateUserStats from "./admin/stats/updateUserStats.js";
+// EXPORTS 100% SEGUROS
+export { sendAdminNotification, sendMatchResultNotification, updateUserStats, };

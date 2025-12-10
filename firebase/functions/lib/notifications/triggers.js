@@ -1,9 +1,9 @@
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { setGlobalOptions } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
-import { buildDeepLink, cityTopic, clampText, getFollowersOfUser, getRoomMembers, getUserDoc, getUserTokensIfAllowed, isInDndWindow } from "./utils.js";
-import { buildPayload, sendToTokens, sendToTopic } from "./publisher.js";
-import { shouldThrottle } from "./rateLimiter.js";
+import { buildDeepLink, cityTopic, clampText, getFollowersOfUser, getRoomMembers, getUserDoc, getUserTokensIfAllowed, isInDndWindow } from "./utils";
+import { buildPayload, sendToTokens, sendToTopic } from "./publisher";
+import { shouldThrottle } from "./rateLimiter";
 if (!admin.apps.length) {
     admin.initializeApp();
 }

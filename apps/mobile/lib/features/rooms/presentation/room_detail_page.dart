@@ -4,6 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:share_plus/share_plus.dart';
 
+// AGREGA ESTE:
+import 'package:cloud_functions/cloud_functions.dart';
+
 import '../models/room_model.dart';
 import '../data/room_service.dart';
 import 'team_list_page.dart';
@@ -951,6 +954,45 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
     );
   }
 
+  // ================================================================
+// 🔹 Builder reutilizable para mostrar filas de información
+// ================================================================
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: Colors.blueAccent, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionButtons(Room room, bool isCreator, bool joined) {
     return Center(
       child: Column(
@@ -1202,8 +1244,11 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
   }
 
   // ================================================================
-  // 🧮 Lógica de cierre de partido
+// 🧮 Lógica de cierre de partido (versión final con Cloud Functions)
+// ================================================================
   // ================================================================
+// 🧮 Lógica de cierre de partido (versión final con Cloud Functions)
+// ================================================================
   Future<void> _processMatchResult(Room room, String winnerTeamId) async {
     final teamsSnap = await FirebaseFirestore.instance
         .collection('rooms')
@@ -1212,178 +1257,111 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
         .get();
 
     final uid = _auth.currentUser!.uid;
-    final isCreator = room.creatorId == uid;
 
+    // ------------------------------------------------------------
+    // Identificar ganador
+    // ------------------------------------------------------------
     final winnerDoc = teamsSnap.docs.firstWhere((t) => t.id == winnerTeamId);
-    final winnerData = winnerDoc.data() as Map<String, dynamic>;
-    final winnerName = winnerData['name'] ?? 'Equipo';
+    final winnerName = winnerDoc.data()['name'] ?? 'Equipo';
 
-    // 🔥 VALIDAR MÍNIMOS SOLO PARA USUARIOS NORMALES
+    // ------------------------------------------------------------
+    // Preparar arrays de ganadores / perdedores
+    // ------------------------------------------------------------
+    final Set<String> winners = {};
+    final Set<String> losers = {};
+
     for (var t in teamsSnap.docs) {
-      final data = t.data() as Map<String, dynamic>;
+      final data = t.data();
       final players = List<String>.from(data['players'] ?? []);
-      if (!isCreator && players.length < 4) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'Cada equipo debe tener mínimo 4 jugadores para cerrar el partido.'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-        return;
+
+      if (t.id == winnerTeamId) {
+        winners.addAll(players);
+      } else {
+        losers.addAll(players);
       }
     }
 
-    // 🏁 Cerrar sala en Firestore
-    await _roomService.updateRoom(room.id, {
-      'isClosed': true,
-      'winnerTeamId': winnerTeamId,
-      'winnerTeamName': winnerName,
-      'closedAt': Timestamp.now(),
-    });
+    // ------------------------------------------------------------
+    // 1️⃣ LLAMAR FUNCIÓN HTTPS: Notificaciones + Histórico
+    // ------------------------------------------------------------
+    try {
+      final callableNotif = FirebaseFunctions.instance.httpsCallable(
+        'sendMatchResultNotification',
+      );
 
-    // 📝 Mensaje del sistema
-    await _sendSystemMessage(
-      room.id,
-      '🏆 El equipo **$winnerName** ganó este partido.',
-    );
-
-    // ==============================
-    // ⚽ SUMAR PARTIDOS A TODOS
-    // ==============================
-    for (var t in teamsSnap.docs) {
-      final data = t.data() as Map<String, dynamic>;
-      final players = List<String>.from(data['players'] ?? []);
-
-      for (final playerId in players) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(playerId)
-            .update({
-          'matchesPlayed': FieldValue.increment(1),
-          'xp': FieldValue.increment(20), // 🟦 20 XP por partido
-        });
-
-        // Actualizar nivel automáticamente
-        await _updateUserLevel(playerId);
-      }
+      await callableNotif.call({
+        'roomId': room.id,
+        'roomName': room.name,
+        'winnerTeamId': winnerTeamId,
+        'winnerTeamName': winnerName,
+        'winners': winners.toList(),
+        'losers': losers.toList(),
+      });
+    } catch (e) {
+      print("ERROR enviando notificaciones: $e");
     }
 
-    // ==============================
-    // 🔔 Notificaciones Push
-    // ==============================
-    for (var t in teamsSnap.docs) {
-      final data = t.data() as Map<String, dynamic>;
-      final players = List<String>.from(data['players'] ?? []);
-      final isWinner = (t.id == winnerTeamId);
+    // ------------------------------------------------------------
+    // 2️⃣ ACTUALIZAR XP + PARTIDOS usando Cloud Function updateUserStats
+    // ------------------------------------------------------------
+    try {
+      final allPlayers = {...winners, ...losers}.toList();
 
-      for (final playerId in players) {
-        await _sendResultNotification(playerId, isWinner, room.name);
-      }
+      final callableStats =
+          FirebaseFunctions.instance.httpsCallable('updateUserStats');
+
+      await callableStats.call({
+        'userIds': allPlayers,
+        'xpGained': 120, // XP que configuraste en la Function
+      });
+    } catch (e) {
+      print("ERROR updateUserStats: $e");
     }
 
-    // ==============================
-    // 🎴 Tarjeta animada
-    // ==============================
-    final isUserWinner = winnerTeamId == _getUserTeamId(uid, teamsSnap.docs);
+    // ------------------------------------------------------------
+// 3️⃣ UI: Mostrar tarjeta de victoria/derrota
+// ------------------------------------------------------------
+    final myTeamId = _getUserTeamId(uid, teamsSnap.docs);
+    final userWon = myTeamId == winnerTeamId;
 
-    if (isUserWinner) {
+    if (userWon) {
       _showVictoryCard(winnerName);
     } else {
       _showDefeatCard(winnerName);
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Partido cerrado correctamente'),
-        backgroundColor: Colors.greenAccent,
-      ),
-    );
+// Esperar 5 segundos para que el usuario lea la tarjeta
+    await Future.delayed(const Duration(seconds: 5));
 
-// 🚀 Sacar al usuario de la sala primero
-
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (mounted) {
-        Navigator.pop(context); // salir del RoomDetailPage
-      }
-    });
-
-    // 📝 Guardar resultado del partido para cada jugador (match_history)
-    final matchId = room.id; // usamos id de sala como id único del partido
-
-    for (var t in teamsSnap.docs) {
-      final data = t.data() as Map<String, dynamic>;
-      final players = List<String>.from(data['players'] ?? []);
-      final isWinner = (t.id == winnerTeamId);
-
-      for (final playerId in players) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(playerId)
-            .collection('match_history')
-            .doc(matchId)
-            .set({
-          'matchId': matchId,
-          'roomName': room.name,
-          'createdAt': Timestamp.now(),
-          'winner': isWinner,
-          'teamName': winnerName,
-          'xp': 20,
-          'seen': false, // 👈 ESTE ES EL CAMPO CORRECTO
-        }, SetOptions(merge: true));
-      }
+// Cerrar tarjeta manualmente si el usuario no lo hizo
+    if (Navigator.canPop(context)) {
+      Navigator.of(context).pop(); // Cierra la tarjeta
     }
 
-// 🧨 Eliminar la sala en segundo plano después de mostrar tarjeta y notifs
-    Future.delayed(const Duration(seconds: 4), () async {
+// Salir de la sala (volver al dashboard)
+    if (mounted) Navigator.pop(context);
+
+// ------------------------------------------------------------
+// 4️⃣ Eliminar sala después de procesar todo (segundo plano)
+// ------------------------------------------------------------
+    Future.delayed(const Duration(seconds: 3), () async {
       await _roomService.deleteRoom(room.id);
     });
   }
+
+// ================================================================
+// Helpers
+// ================================================================
 
   String? _getUserTeamId(
     String uid,
     List<QueryDocumentSnapshot<Map<String, dynamic>>> teams,
   ) {
     for (var t in teams) {
-      final data = t.data();
-      final players = List<String>.from(data['players'] ?? []);
+      final players = List<String>.from(t.data()['players'] ?? []);
       if (players.contains(uid)) return t.id;
     }
     return null;
-  }
-
-  Future<void> _updateUserLevel(String uid) async {
-    final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
-    final snap = await userRef.get();
-    final data = snap.data() as Map<String, dynamic>? ?? {};
-    final xp = (data['xp'] ?? 0) as int;
-
-    int level = 1;
-    if (xp > 100) level = 2;
-    if (xp > 250) level = 3;
-    if (xp > 500) level = 4;
-    if (xp > 1000) level = 5;
-
-    await userRef.update({'level': level});
-  }
-
-  Future<void> _sendResultNotification(
-      String uid, bool winner, String roomName) async {
-    final userSnap =
-        await FirebaseFirestore.instance.collection('users').doc(uid).get();
-    final data = userSnap.data() as Map<String, dynamic>? ?? {};
-    final tokens = List<String>.from(data['fcmTokens'] ?? []);
-
-    for (final token in tokens) {
-      await FirebaseFirestore.instance.collection('notifications').add({
-        'token': token,
-        'title': winner ? '🏆 ¡Ganaste!' : '❌ Partido perdido',
-        'body': winner
-            ? 'Tu equipo ganó el partido en la sala $roomName'
-            : 'Otro equipo ganó el partido en la sala $roomName',
-        'sentAt': Timestamp.now(),
-      });
-    }
   }
 
   void _showVictoryCard(String teamName) {
@@ -1416,34 +1394,6 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
           'El equipo $teamName ganó, pero no fue el tuyo.',
           style: const TextStyle(color: Colors.white),
         ),
-      ),
-    );
-  }
-
-  // ================================================================
-  // 🔠 Fila de info
-  // ================================================================
-  Widget _buildInfoRow(IconData icon, String label, String value) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.blueAccent, size: 22),
-          const SizedBox(width: 12),
-          Text(
-            '$label: ',
-            style: const TextStyle(
-              color: Colors.white70,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(color: Colors.white),
-            ),
-          ),
-        ],
       ),
     );
   }
