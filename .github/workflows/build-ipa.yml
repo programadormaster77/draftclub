@@ -1,22 +1,16 @@
-name: Build iOS IPA
+name: Build iOS IPA (Unsigned)
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-14
 
     steps:
-      # =========================================================
-      # 📦 CHECKOUT DEL REPOSITORIO
-      # =========================================================
       - name: 🧩 Checkout repository
         uses: actions/checkout@v4
 
-      # =========================================================
-      # 🧰 CONFIGURAR FLUTTER (misma versión local)
-      # =========================================================
       - name: 🧰 Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -24,97 +18,30 @@ jobs:
           channel: stable
           cache: true
 
-      - name: 🔍 Verify Flutter version
-        run: flutter --version
-
-      # =========================================================
-      # 💎 CONFIGURAR RUBY 3.1 GLOBAL (evita conflicto Ruby 3.3)
-      # =========================================================
-      - name: 💎 Set up Ruby 3.1
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.1"
-          bundler-cache: false
-
-      - name: 🔍 Verify Ruby version
-        run: ruby -v
-
-      # =========================================================
-      # 📦 DEPENDENCIAS DE FLUTTER
-      # =========================================================
       - name: 📦 Get Flutter packages
         working-directory: apps/mobile
         run: flutter pub get
 
-      # =========================================================
-      # ⚙️ PREPARAR ENTORNO iOS
-      # =========================================================
-      - name: 🛠️ Precache iOS artifacts
-        run: flutter --no-version-check precache --ios
+      - name: 🧹 Install CocoaPods (brew, estable)
+        run: brew install cocoapods
 
-      - name: ⚙️ Generate iOS structure (no codesign)
-        working-directory: apps/mobile
-        env:
-          CI: true
-          CODE_SIGNING_ALLOWED: "NO"
-          FLUTTER_SUPPRESS_ANALYTICS: "true"
-        run: |
-          echo "🧩 Generando estructura iOS..."
-          flutter build ios --simulator --no-codesign || true
-          test -f ios/Flutter/podhelper.rb && echo "✅ podhelper.rb OK" || (echo "❌ Falta podhelper.rb" && exit 1)
-
-       # =========================================================
-      # 🧹 INSTALAR COCOAPODS DE FORMA ESTABLE (Ruby 3.1, tolerante)
-      # =========================================================
-      - name: 🧹 Install CocoaPods (Ruby 3.1 stable, safe retry)
+      - name: ⚙️ Install Pods
         working-directory: apps/mobile/ios
-        shell: bash
-        run: |
-          echo "🧩 Eliminando CocoaPods previos..."
-          sudo gem uninstall cocoapods -aIx || true
+        run: pod install --repo-update
 
-          echo "📦 Instalando CocoaPods 1.15.2..."
-          sudo gem install cocoapods -v 1.15.2 --no-document
-          pod --version
-
-          echo "🧹 Limpiando Pods previos y cachés..."
-          rm -rf Pods Podfile.lock ~/Library/Caches/CocoaPods
-          pod cache clean --all || true
-          rm -rf ~/.cocoapods/repos || true
-
-          echo "🔁 Inicializando repositorios..."
-          pod setup
-
-          echo "🔧 Intento 1: instalación con actualización de repos"
-          (pod install --repo-update --verbose || true)
-
-          echo "🔧 Intento 2: instalación normal si el primero falla"
-          (pod install --verbose || true)
-
-          echo "✅ CocoaPods finalizado (sin interrupciones)."
-
-
-      # =========================================================
-      # 🚀 COMPILAR IPA (sin firmar)
-      # =========================================================
       - name: 🚀 Build iOS app (Release, no codesign)
         working-directory: apps/mobile
-        env:
-          CI: true
-          CODE_SIGNING_ALLOWED: "NO"
-        run: flutter build ipa --release --no-codesign
+        run: flutter build ios --release --no-codesign
 
-      # =========================================================
-      # 📦 EXPORTAR IPA COMO ARTEFACTO DESCARGABLE
-      # =========================================================
+      - name: 📦 Package Unsigned IPA
+        working-directory: apps/mobile
+        run: |
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -r unsigned.ipa Payload
+
       - name: 📦 Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: draftclub-ios-ipa
-          path: apps/mobile/build/ios/ipa/*.ipa
-
-      # =========================================================
-      # ✅ FINALIZACIÓN
-      # =========================================================
-      - name: ✅ Complete job
-        run: echo "✅ Build iOS finished successfully!"
+          name: draftclub-ios-unsigned-ipa
+          path: apps/mobile/unsigned.ipa
