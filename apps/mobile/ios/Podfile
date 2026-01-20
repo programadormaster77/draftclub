@@ -44,32 +44,23 @@ target 'Runner' do
 end
 
 # ============================================================
-# 🩹 FIX GLOBAL — Compatibilidad CocoaPods 1.16+ (sin usar .xcconfig)
-# ============================================================
-
-pre_install do |installer|
-  puts("🔧 Inyectando ruta de Flutter.framework para compatibilidad con wakelock_plus y app_links...")
-
-  installer.pod_targets.each do |pod|
-    # 🔍 Solo afecta a pods que fallan con 'Flutter/Flutter.h not found'
-    next unless pod.name.match?(/wakelock_plus|wakelock|app_links/i)
-
-    flutter_framework_dir = File.join(File.expand_path(flutter_application_path), '.ios', 'Flutter', 'engine')
-
-    pod.build_configurations.each do |config_name, build_settings|
-      current_paths = build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
-      unless current_paths.include?(flutter_framework_dir)
-        build_settings['HEADER_SEARCH_PATHS'] = "#{current_paths} #{flutter_framework_dir}/**"
-      end
-    end
-  end
-end
-
-# ============================================================
 # 🧩 POST-INSTALL — Ajustes globales y compatibilidad Firebase/AppLinks
 # ============================================================
 
 post_install do |installer|
+  flutter_framework_dir = File.join(File.expand_path(flutter_application_path), '.ios', 'Flutter', 'engine')
+
+  installer.pods_project.targets.each do |target|
+    next unless target.name.match?(/wakelock_plus|wakelock|app_links/i)
+
+    target.build_configurations.each do |config|
+      current_paths = config.build_settings['HEADER_SEARCH_PATHS'] || '$(inherited)'
+      unless current_paths.include?(flutter_framework_dir)
+        config.build_settings['HEADER_SEARCH_PATHS'] = "#{current_paths} #{flutter_framework_dir}/**"
+      end
+    end
+  end
+
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
 
