@@ -155,7 +155,7 @@ class Room {
     }
 
     return Room(
-      id: map['id'] ?? '',
+      id: (map['id'] ?? '').toString(),
       name: map['name'] ?? '',
       teams: parseInt(map['teams']),
       playersPerTeam: parseInt(map['playersPerTeam']),
@@ -167,9 +167,9 @@ class Room {
       cityLng: parseDouble(map['cityLng']),
       lat: parseDouble(map['lat']),
       lng: parseDouble(map['lng']),
-      countryCode: map['countryCode'] ?? map['country'] ?? '',
+      countryCode: (map['countryCode'] ?? map['country'])?.toString(),
       exactAddress: map['exactAddress'],
-      sex: map['sex'] ?? 'Mixto',
+      sex: (map['sex'] ?? 'Mixto').toString(),
       createdAt: createdAt,
       updatedAt: updatedAt,
       eventAt: eventAt,
@@ -182,6 +182,18 @@ class Room {
       closedAt: closedAt,
     );
   }
+
+    /// ================================================================
+  /// 📌 Factory seguro: usa doc.id como id real del documento
+  /// ================================================================
+  factory Room.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? <String, dynamic>{};
+    return Room.fromMap({
+      ...data,
+      'id': doc.id,
+    });
+  }
+
 
   // ================================================================
   // 🧾 Copiar instancia con valores modificados

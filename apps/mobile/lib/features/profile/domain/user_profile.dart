@@ -21,6 +21,8 @@ class UserProfile {
   final String sex; // Masculino / Femenino
   final String rank; // Bronce, Plata, Oro, etc.
   final int xp; // Experiencia
+  final int matches; // 🆕 partidos jugados
+  final int wins;    // 🆕 victorias
   final bool vipFlag; // Usuario VIP
   final String role; // 👑 user | admin | moderator
   final DateTime createdAt;
@@ -39,6 +41,8 @@ class UserProfile {
     this.city,
     this.rank = 'Bronce',
     this.xp = 0,
+    this.matches = 0,
+    this.wins = 0,
     this.vipFlag = false,
     this.role = 'user', // 👈 valor por defecto
     DateTime? createdAt,
@@ -62,12 +66,17 @@ class UserProfile {
       'sex': sex,
       'rank': rank,
       'xp': xp,
+      
+      'matches': matches,
+      'wins': wins,
       'vipFlag': vipFlag,
       'role': role, // 👑 Nuevo campo
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
   }
+
+
 
   /// ===============================================================
   /// 🧩 Construcción desde Firestore (retrocompatible)
@@ -94,9 +103,18 @@ class UserProfile {
           : (map['xp'] is double)
               ? (map['xp'] as double).toInt()
               : 0,
+      matches: (map['matches'] is int)
+          ? map['matches'] as int
+          : (map['matches'] is double)
+              ? (map['matches'] as double).toInt()
+              : 0,
+      wins: (map['wins'] is int)
+          ? map['wins'] as int
+          : (map['wins'] is double)
+              ? (map['wins'] as double).toInt()
+              : 0,
       vipFlag: map['vipFlag'] as bool? ?? false,
-      role:
-          map['role'] as String? ?? 'user', // 👑 valor por defecto si no existe
+      role: map['role'] as String? ?? 'user',
       createdAt: (map['createdAt'] is Timestamp)
           ? (map['createdAt'] as Timestamp).toDate()
           : DateTime.now(),
@@ -106,3 +124,4 @@ class UserProfile {
     );
   }
 }
+

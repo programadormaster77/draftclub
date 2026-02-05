@@ -1227,12 +1227,18 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blueAccent,
                   ),
-                  onPressed: selectedTeamId == null
-                      ? null
-                      : () async {
-                          Navigator.pop(context);
-                          await _processMatchResult(room, selectedTeamId!);
-                        },
+                 onPressed: (selectedTeamId == null || _loading)
+    ? null
+    : () async {
+        Navigator.pop(context);
+        setState(() => _loading = true);
+        try {
+          await _processMatchResult(room, selectedTeamId!);
+        } finally {
+          if (mounted) setState(() => _loading = false);
+        }
+      },
+
                   child: const Text('Guardar resultado'),
                 ),
               ],
@@ -1243,10 +1249,8 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
     );
   }
 
-  // ================================================================
-// 🧮 Lógica de cierre de partido (versión final con Cloud Functions)
+
 // ================================================================
-  // ================================================================
 // 🧮 Lógica de cierre de partido (versión final con Cloud Functions)
 // ================================================================
   Future<void> _processMatchResult(Room room, String winnerTeamId) async {
@@ -1301,22 +1305,25 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
       print("ERROR enviando notificaciones: $e");
     }
 
-    // ------------------------------------------------------------
-    // 2️⃣ ACTUALIZAR XP + PARTIDOS usando Cloud Function updateUserStats
-    // ------------------------------------------------------------
-    try {
-      final allPlayers = {...winners, ...losers}.toList();
+// ------------------------------------------------------------
+// 2️⃣ ACTUALIZAR XP + PARTIDOS usando Cloud Function updateUserStats
+// ------------------------------------------------------------
+try {
+ final callableStats =
+    FirebaseFunctions.instance.httpsCallable('updateUserStats');
 
-      final callableStats =
-          FirebaseFunctions.instance.httpsCallable('updateUserStats');
+await callableStats.call({
+  'roomId': room.id,
+  'winnerUserIds': winners.toList(),
+  'loserUserIds': losers.toList(),
+  'xpWinner': 120,
+  'xpLoser': 60,
+});
 
-      await callableStats.call({
-        'userIds': allPlayers,
-        'xpGained': 120, // XP que configuraste en la Function
-      });
-    } catch (e) {
-      print("ERROR updateUserStats: $e");
-    }
+} catch (e) {
+  print("ERROR updateUserStats: $e");
+}
+
 
     // ------------------------------------------------------------
 // 3️⃣ UI: Mostrar tarjeta de victoria/derrota

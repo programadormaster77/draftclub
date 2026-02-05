@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * 🏆 updateUserStats — Actualiza partidos, wins, XP y rank (idempotente)
+ * 🏆 updateUserStats — Actualiza partidos, XP y rank (wins solo si árbitro)
  * ============================================================================
  */
 import { onCall, HttpsError } from "firebase-functions/v2/https";
@@ -34,6 +34,8 @@ export const updateUserStats = onCall(async (req) => {
         : [];
     const xpWinner = Number.isFinite(data.xpWinner) ? Number(data.xpWinner) : 120;
     const xpLoser = Number.isFinite(data.xpLoser) ? Number(data.xpLoser) : 60;
+    // ✅ NUEVO: solo sumar wins cuando árbitro lo confirme
+    const applyWins = data.applyWins === true; // por defecto false
     if (!roomId || typeof roomId !== "string") {
         throw new HttpsError("invalid-argument", "roomId is required (string)");
     }
@@ -50,8 +52,8 @@ export const updateUserStats = onCall(async (req) => {
         throw new HttpsError("invalid-argument", "No valid userIds after cleanup");
     }
     // ============================================================
-    // ✅ 1) LOCK idempotente: si ya se aplicó, salimos sin duplicar
-    //    Creamos un doc único por sala: rooms/{roomId}/_locks/statsApplied
+    // ✅ 1) LOCK idempotente
+    //    rooms/{roomId}/_locks/statsApplied
     // ============================================================
     const lockRef = db
         .collection("rooms")
@@ -62,14 +64,15 @@ export const updateUserStats = onCall(async (req) => {
     await db.runTransaction(async (tx) => {
         const lockSnap = await tx.get(lockRef);
         if (lockSnap.exists) {
-            acquiredLock = false; // ya aplicado
+            acquiredLock = false;
             return;
         }
         tx.set(lockRef, {
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             userCount: allUserIds.length,
+            // útil para debug: saber si en esta corrida se permitían wins
+            applyWins,
         });
-        // (Opcional) marcar la sala también, para debug/UI
         tx.set(db.collection("rooms").doc(roomId), {
             statsApplied: true,
             statsAppliedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -77,30 +80,27 @@ export const updateUserStats = onCall(async (req) => {
         acquiredLock = true;
     });
     if (!acquiredLock) {
-        // Ya estaba aplicado: respuesta OK sin cambios
         return { ok: true, skipped: true, reason: "already_applied" };
     }
     // ============================================================
-    // ✅ 2) Updates masivos (FUERA de la transacción) con batch
-    //    Usamos set({merge:true}) para NO fallar si el user doc no existe
+    // ✅ 2) Updates masivos con batch
     // ============================================================
     const batch = db.batch();
     for (const uid of allUserIds) {
         const userRef = db.collection("users").doc(uid);
         const isWinner = winnerSet.has(uid);
         const xpGain = isWinner ? xpWinner : xpLoser;
+        const applyWins = data.applyWins === true; // ✅ solo árbitro lo activa
         batch.set(userRef, {
             matches: admin.firestore.FieldValue.increment(1),
             xp: admin.firestore.FieldValue.increment(xpGain),
-            ...(isWinner
-                ? { wins: admin.firestore.FieldValue.increment(1) }
-                : {}),
+            // 🚫 NO sumar wins aquí. Wins será SOLO por árbitro (otra función).
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
     }
     await batch.commit();
     // ============================================================
-    // ✅ 3) Recalcular rank (paralelo) — lectura + update por usuario
+    // ✅ 3) Recalcular rank (paralelo)
     // ============================================================
     await Promise.all(allUserIds.map(async (uid) => {
         const ref = db.collection("users").doc(uid);
@@ -109,7 +109,10 @@ export const updateUserStats = onCall(async (req) => {
             return;
         const xp = Number(snap.data()?.xp ?? 0);
         const newRank = computeRank(xp);
-        await ref.set({ rank: newRank, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        await ref.set({
+            rank: newRank,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
     }));
-    return { ok: true, updated: allUserIds.length };
+    return { ok: true, updated: allUserIds.length, applyWins };
 });

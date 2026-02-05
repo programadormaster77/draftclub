@@ -6,23 +6,22 @@
 
 import admin from "firebase-admin";
 
-// Inicializar Firebase una sola vez
 if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-// IMPORTS
+// ✅ ESM: en TypeScript debes importar con ".js"
+// porque esto se ejecuta luego en lib/*.js
 import * as sendAdminNotification from "./admin/notifications/sendAdminNotification.js";
 import { sendMatchResultNotification } from "./admin/notifications/sendMatchResultNotification.js";
 
-// ✅ Importa la FUNCIÓN (no el módulo) para nombre exacto
 import { updateUserStats } from "./admin/stats/updateUserStats.js";
 import { closeMatch } from "./admin/stats/closeMatch.js";
 
-// EXPORTS
 export {
   sendAdminNotification,
   sendMatchResultNotification,
   updateUserStats,
   closeMatch,
 };
+

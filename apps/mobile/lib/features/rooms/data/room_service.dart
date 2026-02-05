@@ -374,9 +374,8 @@ class RoomService {
           .orderBy('createdAt', descending: true)
           .limit(200)
           .get();
+        List<Room> rooms = snap.docs.map((doc) => Room.fromDoc(doc)).toList();
 
-      List<Room> rooms =
-          snap.docs.map((doc) => Room.fromMap(doc.data())).toList();
 
       // 1️⃣ Filtro por fecha
       if (targetDate != null) {
@@ -736,14 +735,14 @@ try {
     options: HttpsCallableOptions(timeout: Duration(seconds: 20)),
   );
 
-  await function.call({
-    'roomId': roomId,
-    'winnerUserIds': winnerPlayerIds.toList(),
-    'loserUserIds': loserPlayerIds.toList(),
-    // Ajusta estos valores a tu economía de juego:
-    'xpWinner': 120,
-    'xpLoser': 60,
-  });
+await function.call({
+  'roomId': roomId,
+  'winnerUserIds': winnerPlayerIds.toList(),
+  'loserUserIds': loserPlayerIds.toList(),
+  'xpWinner': 120,
+  'xpLoser': 60,
+});
+
 
   print("✓ Stats actualizadas (match+xp+wins+rank) para sala $roomId.");
 } catch (e) {
