@@ -438,9 +438,9 @@ class _RoomsPageState extends State<RoomsPage>
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildMyRoomsTab(),
-                _buildMyRoomsTab(),
-                const FindRoomPage(),
+                _buildPublicRoomsTab(), // ✅ Públicas reales
+                _buildMyRoomsTab(), // ✅ Mis salas
+                const FindRoomPage(), // Buscar por ID (por ahora)
               ],
             ),
           ),
@@ -449,7 +449,87 @@ class _RoomsPageState extends State<RoomsPage>
     );
   }
 
+  // ✅ NUEVO: Tab de salas públicas (discovery)
+  Widget _buildPublicRoomsTab() {
+    // Mientras carga contexto (ubicación/sexo/ciudad)
+    if (_bootstrapping) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.blueAccent),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      color: Colors.blueAccent,
+      child: FutureBuilder<List<Room>>(
+        future: _roomsFuture,
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(color: Colors.blueAccent),
+            );
+          }
+
+          if (snap.hasError) {
+            return Center(
+              child: Text(
+                'Error cargando salas públicas: ${snap.error}',
+                style: const TextStyle(color: Colors.redAccent),
+                textAlign: TextAlign.center,
+              ),
+            );
+          }
+
+          final rooms = (snap.data ?? []).where((r) => r.isPublic).toList();
+
+          if (rooms.isEmpty) {
+            // ✅ Empty state SOLO para Públicas
+            return _EmptyState(
+              title: 'No hay salas públicas cerca de ti',
+              message:
+                  'En este momento no encontramos salas públicas dentro del rango. '
+                  'Puedes crear la primera sala y otros usuarios la verán aquí.',
+              actionText: 'Crear sala',
+              onAction: () async {
+                final created = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CreateRoomPage()),
+                );
+                if (created == true && mounted) {
+                  setState(() {
+                    _roomsFuture = _fetchRooms();
+                  });
+                }
+              },
+            );
+          }
+
+          return ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            itemCount: rooms.length,
+            itemBuilder: (_, i) {
+              final r = rooms[i];
+              return RoomCard(
+                room: r,
+                userLat: _filters.userLat,
+                userLng: _filters.userLng,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => RoomDetailPage(room: r)),
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildMyRoomsTab() {
+
     final uid = _auth.currentUser?.uid;
     if (uid == null) {
       return const Center(
