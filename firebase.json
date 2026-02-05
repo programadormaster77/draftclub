@@ -3,38 +3,28 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-
-"functions": {
-  "source": "firebase/functions",
-  "runtime": "nodejs20",
-  "ignore": [
-    "node_modules",
-    ".git",
-    "firebase-debug.log",
-    "tsconfig.json",
-    "README.md"
-  ]
-},
-
+  "functions": {
+    "source": "firebase/functions",
+    "runtime": "nodejs20",
+    "ignore": [
+      "node_modules",
+      ".git",
+      "firebase-debug.log",
+      "tsconfig.json",
+      "README.md"
+    ]
+  },
   "hosting": {
-    "public": "build/web",
+    "public": "public",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
     ]
   },
-
   "storage": {
     "rules": "storage.rules"
   },
-
   "emulators": {
     "firestore": {
       "port": 8080

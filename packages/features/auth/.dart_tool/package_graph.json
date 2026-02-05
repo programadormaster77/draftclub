@@ -13,17 +13,6 @@
       "devDependencies": []
     },
     {
-      "name": "go_router",
-      "version": "17.0.0",
-      "dependencies": [
-        "collection",
-        "flutter",
-        "flutter_web_plugins",
-        "logging",
-        "meta"
-      ]
-    },
-    {
       "name": "flutter",
       "version": "0.0.0",
       "dependencies": [
@@ -36,20 +25,8 @@
       ]
     },
     {
-      "name": "meta",
-      "version": "1.16.0",
-      "dependencies": []
-    },
-    {
-      "name": "flutter_web_plugins",
-      "version": "0.0.0",
-      "dependencies": [
-        "flutter"
-      ]
-    },
-    {
-      "name": "collection",
-      "version": "1.19.1",
+      "name": "vector_math",
+      "version": "2.2.0",
       "dependencies": []
     },
     {
@@ -58,8 +35,8 @@
       "dependencies": []
     },
     {
-      "name": "vector_math",
-      "version": "2.2.0",
+      "name": "meta",
+      "version": "1.17.0",
       "dependencies": []
     },
     {
@@ -70,9 +47,32 @@
       ]
     },
     {
+      "name": "collection",
+      "version": "1.19.1",
+      "dependencies": []
+    },
+    {
       "name": "characters",
       "version": "1.4.0",
       "dependencies": []
+    },
+    {
+      "name": "go_router",
+      "version": "17.1.0",
+      "dependencies": [
+        "collection",
+        "flutter",
+        "flutter_web_plugins",
+        "logging",
+        "meta"
+      ]
+    },
+    {
+      "name": "flutter_web_plugins",
+      "version": "0.0.0",
+      "dependencies": [
+        "flutter"
+      ]
     },
     {
       "name": "logging",

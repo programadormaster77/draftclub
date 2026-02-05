@@ -5,6 +5,7 @@
 /// - Convierte nombres de países a códigos ISO-2
 /// - Incluye helpers de capitalización y slugify
 /// ===============================================================
+library;
 
 /// 🔠 Normaliza texto: quita tildes, acentos y espacios innecesarios
 String normalizeText(String s) {

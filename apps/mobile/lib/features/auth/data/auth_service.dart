@@ -74,6 +74,37 @@ class AuthService {
   }
 
   // ===============================================================
+  // 🔁 RECUPERACIÓN DE CUENTA (EMAIL)
+  // ===============================================================
+
+  /// 📩 Envía correo para restablecer contraseña
+  /// ✅ UX seguro: NO revela si existe o no la cuenta asociada al correo.
+  ///
+  /// IMPORTANTE:
+  /// - Si Firebase devuelve `user-not-found`, tratamos como éxito silencioso.
+  /// - Los únicos errores que vale la pena propagar son: correo inválido,
+  ///   correo faltante, rate limit, etc.
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+      debugPrint('📩 Solicitud de restablecimiento enviada (si aplica).');
+    } on FirebaseAuthException catch (e) {
+      debugPrint('⚠️ Error en sendPasswordResetEmail: ${e.code} — ${e.message}');
+
+      // ✅ UX seguro: éxito silencioso para evitar enumeración de cuentas
+      if (e.code == 'user-not-found') {
+        debugPrint('🟡 user-not-found: manejado como éxito silencioso por UX.');
+        return;
+      }
+
+      throw Exception(_mapFirebaseError(e.code));
+    } catch (e) {
+      debugPrint('⚠️ Error desconocido en sendPasswordResetEmail: $e');
+      throw Exception('No se pudo iniciar la recuperación. Intenta de nuevo.');
+    }
+  }
+
+  // ===============================================================
   // 🔵 LOGIN CON GOOGLE
   // ===============================================================
 
@@ -202,9 +233,12 @@ class AuthService {
     switch (code) {
       case 'invalid-email':
         return 'El correo electrónico no es válido.';
+      case 'missing-email':
+        return 'Debes ingresar un correo electrónico.';
       case 'user-disabled':
         return 'Esta cuenta ha sido desactivada.';
       case 'user-not-found':
+        // ⚠️ Para login puede usarse, pero en LoginPage ya lo convertimos a mensaje neutro.
         return 'No se encontró ninguna cuenta con ese correo.';
       case 'wrong-password':
         return 'Contraseña incorrecta.';
@@ -212,6 +246,8 @@ class AuthService {
         return 'Este correo ya está registrado.';
       case 'weak-password':
         return 'La contraseña es demasiado débil.';
+      case 'too-many-requests':
+        return 'Demasiados intentos, intenta más tarde.';
       default:
         return 'Ocurrió un error inesperado. Intenta de nuevo.';
     }

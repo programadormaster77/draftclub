@@ -1,7 +1,6 @@
 // lib/app/router.dart
 
 // 📦 Importaciones principales
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 // ============ AUTH ============
@@ -20,7 +19,6 @@ import 'package:draftclub_mobile/features/social/presentation/page/follow_list_p
 import 'package:draftclub_mobile/features/social/presentation/page/post_detail_page.dart';
 
 // ============ NOTIFICACIONES ============
-import 'package:draftclub_mobile/features/notifications/presentation/notifications_settings_page.dart';
 
 // ============ LOCKER ============
 // ⚠️ IMPORTANTE: ajusta estas rutas según la ubicación REAL de tus archivos.

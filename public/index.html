@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Restablecer contraseña • DraftClub</title>
+
+  <!-- Firebase -->
+  <script src="/__/firebase/12.8.0/firebase-app-compat.js"></script>
+  <script src="/__/firebase/12.8.0/firebase-auth-compat.js"></script>
+  <script src="/__/firebase/init.js"></script>
+
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+
+    body{
+      margin:0; min-height:100vh;
+      background: radial-gradient(circle at top, #1f6fff, #050b18 70%);
+      display:flex; align-items:center; justify-content:center;
+      color:#fff;
+      padding: 22px;
+    }
+
+    .card{
+      width:100%; max-width:440px;
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(12px);
+      border-radius: 22px;
+      padding: 32px 28px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+
+    .logo{
+      text-align:center;
+      font-size:34px; font-weight:800; letter-spacing:1px;
+    }
+
+    .subtitle{
+      text-align:center;
+      color: rgba(255,255,255,0.72);
+      margin-top: 6px;
+      margin-bottom: 26px;
+    }
+
+    .field { margin-bottom: 14px; }
+
+    label{
+      display:block;
+      font-size: 13px;
+      color: rgba(255,255,255,0.85);
+      margin-bottom: 8px;
+    }
+
+    .inputWrap{
+      position: relative;
+    }
+
+    input{
+      width:100%;
+      padding: 14px 44px 14px 16px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.10);
+      outline: none;
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+      font-size: 15px;
+      transition: border-color .18s ease, box-shadow .18s ease;
+    }
+
+    input:focus{
+      border-color: rgba(47,128,255,0.9);
+      box-shadow: 0 0 0 3px rgba(47,128,255,0.18);
+    }
+
+    .toggle{
+      position:absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.18);
+      color: rgba(255,255,255,0.85);
+      cursor: pointer;
+      display:flex; align-items:center; justify-content:center;
+      transition: transform .12s ease, background .12s ease;
+      user-select: none;
+    }
+    .toggle:active{ transform: translateY(-50%) scale(0.98); }
+    .toggle:hover{ background: rgba(0,0,0,0.28); }
+
+    .hint{
+      color: rgba(255,255,255,0.62);
+      font-size: 12px;
+      margin-top: 8px;
+      line-height: 1.35;
+    }
+
+    .strengthBox{
+      margin-top: 10px;
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(0,0,0,0.18);
+      border: 1px solid rgba(255,255,255,0.10);
+    }
+
+    .bar{
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.10);
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+
+    .bar > div{
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      transition: width .18s ease;
+    }
+
+    .checks{
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 12px;
+      color: rgba(255,255,255,0.72);
+    }
+
+    .checks li{
+      display:flex;
+      align-items:center;
+      gap: 8px;
+      opacity: 0.9;
+    }
+
+    .dot{
+      width: 10px; height: 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.18);
+      flex: 0 0 auto;
+    }
+
+    .ok .dot{
+      background: rgba(76,217,100,0.95);
+      border-color: rgba(76,217,100,0.95);
+      box-shadow: 0 0 0 3px rgba(76,217,100,0.16);
+    }
+
+    .matchRow{
+      margin-top: 10px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.72);
+      display:flex; align-items:center; gap: 8px;
+    }
+
+    .pill{
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.12);
+      font-weight: 600;
+    }
+
+    button{
+      width:100%;
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: 30px;
+      border: none;
+      background: #2f80ff;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .12s ease, opacity .12s ease, filter .12s ease;
+      box-shadow: 0 16px 30px rgba(47,128,255,0.22);
+    }
+    button:hover{ filter: brightness(1.03); }
+    button:active{ transform: scale(0.99); }
+    button:disabled{
+      opacity: 0.55;
+      cursor: default;
+      box-shadow: none;
+    }
+
+    .message{
+      margin-top: 16px;
+      font-size: 14px;
+      text-align: center;
+      line-height: 1.35;
+    }
+
+    .error{ color:#ff6b6b; }
+    .success{ color:#4cd964; }
+
+    .divider{
+      height: 1px;
+      background: rgba(255,255,255,0.10);
+      margin: 18px 0 10px;
+    }
+
+    .small{
+      text-align:center;
+      margin-top: 12px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.55);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <div class="logo">DraftClub</div>
+    <div class="subtitle">Restablecer contraseña</div>
+
+    <div class="field">
+      <label for="password">Nueva contraseña</label>
+      <div class="inputWrap">
+        <input type="password" id="password" placeholder="••••••••" autocomplete="new-password" />
+        <div class="toggle" id="togglePass" title="Mostrar/Ocultar">
+          <!-- ojo -->
+          👁️
+        </div>
+      </div>
+
+      <div class="strengthBox" id="strengthBox">
+        <div class="bar"><div id="strengthBar"></div></div>
+        <ul class="checks" id="checks">
+          <li id="cLen"><span class="dot"></span> 8+ caracteres</li>
+          <li id="cUpper"><span class="dot"></span> 1 mayúscula</li>
+          <li id="cLower"><span class="dot"></span> 1 minúscula</li>
+          <li id="cNum"><span class="dot"></span> 1 número</li>
+          <li id="cSpec"><span class="dot"></span> 1 símbolo</li>
+          <li id="cNoSpace"><span class="dot"></span> sin espacios</li>
+        </ul>
+
+        <div class="matchRow">
+          <span class="pill" id="matchPill">Aún no coincide</span>
+          <span id="matchText">Confirma la contraseña abajo.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="confirm">Confirmar contraseña</label>
+      <div class="inputWrap">
+        <input type="password" id="confirm" placeholder="••••••••" autocomplete="new-password" />
+        <div class="toggle" id="toggleConfirm" title="Mostrar/Ocultar">
+          👁️
+        </div>
+      </div>
+      <div class="hint">Por seguridad, evita usar contraseñas repetidas en otras apps.</div>
+    </div>
+
+    <button id="submit" disabled>Actualizar contraseña</button>
+
+    <div id="message" class="message"></div>
+    <div class="divider"></div>
+    <div class="small">Si no pediste este cambio, puedes cerrar esta página.</div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const oobCode = params.get('oobCode');
+
+    const messageEl = document.getElementById('message');
+    const btn = document.getElementById('submit');
+
+    const passEl = document.getElementById('password');
+    const confirmEl = document.getElementById('confirm');
+
+    const togglePass = document.getElementById('togglePass');
+    const toggleConfirm = document.getElementById('toggleConfirm');
+
+    const strengthBar = document.getElementById('strengthBar');
+
+    const cLen = document.getElementById('cLen');
+    const cUpper = document.getElementById('cUpper');
+    const cLower = document.getElementById('cLower');
+    const cNum = document.getElementById('cNum');
+    const cSpec = document.getElementById('cSpec');
+    const cNoSpace = document.getElementById('cNoSpace');
+
+    const matchPill = document.getElementById('matchPill');
+    const matchText = document.getElementById('matchText');
+
+    // --- Seguridad: si falta código, bloquear ---
+    if (!oobCode) {
+      showError('Enlace inválido o expirado.');
+      btn.disabled = true;
+    }
+
+    // --- Ojo: toggle ---
+    togglePass.addEventListener('click', () => {
+      passEl.type = (passEl.type === 'password') ? 'text' : 'password';
+    });
+    toggleConfirm.addEventListener('click', () => {
+      confirmEl.type = (confirmEl.type === 'password') ? 'text' : 'password';
+    });
+
+    // --- Reglas de fuerza ---
+    function getRules(password) {
+      const hasMinLen = password.length >= 8;
+      const hasUpper = /[A-Z]/.test(password);
+      const hasLower = /[a-z]/.test(password);
+      const hasNum = /\d/.test(password);
+      const hasSpec = /[!@#$%^&*(),.?":{}|<>_\-\[\]\\\/~`+=;]/.test(password);
+      const noSpace = !/\s/.test(password);
+
+      return { hasMinLen, hasUpper, hasLower, hasNum, hasSpec, noSpace };
+    }
+
+    function scoreRules(r) {
+      const vals = [r.hasMinLen, r.hasUpper, r.hasLower, r.hasNum, r.hasSpec, r.noSpace];
+      return vals.filter(Boolean).length; // 0..6
+    }
+
+    function setCheck(el, ok) {
+      el.classList.toggle('ok', !!ok);
+    }
+
+    function updateUI() {
+      const pass = passEl.value || '';
+      const confirm = confirmEl.value || '';
+
+      const rules = getRules(pass);
+      const score = scoreRules(rules);
+
+      setCheck(cLen, rules.hasMinLen);
+      setCheck(cUpper, rules.hasUpper);
+      setCheck(cLower, rules.hasLower);
+      setCheck(cNum, rules.hasNum);
+      setCheck(cSpec, rules.hasSpec);
+      setCheck(cNoSpace, rules.noSpace);
+
+      // Barra (0-100)
+      const pct = Math.round((score / 6) * 100);
+      strengthBar.style.width = pct + '%';
+
+      // Color por score (sin meter librerías)
+      // 0-2: rojo, 3-4: naranja, 5-6: verde
+      if (score <= 2) strengthBar.style.background = 'rgba(255,107,107,0.95)';
+      else if (score <= 4) strengthBar.style.background = 'rgba(255,193,7,0.95)';
+      else strengthBar.style.background = 'rgba(76,217,100,0.95)';
+
+      // Coincidencia
+      const matches = pass.length > 0 && pass === confirm;
+      if (matches) {
+        matchPill.textContent = 'Coincide ✅';
+        matchPill.style.borderColor = 'rgba(76,217,100,0.75)';
+        matchPill.style.color = '#4cd964';
+        matchText.textContent = 'Puedes actualizar tu contraseña.';
+      } else {
+        matchPill.textContent = 'Aún no coincide';
+        matchPill.style.borderColor = 'rgba(255,255,255,0.14)';
+        matchPill.style.color = 'rgba(255,255,255,0.72)';
+        matchText.textContent = 'Confirma la contraseña abajo.';
+      }
+
+      // Habilitar botón: reglas completas + coincide + oobCode presente
+      const strong = score === 6;
+      btn.disabled = !(oobCode && strong && matches);
+
+      // Limpiar mensajes mientras escribe
+      messageEl.textContent = '';
+      messageEl.className = 'message';
+    }
+
+    passEl.addEventListener('input', updateUI);
+    confirmEl.addEventListener('input', updateUI);
+
+    btn.addEventListener('click', async () => {
+      const pass = passEl.value;
+      const confirm = confirmEl.value;
+
+      const rules = getRules(pass);
+      const score = scoreRules(rules);
+
+      if (score !== 6) {
+        showError('Tu contraseña aún no cumple los requisitos.');
+        return;
+      }
+      if (pass !== confirm) {
+        showError('Las contraseñas no coinciden.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Actualizando…';
+
+      try {
+        await firebase.auth().confirmPasswordReset(oobCode, pass);
+        showSuccess('Contraseña actualizada. Ya puedes volver a la app.');
+        btn.style.display = 'none';
+      } catch (e) {
+        showError('El enlace es inválido o ya expiró. Solicita uno nuevo desde la app.');
+        btn.disabled = false;
+        btn.textContent = 'Actualizar contraseña';
+      }
+    });
+
+    function showError(text) {
+      messageEl.textContent = text;
+      messageEl.className = 'message error';
+    }
+    function showSuccess(text) {
+      messageEl.textContent = text;
+      messageEl.className = 'message success';
+    }
+
+    // Inicial
+    updateUI();
+  </script>
+</body>
+</html>
