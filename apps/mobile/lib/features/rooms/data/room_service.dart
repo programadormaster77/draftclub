@@ -724,30 +724,33 @@ class RoomService {
 
     await batch.commit();
 
-    // 7️⃣ Actualizar estadísticas de usuarios (partidos + XP + rango)
-    try {
-      final Set<String> allPlayers = {
-        ...winnerPlayerIds,
-        ...loserPlayerIds,
-      };
+   // 7️⃣ Actualizar estadísticas de usuarios (partidos + wins + XP + rank)
+try {
+  if (winnerPlayerIds.isEmpty && loserPlayerIds.isEmpty) {
+    print("⚠️ No hay jugadores para actualizar stats.");
+    return;
+  }
 
-      if (allPlayers.isNotEmpty) {
-        final function = FirebaseFunctions.instance.httpsCallable(
-          'updateUserStats',
-          options: HttpsCallableOptions(timeout: Duration(seconds: 20)),
-        );
+  final function = FirebaseFunctions.instance.httpsCallable(
+    'updateUserStats',
+    options: HttpsCallableOptions(timeout: Duration(seconds: 20)),
+  );
 
-        await function.call({
-          'userIds': allPlayers.toList(),
-          'xpGained': 100, // XP que definimos
-        });
+  await function.call({
+    'roomId': roomId,
+    'winnerUserIds': winnerPlayerIds.toList(),
+    'loserUserIds': loserPlayerIds.toList(),
+    // Ajusta estos valores a tu economía de juego:
+    'xpWinner': 120,
+    'xpLoser': 60,
+  });
 
-        print(
-            "✓ Estadísticas actualizadas con éxito para ${allPlayers.length} jugadores.");
-      }
-    } catch (e) {
-      print("❌ Error llamando función updateUserStats: $e");
-    }
+  print("✓ Stats actualizadas (match+xp+wins+rank) para sala $roomId.");
+} catch (e) {
+  print("❌ Error llamando función updateUserStats: $e");
+}
+
+
   }
 
   // ===================================================================
