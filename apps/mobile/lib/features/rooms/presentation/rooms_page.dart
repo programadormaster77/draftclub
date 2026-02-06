@@ -15,6 +15,8 @@ import 'widgets/room_card.dart';
 import 'create_room_page.dart';
 import 'room_detail_page.dart';
 import 'find_room_page.dart';
+import 'pitches_map_page.dart';
+
 
 import 'package:draftclub_mobile/core/location/place_service.dart';
 
@@ -381,73 +383,119 @@ class _RoomsPageState extends State<RoomsPage>
   }
 
   // ----------------- UI -----------------
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0E0E0E),
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: const Color(0xFF0E0E0E),
 
-      // 👇 Eliminamos el AppBar local, porque el Dashboard ya muestra "Salas"
-      // y mantenemos la TabBar dentro del cuerpo.
-      body: Column(
-        children: [
-          // =======================================================
-          // 🔹 TabBar superior (antes estaba dentro del AppBar)
-          // =======================================================
-          Container(
-            color: Colors.black,
-            child: TabBar(
-              controller: _tabController,
-              indicatorColor: Colors.blueAccent,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white70,
-              tabs: const [
-                Tab(text: 'Públicas'),
-                Tab(text: 'Mis salas'),
-                Tab(text: 'Buscar'),
-              ],
-            ),
+    // 👇 Eliminamos el AppBar local, porque el Dashboard ya muestra "Salas"
+    // y mantenemos la TabBar dentro del cuerpo.
+    body: Column(
+      children: [
+        // =======================================================
+        // 🔹 TabBar superior (antes estaba dentro del AppBar)
+        // =======================================================
+        Container(
+          color: Colors.black,
+          child: TabBar(
+            controller: _tabController,
+            indicatorColor: Colors.blueAccent,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            tabs: const [
+              Tab(text: 'Públicas'),
+              Tab(text: 'Mis salas'),
+              Tab(text: 'Buscar'),
+            ],
           ),
+        ),
 
-          // =======================================================
-          // 🔹 Botón para crear sala (antes estaba en AppBar.actions)
-          // =======================================================
-          Container(
-            color: const Color(0xFF0E0E0E),
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-            alignment: Alignment.centerRight,
-            child: IconButton(
-              icon: const Icon(Icons.add_circle_outline,
-                  color: Colors.blueAccent, size: 28),
-              tooltip: 'Crear nueva sala',
-              onPressed: () async {
-                final created = await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CreateRoomPage()),
-                );
-                if (created == true && mounted) {
-                  setState(() => _roomsFuture = _fetchRooms());
-                }
-              },
-            ),
-          ),
+        // =======================================================
+        // 🔹 Acciones superiores: Mapa de canchas + Crear sala
+        // =======================================================
+        Container(
+          color: const Color(0xFF0E0E0E),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          child: Row(
+            children: [
+              // ✅ Botón estético: Ver mapa de canchas
+              Expanded(
+                child: SizedBox(
+                  height: 44,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF111111),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(color: Colors.white24),
+                      ),
+                    ),
+                    icon: const Icon(Icons.map_outlined,
+                        color: Colors.blueAccent, size: 20),
+                    label: const Text(
+                      'Ver mapa de canchas',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    onPressed: () async {
+                      // TODO: Crear PitchesMapPage y apuntar aquí
+                     Navigator.push(
+                       context,
+                     MaterialPageRoute(builder: (_) => const PitchesMapPage()),
+                      );
 
-          // =======================================================
-          // 🔹 Contenido principal con las pestañas
-          // =======================================================
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildPublicRoomsTab(), // ✅ Públicas reales
-                _buildMyRoomsTab(), // ✅ Mis salas
-                const FindRoomPage(), // Buscar por ID (por ahora)
-              ],
-            ),
+                    },
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              // ✅ Botón para crear sala (se mantiene igual)
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline,
+                    color: Colors.blueAccent, size: 28),
+                tooltip: 'Crear nueva sala',
+                onPressed: () async {
+                  final created = await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CreateRoomPage()),
+                  );
+                  if (created == true && mounted) {
+                    setState(() => _roomsFuture = _fetchRooms());
+                  }
+                },
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
+        ),
+
+
+
+        // =======================================================
+        // 🔹 Contenido principal con las pestañas
+        // =======================================================
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildPublicRoomsTab(), // ✅ Públicas reales
+              _buildMyRoomsTab(), // ✅ Mis salas
+              const FindRoomPage(), // Buscar por ID (por ahora)
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 
   // ✅ NUEVO: Tab de salas públicas (discovery)
   Widget _buildPublicRoomsTab() {

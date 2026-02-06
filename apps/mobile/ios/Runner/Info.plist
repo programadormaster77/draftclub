@@ -10,6 +10,9 @@
 	<string>DraftClub usa tu ubicación incluso en segundo plano para recomendarte partidos cercanos y organizar encuentros.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>DraftClub necesita acceder a tu ubicación incluso en segundo plano para encontrar partidos cerca de ti.</string>
+    <!-- 🗺️ Google Maps API Key -->
+     <key>GMSApiKey</key>
+    <string>TU_API_KEY_AQUÍ</string>
 
 	<!-- 📸 Permisos multimedia -->
 	<key>NSCameraUsageDescription</key>

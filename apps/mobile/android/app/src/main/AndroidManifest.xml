@@ -8,12 +8,19 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
 
     <application
         android:name="${applicationName}"
         android:label="DraftClub ⚽"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
+
+        <meta-data
+      android:name="com.google.android.geo.API_KEY"
+      android:value="AIzaSyCV9KM9k8rv3rOaG2uPXTCaRlwK2PebtlM" />
+
 
         <!-- 🚀 Main Activity (inicio de Flutter) -->
         <activity
