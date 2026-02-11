@@ -33,6 +33,8 @@ android {
     }
 
     compileOptions {
+        // Compatibilidad con Java moderno
+        isCoreLibraryDesugaringEnabled = true
         // Compatibilidad moderna con Java
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

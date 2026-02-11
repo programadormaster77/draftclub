@@ -1,8 +1,9 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../models/room_model.dart';
 import '../room_detail_page.dart';
-import 'package:intl/intl.dart';
+import '../widgets/match_countdown.dart'; // 🆕
 
 /// ====================================================================
 /// 💠 RoomCard — Tarjeta reutilizable para mostrar una sala
@@ -17,6 +18,7 @@ class RoomCard extends StatelessWidget {
   final double? userLat;
   final double? userLng;
   final VoidCallback? onTap; // opcional, por si se usa fuera del listado
+  final bool showCountdown; // 🆕
 
   const RoomCard({
     super.key,
@@ -24,6 +26,7 @@ class RoomCard extends StatelessWidget {
     this.userLat,
     this.userLng,
     this.onTap,
+    this.showCountdown = false, // 🆕 Default false
   });
 
   // ===============================================================
@@ -146,7 +149,7 @@ class RoomCard extends StatelessWidget {
               const SizedBox(height: 6),
 
               // -----------------------------------------------------
-              // 📍 Ciudad + Fecha
+              // 📍 Ciudad + Fecha (o Countdown)
               // -----------------------------------------------------
               Row(
                 children: [
@@ -163,17 +166,25 @@ class RoomCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  const Icon(Icons.event, size: 16, color: Colors.white54),
-                  const SizedBox(width: 6),
-                  Text(
-                    formattedDate,
-                    style: const TextStyle(color: Colors.white70, fontSize: 13),
-                  ),
-                ],
-              ),
+              const SizedBox(height: 6),
+
+              if (showCountdown && room.eventAt != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: MatchCountdown(eventDate: room.eventAt!),
+                )
+              else
+                Row(
+                  children: [
+                    const Icon(Icons.event, size: 16, color: Colors.white54),
+                    const SizedBox(width: 6),
+                    Text(
+                      formattedDate,
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                  ],
+                ),
 
               const SizedBox(height: 6),
 

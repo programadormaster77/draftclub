@@ -54,7 +54,7 @@ class _RoomsPageState extends State<RoomsPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _roomsFuture = _bootstrapAndFetch();
   }
 
@@ -630,6 +630,7 @@ Widget build(BuildContext context) {
               room: r,
               userLat: _filters.userLat,
               userLng: _filters.userLng,
+              showCountdown: true, // 🆕 Enabled for My Rooms
               onTap: () {
                 Navigator.push(
                   context,

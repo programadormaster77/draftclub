@@ -128,6 +128,8 @@ dependencies:
     path: ../../packages/features/notifications
   settings:
     path: ../../packages/features/settings
+  flutter_local_notifications: ^17.0.0
+  timezone: ^0.9.0
 
 dependency_overrides:
   record_platform_interface: ^1.4.0

@@ -1,0 +1,511 @@
+Running Gradle task 'assembleDebug'...                          
+lib/features/rooms/presentation/widgets/room_card.dart:11:24: Error: Type 'StatelessWidget' not found.
+class RoomCard extends StatelessWidget {
+                       ^^^^^^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:12:9: Error: Type 'Room' not found.
+  final Room room;
+        ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:15:9: Error: Type 'VoidCallback' not found.
+  final VoidCallback? onTap; // opcional, por si se usa fuera del listado
+        ^^^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:53:3: Error: Type 'Color' not found.
+  Color get sexColor {
+  ^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:83:3: Error: Type 'Widget' not found.
+  Widget build(BuildContext context) {
+  ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:83:16: Error: Type 'BuildContext' not found.
+  Widget build(BuildContext context) {
+               ^^^^^^^^^^^^
+lib/features/rooms/presentation/rooms_page.dart:506:28: Error: A value of type 'RoomCard' can't be returned from a function with return type 'Widget?'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+ - 'Widget' is from 'package:flutter/src/widgets/framework.dart' ('../../../../../../../flutter/packages/flutter/lib/src/widgets/framework.dart').
+                    return RoomCard(
+                           ^
+lib/features/rooms/presentation/rooms_page.dart:578:20: Error: A value of type 'RoomCard' can't be returned from a function with return type 'Widget?'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+ - 'Widget' is from 'package:flutter/src/widgets/framework.dart' ('../../../../../../../flutter/packages/flutter/lib/src/widgets/framework.dart').
+            return RoomCard(
+                   ^
+lib/features/rooms/presentation/widgets/room_card.dart:12:9: Error: 'Room' isn't a type.
+  final Room room;
+        ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:15:9: Error: 'VoidCallback' isn't a type.
+  final VoidCallback? onTap; // opcional, por si se usa fuera del listado
+        ^^^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:39:16: Error: The method 'sin' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'sin'.
+    final a = (sin(dLat / 2) * sin(dLat / 2)) +
+               ^^^
+lib/features/rooms/presentation/widgets/room_card.dart:39:32: Error: The method 'sin' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'sin'.
+    final a = (sin(dLat / 2) * sin(dLat / 2)) +
+                               ^^^
+lib/features/rooms/presentation/widgets/room_card.dart:40:10: Error: The method 'cos' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'cos'.
+        (cos(_deg2rad(userLat!)) *
+         ^^^
+lib/features/rooms/presentation/widgets/room_card.dart:41:13: Error: The method 'cos' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'cos'.
+            cos(_deg2rad(lat)) *
+            ^^^
+lib/features/rooms/presentation/widgets/room_card.dart:42:13: Error: The method 'sin' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'sin'.
+            sin(dLon / 2) *
+            ^^^
+lib/features/rooms/presentation/widgets/room_card.dart:43:13: Error: The method 'sin' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'sin'.
+            sin(dLon / 2));
+            ^^^
+lib/features/rooms/presentation/widgets/room_card.dart:44:19: Error: The method 'atan2' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'atan2'.
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+                  ^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:44:25: Error: The method 'sqrt' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'sqrt'.
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+                        ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:44:34: Error: The method 'sqrt' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'sqrt'.
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+                                 ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:56:16: Error: The getter 'Colors' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'Colors'.
+        return Colors.blueAccent;
+               ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:58:16: Error: The getter 'Colors' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'Colors'.
+        return Colors.pinkAccent;
+               ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:60:16: Error: The getter 'Colors' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'Colors'.
+        return Colors.greenAccent;
+               ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:69:16: Error: The method 'DateFormat' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'DateFormat'.
+    final df = DateFormat('dd/MM/yyyy � HH:mm');
+               ^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:83:16: Error: 'BuildContext' isn't a type.
+  Widget build(BuildContext context) {
+               ^^^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:96:23: Error: Couldn't find constructor 'EdgeInsets.only'.
+        margin: const EdgeInsets.only(bottom: 14),
+                      ^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:98:24: Error: Not a constant expression.
+          color: const Color(0xFF1A1A1A),
+                       ^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:105:29: Error: Not a constant expression.
+              offset: const Offset(0, 3),
+                            ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:110:26: Error: Couldn't find constructor 'EdgeInsets.all'.
+          padding: const EdgeInsets.all(16),
+                         ^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:124:32: Error: Not a constant expression.
+                        color: Colors.white,
+                               ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:126:37: Error: Not a constant expression.
+                        fontWeight: FontWeight.bold,
+                                    ^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:127:35: Error: Not a constant expression.
+                        overflow: TextOverflow.ellipsis,
+                                  ^^^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:123:36: Error: Not a constant expression.
+                      style: const TextStyle(
+                                   ^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:134:36: Error: Not a constant expression.
+                        const Icon(Icons.place,
+                                   ^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:135:46: Error: Not a constant expression.
+                            size: 16, color: Colors.white54),
+                                             ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:134:31: Error: Not a constant expression.
+                        const Icon(Icons.place,
+                              ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:136:31: Error: Not a constant expression.
+                        const SizedBox(width: 4),
+                              ^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:139:40: Error: Not a constant expression.
+                                color: Colors.white60, fontSize: 12)),
+                                       ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:138:42: Error: Not a constant expression.
+                            style: const TextStyle(
+                                         ^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:144:21: Error: Not a constant expression.
+              const SizedBox(height: 6),
+                    ^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:151:30: Error: Not a constant expression.
+                  const Icon(Icons.location_city,
+                             ^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:152:40: Error: Not a constant expression.
+                      size: 16, color: Colors.white54),
+                                       ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:151:25: Error: Not a constant expression.
+                  const Icon(Icons.location_city,
+                        ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:153:25: Error: Not a constant expression.
+                  const SizedBox(width: 6),
+                        ^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:158:50: Error: Not a constant expression.
+                          const TextStyle(color: Colors.white70, fontSize: 13),
+                                                 ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:158:33: Error: Not a constant expression.
+                          const TextStyle(color: Colors.white70, fontSize: 13),
+                                ^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:164:21: Error: Not a constant expression.
+              const SizedBox(height: 6),
+                    ^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:168:34: Error: Couldn't find constructor 'EdgeInsets.only'.
+                  padding: const EdgeInsets.only(bottom: 6),
+                                 ^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:174:32: Error: Not a constant expression.
+                    const Icon(Icons.event, size: 16, color: Colors.white54),
+                               ^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:174:62: Error: Not a constant expression.
+                    const Icon(Icons.event, size: 16, color: Colors.white54),
+                                                             ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:174:27: Error: Not a constant expression.
+                    const Icon(Icons.event, size: 16, color: Colors.white54),
+                          ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:175:27: Error: Not a constant expression.
+                    const SizedBox(width: 6),
+                          ^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:179:50: Error: Not a constant expression.
+                          const TextStyle(color: Colors.white70, fontSize: 13),
+                                                 ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:179:33: Error: Not a constant expression.
+                          const TextStyle(color: Colors.white70, fontSize: 13),
+                                ^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:184:21: Error: Not a constant expression.
+              const SizedBox(height: 6),
+                    ^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:197:25: Error: Not a constant expression.
+                  const SizedBox(width: 6),
+                        ^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:200:51: Error: Not a constant expression.
+                    style: const TextStyle(color: Colors.white60, fontSize: 13),
+                                                  ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:200:34: Error: Not a constant expression.
+                    style: const TextStyle(color: Colors.white60, fontSize: 13),
+                                 ^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:202:25: Error: Not a constant expression.
+                  const SizedBox(width: 12),
+                        ^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:204:25: Error: Not a constant expression.
+                  const SizedBox(width: 6),
+                        ^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:217:21: Error: Not a constant expression.
+              const SizedBox(height: 6),
+                    ^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:224:47: Error: Not a constant expression.
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+                                              ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:224:30: Error: Not a constant expression.
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+                             ^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:227:21: Error: Not a constant expression.
+              const SizedBox(height: 10),
+                    ^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:252:38: Error: Not a constant expression.
+                    icon: const Icon(Icons.arrow_forward_ios,
+                                     ^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:253:32: Error: Not a constant expression.
+                        color: Colors.blueAccent, size: 16),
+                               ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:252:33: Error: Not a constant expression.
+                    icon: const Icon(Icons.arrow_forward_ios,
+                                ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:256:47: Error: Not a constant expression.
+                      style: TextStyle(color: Colors.blueAccent, fontSize: 13),
+                                              ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:256:30: Error: Not a constant expression.
+                      style: TextStyle(color: Colors.blueAccent, fontSize: 13),
+                             ^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:254:34: Error: Not a constant expression.
+                    label: const Text(
+                                 ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:87:12: Error: The method 'GestureDetector' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'GestureDetector'.
+    return GestureDetector(
+           ^^^^^^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:90:13: Error: The getter 'Navigator' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'Navigator'.
+            Navigator.push(
+            ^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:92:15: Error: The method 'MaterialPageRoute' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'MaterialPageRoute'.
+              MaterialPageRoute(builder: (_) => RoomDetailPage(room: room)),
+              ^^^^^^^^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:92:49: Error: The method 'RoomDetailPage' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'RoomDetailPage'.
+              MaterialPageRoute(builder: (_) => RoomDetailPage(room: room)),
+                                                ^^^^^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:95:14: Error: The method 'Container' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Container'.
+      child: Container(
+             ^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:97:21: Error: The method 'BoxDecoration' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'BoxDecoration'.
+        decoration: BoxDecoration(
+                    ^^^^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:99:25: Error: The getter 'BorderRadius' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'BorderRadius'.
+          borderRadius: BorderRadius.circular(16),
+                        ^^^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:100:19: Error: The getter 'Border' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'Border'.
+          border: Border.all(color: Colors.white12, width: 1),
+                  ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:100:37: Error: The getter 'Colors' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'Colors'.
+          border: Border.all(color: Colors.white12, width: 1),
+                                    ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:102:13: Error: The method 'BoxShadow' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'BoxShadow'.
+            BoxShadow(
+            ^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:103:22: Error: The getter 'Colors' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'Colors'.
+              color: Colors.black.withOpacity(0.25),
+                     ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:109:16: Error: The method 'Padding' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Padding'.
+        child: Padding(
+               ^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:111:18: Error: The method 'Column' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Column'.
+          child: Column(
+                 ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:112:33: Error: The getter 'CrossAxisAlignment' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'CrossAxisAlignment'.
+            crossAxisAlignment: CrossAxisAlignment.start,
+                                ^^^^^^^^^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:117:15: Error: The method 'Row' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Row'.
+              Row(
+              ^^^
+lib/features/rooms/presentation/widgets/room_card.dart:118:36: Error: The getter 'MainAxisAlignment' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MainAxisAlignment'.
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                   ^^^^^^^^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:120:19: Error: The method 'Expanded' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Expanded'.
+                  Expanded(
+                  ^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:121:28: Error: The method 'Text' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Text'.
+                    child: Text(
+                           ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:132:21: Error: The method 'Row' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Row'.
+                    Row(
+                    ^^^
+lib/features/rooms/presentation/widgets/room_card.dart:137:25: Error: The method 'Text' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Text'.
+                        Text(dist,
+                        ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:149:15: Error: The method 'Row' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Row'.
+              Row(
+              ^^^
+lib/features/rooms/presentation/widgets/room_card.dart:154:19: Error: The method 'Expanded' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Expanded'.
+                  Expanded(
+                  ^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:155:28: Error: The method 'Text' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Text'.
+                    child: Text(
+                           ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:159:33: Error: The getter 'TextOverflow' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'TextOverflow'.
+                      overflow: TextOverflow.ellipsis,
+                                ^^^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:167:17: Error: The method 'Padding' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Padding'.
+                Padding(
+                ^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:172:17: Error: The method 'Row' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Row'.
+                Row(
+                ^^^
+lib/features/rooms/presentation/widgets/room_card.dart:176:21: Error: The method 'Text' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Text'.
+                    Text(
+                    ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:189:15: Error: The method 'Row' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Row'.
+              Row(
+              ^^^
+lib/features/rooms/presentation/widgets/room_card.dart:191:19: Error: The method 'Icon' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Icon'.
+                  Icon(
+                  ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:192:37: Error: The getter 'Icons' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'Icons'.
+                    room.isPublic ? Icons.public : Icons.lock,
+                                    ^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:192:52: Error: The getter 'Icons' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'Icons'.
+                    room.isPublic ? Icons.public : Icons.lock,
+                                                   ^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:195:41: Error: The getter 'Colors' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'Colors'.
+                        room.isPublic ? Colors.blueAccent : Colors.orangeAccent,
+                                        ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:195:61: Error: The getter 'Colors' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'Colors'.
+                        room.isPublic ? Colors.blueAccent : Colors.orangeAccent,
+                                                            ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:198:19: Error: The method 'Text' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Text'.
+                  Text(
+                  ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:203:19: Error: The method 'Icon' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Icon'.
+                  Icon(Icons.people, size: 16, color: sexColor),
+                  ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:203:24: Error: The getter 'Icons' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'Icons'.
+                  Icon(Icons.people, size: 16, color: sexColor),
+                       ^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:205:19: Error: The method 'Text' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Text'.
+                  Text(
+                  ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:209:28: Error: The method 'TextStyle' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'TextStyle'.
+                    style: TextStyle(
+                           ^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:212:37: Error: The getter 'FontWeight' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'FontWeight'.
+                        fontWeight: FontWeight.w600),
+                                    ^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:222:15: Error: The method 'Text' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Text'.
+              Text(
+              ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:232:15: Error: The method 'Row' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Row'.
+              Row(
+              ^^^
+lib/features/rooms/presentation/widgets/room_card.dart:233:36: Error: The getter 'MainAxisAlignment' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'MainAxisAlignment'.
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                   ^^^^^^^^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:235:19: Error: The method 'Text' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'Text'.
+                  Text(
+                  ^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:237:28: Error: The method 'TextStyle' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'TextStyle'.
+                    style: TextStyle(
+                           ^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:238:39: Error: The getter 'Colors' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'Colors'.
+                      color: isFull ? Colors.redAccent : Colors.greenAccent,
+                                      ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:238:58: Error: The getter 'Colors' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'Colors'.
+                      color: isFull ? Colors.redAccent : Colors.greenAccent,
+                                                         ^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:239:35: Error: The getter 'FontWeight' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'FontWeight'.
+                      fontWeight: FontWeight.bold,
+                                  ^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:243:19: Error: The getter 'TextButton' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'TextButton'.
+                  TextButton.icon(
+                  ^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:246:27: Error: The getter 'Navigator' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'Navigator'.
+                          Navigator.push(
+                          ^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:248:29: Error: The method 'MaterialPageRoute' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'MaterialPageRoute'.
+                            MaterialPageRoute(
+                            ^^^^^^^^^^^^^^^^^
+lib/features/rooms/presentation/widgets/room_card.dart:249:49: Error: The method 'RoomDetailPage' isn't defined for the type 'RoomCard'.
+ - 'RoomCard' is from 'package:draftclub_mobile/features/rooms/presentation/widgets/room_card.dart' ('lib/features/rooms/presentation/widgets/room_card.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'RoomDetailPage'.
+                                builder: (_) => RoomDetailPage(room: room)),
+                                                ^^^^^^^^^^^^^^
+Target kernel_snapshot_program failed: Exception
+
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileFlutterBuildDebug'.
+> Process 'command 'C:\Users\famil\flutter\bin\flutter.bat'' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 33s
+Running Gradle task 'assembleDebug'...                             34.5s
+Gradle task assembleDebug failed with exit code 1

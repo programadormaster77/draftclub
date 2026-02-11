@@ -26,6 +26,7 @@ class UserProfile {
   final bool vipFlag; // Usuario VIP
   final String role; // 👑 user | admin | moderator
   final DateTime createdAt;
+
   final DateTime updatedAt;
 
   UserProfile({
@@ -72,6 +73,7 @@ class UserProfile {
       'vipFlag': vipFlag,
       'role': role, // 👑 Nuevo campo
       'createdAt': Timestamp.fromDate(createdAt),
+
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
   }

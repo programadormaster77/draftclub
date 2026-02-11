@@ -1,3 +1,5 @@
+import 'dart:io'; // 🆕
+import 'package:path_provider/path_provider.dart'; // 🆕
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // 📋 Clipboard (copiar ID)
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,6 +14,18 @@ import '../data/room_service.dart';
 import 'team_list_page.dart';
 import 'chat/chat_room_page.dart';
 import '../../../core/location/place_service.dart'; // 🆕 direcciones exactas
+import 'widgets/match_card.dart'; // 🆕 Widget reutilizable
+import 'widgets/match_progress_bar.dart'; // 🆕 Import
+import 'package:draftclub_mobile/core/notifications/notification_service.dart'; // 🆕
+
+import 'widgets/match_card_image.dart'; // 🆕
+import 'widgets/versus_overlay.dart'; // 🆕
+import 'package:screenshot/screenshot.dart'; // 🆕
+import 'package:add_2_calendar/add_2_calendar.dart'; // 🆕
+import '../../profile/presentation/rate_player_page.dart'; // 🆕
+import 'widgets/soccer_field_widget.dart';
+import 'dialogs/match_result_dialog.dart'; // 🆕 Dialogo de resultados
+import 'package:lottie/lottie.dart'; // 🆕 Animación
 
 /// ====================================================================
 /// ⚽ RoomDetailPage — Detalle de sala (con stream en tiempo real)
@@ -28,9 +42,39 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
   final _auth = FirebaseAuth.instance;
   final _firestore = FirebaseFirestore.instance;
   final _roomService = RoomService();
+  final _notificationService = NotificationService(); // 🆕
+  final ScreenshotController _screenshotController =
+      ScreenshotController(); // 🆕
 
   bool _loading = false;
+  bool _showLineup = true; // Default to true for engagement
   bool _searchingAddress = false;
+  bool _showVersus = false; // 🆕
+  bool _hasShownVersus = false; // 🆕
+
+  @override
+  void initState() {
+    super.initState();
+    _initNotifications();
+  }
+
+  Future<void> _initNotifications() async {
+    await _notificationService.init();
+    // Agendar recordatorio si ya hay fecha definida
+    if (widget.room.eventAt != null) {
+      _scheduleMatchReminder(widget.room);
+    }
+  }
+
+  void _scheduleMatchReminder(Room room) {
+    if (room.eventAt == null) return;
+    _notificationService.scheduleMatchReminder(
+      id: room.id.hashCode, // Simple ID based on hash
+      title: '⚽ ¡Tu partido se acerca!',
+      body: 'El partido "${room.name}" comienza en 1 hora. ¡Prepárate!',
+      scheduledDate: room.eventAt!,
+    );
+  }
 
   /// ===============================================================
   /// 🧩 Normalizador de género (consistencia global)
@@ -573,6 +617,43 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
   }
 
   // ================================================================
+  // 🪄 CREAR PARTIDO DE PRUEBA (DEBUG)
+  // ================================================================
+
+  Future<void> _debugFillRoom(Room room) async {
+    try {
+      final currentPlayers = List<String>.from(room.players);
+      final needed = (room.maxPlayers * 0.8).ceil();
+      if (currentPlayers.length >= needed) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('La sala ya tiene suficiente gente 👍')),
+          );
+        }
+        return;
+      }
+
+      for (int i = currentPlayers.length; i < needed; i++) {
+        currentPlayers.add('dummy_player_$i');
+      }
+
+      await _roomService.updateRoom(room.id, {'players': currentPlayers});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sala llenada con bots 🤖')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error debug fill: $e')),
+        );
+      }
+    }
+  }
+
+  // ================================================================
   // 📤 Compartir por ID — hoja con copiar + compartir
   // ================================================================
   Future<void> _openShareIdSheet(Room room) async {
@@ -689,6 +770,23 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
   }
 
   // ================================================================
+  // 📅 Agregar al Calendario
+  // ================================================================
+  void _addToCalendar(Room room) {
+    if (room.eventAt == null) return;
+    final event = Event(
+      title: 'Partido: ${room.name}',
+      description: 'Partido en DraftClub. Fase: ${room.phase}',
+      location: room.exactAddress ?? room.city,
+      startDate: room.eventAt!,
+      endDate: room.eventAt!.add(const Duration(hours: 2)),
+      iosParams: const IOSParams(reminder: Duration(minutes: 60)),
+      androidParams: const AndroidParams(emailInvites: []),
+    );
+    Add2Calendar.addEvent2Cal(event);
+  }
+
+  // ================================================================
   // 🎨 UI + STREAM BUILDER
   // ================================================================
   @override
@@ -706,6 +804,24 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
         }
 
         final room = snapshot.data!;
+
+        // 🆕 Reagendar notificación si hay fecha
+        if (room.eventAt != null) {
+          _scheduleMatchReminder(room);
+        }
+
+        // 🆕 VS Screen Trigger
+        if (room.phase == 'ready' && !_hasShownVersus) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !_showVersus && !_hasShownVersus) {
+              setState(() {
+                _showVersus = true;
+                _hasShownVersus = true;
+              });
+            }
+          });
+        }
+
         final uid = _auth.currentUser?.uid;
         final isCreator = room.creatorId == uid;
         final joined = uid != null && room.players.contains(uid);
@@ -752,7 +868,7 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
     }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -861,6 +977,28 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
                   ],
                 ),
               ),
+              TextButton.icon(
+                onPressed: () => setState(() => _showLineup = !_showLineup),
+                icon: Icon(_showLineup ? Icons.list : Icons.sports_soccer,
+                    color: Colors.blueAccent),
+                label: Text(_showLineup ? 'Ver Lista' : 'Ver Cancha',
+                    style: const TextStyle(color: Colors.blueAccent)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 400),
+            crossFadeState: _showLineup
+                ? CrossFadeState.showFirst
+                : CrossFadeState.showSecond,
+            firstChild: Center(
+              child: SoccerFieldWidget(
+                playerPositions: room.playerPositions,
+                allPlayers: room.players,
+                onPositionTap: (pos) => _handlePositionTap(room, pos),
+              ),
             ),
 
           _buildInfoRow(Icons.group, 'Equipos', '${room.teams} equipos'),
@@ -883,7 +1021,7 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
                   '${room.eventAt!.hour}:${room.eventAt!.minute.toString().padLeft(2, '0')}',
             ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 30),
 
           // ============================================================
           // ID DE LA SALA
@@ -896,38 +1034,54 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.white12),
             ),
-            child: Row(
-              children: [
-                const Icon(Icons.key, color: Colors.blueAccent, size: 20),
-                const SizedBox(width: 10),
-                const Text(
-                  'ID de la sala:',
-                  style: TextStyle(
-                      color: Colors.white70, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Text(
-                      room.id,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontFamily: 'monospace',
+          ),
+          const SizedBox(height: 12),
+          StreamBuilder<List<m.Match>>(
+            stream: _roomService.getMatches(room.id),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Text('Error al cargar partidos.',
+                    style: TextStyle(color: Colors.redAccent));
+              }
+              if (!snapshot.hasData) {
+                return const Center(
+                    child: CircularProgressIndicator(color: Colors.blueAccent));
+              }
+
+              final matches = snapshot.data!;
+              final pending = matches.where((m) => !m.isFinished).toList();
+
+              print('DEBUG: Total matches: ${matches.length}');
+              print('DEBUG: Pending: ${pending.length}');
+
+              return Column(
+                children: [
+                  // 1. Partidos Pendientes
+                  if (pending.isNotEmpty) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Pendientes (${pending.length})',
+                        style: const TextStyle(
+                            color: Colors.blueAccent,
+                            fontWeight: FontWeight.w600),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  tooltip: 'Copiar ID',
-                  onPressed: () async {
-                    await Clipboard.setData(ClipboardData(text: room.id));
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('ID copiado al portapapeles'),
-                          backgroundColor: Colors.blueAccent,
+                    const SizedBox(height: 8),
+                    ...pending.map((match) => MatchCard(
+                          match: match,
+                          roomName: room.name,
+                        )),
+                    const SizedBox(height: 16),
+                  ],
+
+                  if (pending.isEmpty)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20),
+                        child: Text(
+                          'No hay partidos programados.',
+                          style: TextStyle(color: Colors.white38),
                         ),
                       );
                     }
@@ -942,7 +1096,6 @@ class _RoomDetailPageState extends State<RoomDetailPage> {
               ],
             ),
           ),
-
           const SizedBox(height: 30),
 
           // ============================================================
@@ -1403,5 +1556,217 @@ await callableStats.call({
         ),
       ),
     );
+  }
+
+  Widget _buildStatusSelector(Room room) {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return const SizedBox.shrink();
+    final currentStatus = room.playerStatus[uid];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('MI ESTADO',
+              style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1)),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildStatusChip(room, 'on_way', '🏃 Voy en camino',
+                    Colors.orangeAccent, currentStatus),
+                const SizedBox(width: 8),
+                _buildStatusChip(room, 'arrived', '📍 Ya llegué',
+                    Colors.greenAccent, currentStatus),
+                const SizedBox(width: 8),
+                _buildStatusChip(room, 'late', '⏰ Llego tarde',
+                    Colors.redAccent, currentStatus),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(
+      Room room, String code, String label, Color color, String? current) {
+    final isSelected = current == code;
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (selected) {
+        if (selected) _roomService.updatePlayerStatus(room.id, code);
+      },
+      selectedColor: color.withOpacity(0.2),
+      backgroundColor: Colors.white10,
+      labelStyle: TextStyle(
+        color: isSelected ? color : Colors.white70,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+      ),
+      side: BorderSide(
+        color: isSelected ? color : Colors.white12,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    );
+  }
+
+  // ================================================================
+  // ⚽ Helper Methods for Lineup / Player List
+  // ================================================================
+
+  // ================================================================
+  // 📸 Compartir Tarjeta del Partido
+  // ================================================================
+
+  Future<void> _shareMatchCard(Room room) async {
+    setState(() => _loading = true);
+    try {
+      // 1. Generar imagen
+      final imageBytes = await _screenshotController.captureFromWidget(
+        Material(child: MatchCardImage(room: room)),
+        delay: const Duration(milliseconds: 100),
+        pixelRatio: 2.0,
+      );
+
+      // 2. Guardar en archivo temporal
+      final directory = await getTemporaryDirectory();
+      final imagePath =
+          await File('${directory.path}/match_card_${room.id}.png').create();
+      await imagePath.writeAsBytes(imageBytes);
+
+      // 3. Compartir
+      if (!mounted) return;
+      await Share.shareXFiles([XFile(imagePath.path)],
+          text: '¡Únete a mi partido en DraftClub! ⚽🔥');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Error al compartir: $e')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Widget _buildPlayerList(Room room) {
+    if (room.players.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Text('No hay jugadores aún.',
+            style: TextStyle(color: Colors.white54)),
+      );
+    }
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: room.players.length,
+      itemBuilder: (context, index) {
+        final userId = room.players[index];
+        final position = room.playerPositions[userId] ?? 'Sin posición';
+        final status = room.playerStatus[userId];
+
+        return FutureBuilder<DocumentSnapshot>(
+          future: _firestore.collection('users').doc(userId).get(),
+          builder: (context, snapshot) {
+            String name = 'Cargando...';
+            String? photoUrl;
+
+            if (snapshot.hasData && snapshot.data!.exists) {
+              final data = snapshot.data!.data() as Map<String, dynamic>;
+              name = data['name'] ?? 'Usuario';
+              photoUrl = data['photoUrl'];
+            }
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundImage:
+                      photoUrl != null ? NetworkImage(photoUrl) : null,
+                  backgroundColor: Colors.blueAccent,
+                  child: photoUrl == null
+                      ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                          style: const TextStyle(color: Colors.white))
+                      : null,
+                ),
+                title: Text(name,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14)),
+                subtitle: Text(position,
+                    style: const TextStyle(
+                        color: Colors.blueAccent, fontSize: 12)),
+                trailing: status != null ? _buildListStatusChip(status) : null,
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildListStatusChip(String status) {
+    Color color = Colors.grey;
+    String label = status;
+    if (status == 'ready') {
+      color = Colors.green;
+      label = 'Llegó';
+    }
+    if (status == 'on_way') {
+      color = Colors.blue;
+      label = 'En camino';
+    }
+    if (status == 'late') {
+      color = Colors.orange;
+      label = 'Retrasado';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+          color: color.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withOpacity(0.5))),
+      child: Text(label,
+          style: TextStyle(
+              color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Future<void> _handlePositionTap(Room room, String position) async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) return;
+    if (!room.players.contains(currentUser.uid)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Debes unirte a la sala primero.')));
+      return;
+    }
+
+    try {
+      await _roomService.updatePlayerPosition(room.id, position);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            backgroundColor: Colors.green,
+            content: Text('Posición actualizada a: $position')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
   }
 }

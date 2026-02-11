@@ -99,6 +99,7 @@ class RoomService {
     DateTime? eventAt,
     String? exactAddress,
     String? sex,
+    String matchType = 'friendly',
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Usuario no autenticado');
@@ -210,6 +211,8 @@ class RoomService {
       },
       if (country != null && country.isNotEmpty) 'countryCode': country,
       'sex': finalSex,
+      'matchType': matchType,
+      'phase': 'recruitment',
     });
 
     // 5️⃣ Crear equipos
@@ -558,6 +561,31 @@ class RoomService {
 
     sanitized['updatedAt'] = FieldValue.serverTimestamp();
     await _roomRef(roomId).update(sanitized);
+  }
+
+  /// 🚦 Avanzar o retroceder de fase
+  Future<void> updatePhase(String roomId, String newPhase) async {
+    await updateRoom(roomId, {'phase': newPhase});
+  }
+
+  /// ⚽ Actualizar posición del jugador (GK, DEF, MID, FWD)
+  Future<void> updatePlayerPosition(String roomId, String position) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw Exception('Usuario no autenticado');
+    await _firestore.collection('rooms').doc(roomId).update({
+      'playerPositions.$uid': position,
+      'updatedAt': Timestamp.now(),
+    });
+  }
+
+  /// 🚦 Actualizar estado de llegada del jugador (on_way, arrived, late)
+  Future<void> updatePlayerStatus(String roomId, String status) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw Exception('Usuario no autenticado');
+    await _firestore.collection('rooms').doc(roomId).update({
+      'playerStatus.$uid': status,
+      'updatedAt': Timestamp.now(),
+    });
   }
 
   Future<Room?> getRoomById(String roomId) async {
