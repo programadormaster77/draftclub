@@ -1,0 +1,142 @@
+// ===============================================================
+// 🔒 Firestore Security Rules — DraftClub v1.3 (Social System Ready)
+// ===============================================================
+// Protege perfiles, publicaciones, likes, comentarios, reportes,
+// y el nuevo sistema de seguidores/seguidos (follows).
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===========================================================
+    // 👤 USERS — cada usuario solo puede modificar su propio doc
+    // ===========================================================
+    match /users/{uid} {
+      allow read: if true; // público (perfiles visibles)
+      allow write: if request.auth != null && request.auth.uid == uid;
+
+          // ===========================================================
+    // 🧠 XP_HISTORY — historial de experiencia (subcolección)
+    // ===========================================================
+    match /users/{uid}/xp_history/{xpId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null
+                    && request.auth.uid == uid
+                    && (request.resource.data.amount is int)
+                    && (request.resource.data.reason is string)
+                    && (request.resource.data.timestamp is timestamp);
+      allow update, delete: if false; // solo se agregan registros, no se editan ni borran
+    }
+
+    }
+
+    // ===========================================================
+    // 📰 POSTS — publicaciones sociales (feed)
+    // ===========================================================
+    match /posts/{postId} {
+      allow read: if true;
+
+      // 🔹 Crear: solo si el usuario autenticado es el autor
+      allow create: if request.auth != null
+                    && request.auth.uid == request.resource.data.authorId
+                    && (request.resource.data.createdAt is timestamp)
+                    && (request.resource.data.type in ['photo', 'video'])
+                    && (request.resource.data.caption is string)
+                    && (request.resource.data.city is string)
+                    && (request.resource.data.mediaUrls is list)
+                    && request.resource.data.caption.size() < 2200
+                    && request.resource.data.mediaUrls.size() <= 5;
+
+      // 🔹 Editar: solo el autor del post
+      allow update: if request.auth != null
+                    && resource.data.authorId == request.auth.uid;
+
+      // 🔹 Eliminar: solo el autor del post
+      allow delete: if request.auth != null
+                     && resource.data.authorId == request.auth.uid;
+    }
+
+    // ===========================================================
+    // ❤️ POST_LIKES — control de "me gusta"
+    // ===========================================================
+    match /posts/{postId}/likes/{uid} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ===========================================================
+    // 💬 COMMENTS — comentarios (colección anidada en cada post)
+    // ===========================================================
+    match /posts/{postId}/comments/{commentId} {
+      allow read: if true;
+      allow create: if request.auth != null
+                    && request.resource.data.authorId == request.auth.uid
+                    && (request.resource.data.text is string)
+                    && (request.resource.data.text.size() > 0)
+                    && (request.resource.data.text.size() <= 500)
+                    && (request.resource.data.createdAt is timestamp);
+      allow update: if request.auth != null
+                    && resource.data.authorId == request.auth.uid;
+      allow delete: if request.auth != null
+                    && resource.data.authorId == request.auth.uid;
+    }
+
+    // ===========================================================
+    // 🚩 REPORTS — reportes de publicaciones
+    // ===========================================================
+    match /reports/{reportId} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if false; // solo admins
+    }
+
+    // ===========================================================
+    // 👥 FOLLOWS — relaciones seguidor/seguido (top-level)
+    // ===========================================================
+    // Cada documento tiene estructura:
+    // {
+    //   followerId: string,
+    //   targetId: string,
+    //   createdAt: timestamp
+    // }
+    match /follows/{followId} {
+      allow read: if true;
+
+      // ✅ Crear: solo si el seguidor es el usuario autenticado
+      allow create: if request.auth != null
+                    && request.resource.data.followerId == request.auth.uid
+                    && (request.resource.data.targetId is string)
+                    && (request.resource.data.createdAt is timestamp);
+
+      // ✅ Eliminar: solo si el seguidor del doc es el usuario autenticado
+      allow delete: if request.auth != null
+                    && resource.data.followerId == request.auth.uid;
+
+      // ❌ No se puede actualizar (no tiene sentido en este modelo)
+      allow update: if false;
+    }
+
+    // ===========================================================
+    // 🏠 FEED_HOME — timeline materializado (fan-out)
+    // ===========================================================
+    match /feed_home/{uid}/items/{itemId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false; // solo Cloud Functions
+    }
+
+    // ===========================================================
+    // ⚙️ ROOMS / TOURNAMENTS — prototipo
+    // ===========================================================
+    match /rooms/{roomId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // ===========================================================
+    // 🚫 DEFAULT DENY — bloquea cualquier otra colección
+    // ===========================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

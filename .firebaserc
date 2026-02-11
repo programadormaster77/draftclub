@@ -1,0 +1,16 @@
+{
+  "projects": {
+    "default": "draftclub-a00ea",
+    "draftclub": "draftclub-a00ea"
+  },
+  "targets": {
+    "draftclub-a00ea": {
+      "storage": {
+        "rules": [
+          "draftclub-a00ea.appspot.com"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

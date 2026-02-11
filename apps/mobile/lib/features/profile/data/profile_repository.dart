@@ -23,12 +23,16 @@ class ProfileRepository {
     return doc.exists;
   }
 
-  /// 📥 Obtiene un perfil de Firestore y lo convierte a UserProfile
-  Future<UserProfile?> fetchProfile(String uid) async {
-    final doc = await _firestore.collection('users').doc(uid).get();
-    if (!doc.exists || doc.data() == null) return null;
-    return UserProfile.fromMap(doc.data()!);
-  }
+ /// 📥 Obtiene un perfil de Firestore y lo convierte a UserProfile
+Future<UserProfile?> fetchProfile(String uid) async {
+  final doc = await _firestore.collection('users').doc(uid).get();
+  if (!doc.exists || doc.data() == null) return null;
+
+  // ✅ anclaje correcto: el uid real es doc.id (porque NO lo guardas dentro del doc)
+  return UserProfile.fromMap(doc.data()!, uid: doc.id);
+}
+
+
 
   /// 🖼 Sube una imagen al Storage y devuelve su URL
   Future<String?> uploadAvatar({

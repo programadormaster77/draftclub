@@ -1,327 +1,531 @@
 import 'dart:math' as math;
+import 'dart:async'; // 👈 AGREGA ESTA LÍNEA
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// ====================================================================
-/// ⚽ FieldPitchWidget — Versión PRO (vertical, responsivo, centrífugo)
+/// ⚽ FieldPitchWidget — Persistencia 100% en Firestore (con filtro por equipo)
 /// ====================================================================
-/// - Foto real o inicial.
-/// - Nombre + rango en vertical, orientados hacia el centro del campo.
-/// - Escala automática para 5/7/9/11 jugadores.
-/// - Anti-desbordes y sombras sutiles.
+/// ✅ Sin dependencias en memoria.
+/// ✅ Mantiene posiciones (drag + persistencia) en rooms/{roomId}/players/{uid}.
+/// ✅ Si se pasa `teamId`, filtra por los IDs listados en teams/{teamId}.players.
+/// ✅ Si `teamId` es null, muestra TODOS los players de la sala (modo compat).
+/// ✅ Iluminación y animaciones.
 /// ====================================================================
-class FieldPitchWidget extends StatelessWidget {
-  final List<Map<String, dynamic>> players; // {uid, name, rank, avatar, x, y}
+class FieldPitchWidget extends StatefulWidget {
   final Color teamColor;
+  final String roomId;
+
+  /// Si se pasa, solo renderiza jugadores cuyo ID esté en teams/{teamId}.players.
+  final String? teamId;
+
+  final bool enableLighting;
 
   const FieldPitchWidget({
     super.key,
-    required this.players,
     required this.teamColor,
+    required this.roomId,
+    this.teamId,
+    this.enableLighting = true,
   });
 
   @override
-  Widget build(BuildContext context) {
-    // Caja del campo (relación 16:9 aprox, se adapta a móvil)
-    final screenW = MediaQuery.of(context).size.width;
-    final width = screenW * 0.92;
-    final height = width * 0.56;
+  State<FieldPitchWidget> createState() => _FieldPitchWidgetState();
+}
 
-    // Distribución táctica base si no viene x/y
-    final layout = _ensureLayout(players);
+class _FieldPitchWidgetState extends State<FieldPitchWidget> {
+  static const double _kFieldPadding = 8.0;
 
-    // Escala por densidad: 11 jugadores => elementos más pequeños
-    final density = layout.length.clamp(5, 11);
-    final scale = _lerp(1.0, 0.78, (density - 5) / 6.0); // 5 =>1.0, 11 =>0.78
-    final avatarSize = 56.0 * scale;
-    final labelGap = 10.0 * scale; // separación avatar <-> etiqueta
-    final labelMax = 80.0 * scale; // alto asignado a etiqueta vertical
-    final sidePadding = 10.0; // margen para evitar corte en bordes
-
-    return Center(
-      child: Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          color: const Color(0xFF0E0E0E),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white12, width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: teamColor.withOpacity(0.20),
-              blurRadius: 18,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-            CustomPaint(size: Size(width, height), painter: _PitchPainter()),
-            // Jugadores
-            ...layout.map((p) => _buildPlayer(
-                  p,
-                  fieldW: width,
-                  fieldH: height,
-                  avatarSize: avatarSize,
-                  labelGap: labelGap,
-                  labelMax: labelMax,
-                  sidePadding: sidePadding,
-                )),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ------------------------------------------------------------------
-  // Si no hay x/y en players, generar una formación 1-2-3-2-1
-  // ------------------------------------------------------------------
-  List<Map<String, dynamic>> _ensureLayout(List<Map<String, dynamic>> list) {
-    final needGen = list.any((p) => p['x'] == null || p['y'] == null);
-    if (!needGen) return list;
-
-    final gen = _generateHorizontalFormation(list.length);
-    return List.generate(list.length, (i) {
-      return {
-        ...list[i],
-        'x': gen[i]['x'],
-        'y': gen[i]['y'],
-      };
-    });
-  }
-
-  /// Formación horizontal simple 1-2-3-2-1 (hasta 11)
-  List<Map<String, double>> _generateHorizontalFormation(int count) {
-    final base = <Map<String, double>>[
-      {'x': 0.06, 'y': 0.50}, // Portero
-      {'x': 0.23, 'y': 0.28}, {'x': 0.23, 'y': 0.72},
-      {'x': 0.42, 'y': 0.18}, {'x': 0.42, 'y': 0.50}, {'x': 0.42, 'y': 0.82},
-      {'x': 0.62, 'y': 0.34}, {'x': 0.62, 'y': 0.66},
-      {'x': 0.82, 'y': 0.22}, {'x': 0.82, 'y': 0.50}, {'x': 0.82, 'y': 0.78},
-    ];
-    return List.generate(count, (i) => base[i % base.length]);
-  }
-
-  // ------------------------------------------------------------------
-  // Render del jugador con etiqueta vertical orientada al centro
-  // ------------------------------------------------------------------
-  Widget _buildPlayer(
-    Map<String, dynamic> p, {
-    required double fieldW,
-    required double fieldH,
-    required double avatarSize,
-    required double labelGap,
-    required double labelMax,
-    required double sidePadding,
-  }) {
-    final xRel = (p['x'] ?? 0.5) as double;
-    final yRel = (p['y'] ?? 0.5) as double;
-    final name = (p['name'] ?? '') as String;
-    final rank = (p['rank'] ?? '') as String;
-    final avatar = (p['avatar'] ?? '') as String;
-    final number = (p['number'] ?? 0) as int;
-
-    // Posición base
-    double x = xRel * fieldW;
-    double y = yRel * fieldH;
-
-    // Lado del campo para orientar texto hacia el centro
-    final onLeftSide = xRel <= 0.5;
-    final textTurns =
-        onLeftSide ? 3 : 1; // 270° si está a la izq, 90° si a la der
-
-    // Offsets
-    final half = avatarSize / 2;
-    final textOffset = (labelGap + labelMax / 2);
-
-    // Evitar que el avatar se corte con los bordes
-    x = x.clamp(sidePadding + half, fieldW - sidePadding - half);
-    y = y.clamp(sidePadding + half, fieldH - sidePadding - half);
-
-    // Posición del centro del avatar
-    final avatarLeft = x - half;
-    final avatarTop = y - half;
-
-    // Posición del “centro” de la etiqueta vertical
-    final labelCenterX =
-        onLeftSide ? (x + half + textOffset) : (x - half - textOffset);
-    final labelCenterY = y;
-
-    // Contenedor de la etiqueta (alto = labelMax, ancho fijo)
-    final labelBox = SizedBox(
-      width: 16 * (avatarSize / 56.0), // ancho visual de la “columna” de texto
-      height: labelMax,
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: _VerticalNameTag(
-          name: name,
-          rank: rank,
-          color: teamColor,
-          fontScale: avatarSize / 56.0,
-        ),
-      ),
-    );
-
-    return Stack(
-      children: [
-        // Avatar
-        Positioned(
-          left: avatarLeft,
-          top: avatarTop,
-          child: _AvatarBubble(
-            size: avatarSize,
-            teamColor: teamColor,
-            avatar: avatar,
-            number: number,
-            name: name,
-          ),
-        ),
-        // Etiqueta vertical mirando al centro
-        Positioned(
-          left: labelCenterX - (onLeftSide ? 0 : (16 * (avatarSize / 56.0))),
-          top: labelCenterY - (labelMax / 2),
-          child: RotatedBox(
-            quarterTurns: textTurns,
-            child: labelBox,
-          ),
-        ),
+  /// ⚙️ Generador de formación base si aún no hay jugadores creados.
+  List<Map<String, double>> _generateBalancedFormation(int count) {
+    final formations = {
+      5: [
+        {'x': 0.10, 'y': 0.50},
+        {'x': 0.28, 'y': 0.25},
+        {'x': 0.28, 'y': 0.75},
+        {'x': 0.55, 'y': 0.35},
+        {'x': 0.55, 'y': 0.65},
       ],
-    );
+      7: [
+        {'x': 0.08, 'y': 0.50},
+        {'x': 0.23, 'y': 0.22},
+        {'x': 0.23, 'y': 0.78},
+        {'x': 0.42, 'y': 0.30},
+        {'x': 0.42, 'y': 0.70},
+        {'x': 0.67, 'y': 0.40},
+        {'x': 0.67, 'y': 0.60},
+      ],
+      9: [
+        {'x': 0.08, 'y': 0.50},
+        {'x': 0.20, 'y': 0.22},
+        {'x': 0.20, 'y': 0.78},
+        {'x': 0.35, 'y': 0.18},
+        {'x': 0.35, 'y': 0.82},
+        {'x': 0.50, 'y': 0.35},
+        {'x': 0.50, 'y': 0.65},
+        {'x': 0.70, 'y': 0.45},
+        {'x': 0.70, 'y': 0.55},
+      ],
+    };
+    return formations[count] ?? formations[7]!;
   }
 
   double _lerp(double a, double b, double t) => a + (b - a) * t;
+
+  // ----------------------------------------------------------------
+  // 🧠 Stream de jugadores:
+  // - Sin teamId: rooms/{roomId}/players (todos)
+  // - Con teamId: lee teams/{teamId}.players y hace whereIn por documentId
+  //   (Firestore permite máx. 10 IDs por whereIn; tus equipos son <=5)
+  // ----------------------------------------------------------------
+  Stream<QuerySnapshot<Map<String, dynamic>>> _playersStream() {
+    final basePlayersCol = FirebaseFirestore.instance
+        .collection('rooms')
+        .doc(widget.roomId)
+        .collection('players')
+        .withConverter<Map<String, dynamic>>(
+          fromFirestore: (snap, _) => snap.data() ?? {},
+          toFirestore: (data, _) => data,
+        );
+
+    // Modo compat: sin filtro por equipo
+    if (widget.teamId == null || widget.teamId!.isEmpty) {
+      return basePlayersCol.snapshots();
+    }
+
+    // Con filtro por equipo (escucha cambios del equipo y cambia el query)
+    final teamDoc = FirebaseFirestore.instance
+        .collection('rooms')
+        .doc(widget.roomId)
+        .collection('teams')
+        .doc(widget.teamId);
+
+    // Usamos un StreamController para "cambiar" el stream de players al vuelo.
+    final controller =
+        StreamController<QuerySnapshot<Map<String, dynamic>>>.broadcast();
+
+    StreamSubscription? teamSub;
+    StreamSubscription? playersSub;
+
+    teamSub = teamDoc.snapshots().listen((teamSnap) {
+      final teamData = (teamSnap.data() ?? {}) as Map<String, dynamic>;
+      final List<dynamic> idsDyn = teamData['players'] ?? [];
+      final List<String> playerIds =
+          idsDyn.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+
+      // cancelamos el stream anterior de players si existía
+      playersSub?.cancel();
+      if (playerIds.isEmpty) {
+        // Emitimos un QuerySnapshot vacío artificial cuando no hay IDs
+        final emptyQuery =
+            basePlayersCol.where(FieldPath.documentId, whereIn: ['__none__']);
+        playersSub = emptyQuery.snapshots().listen(controller.add);
+      } else {
+        // whereIn por documentId (máx. 10; suficiente para tus equipos <=5)
+        final q = basePlayersCol.where(
+          FieldPath.documentId,
+          whereIn: playerIds.length > 10 ? playerIds.sublist(0, 10) : playerIds,
+        );
+        playersSub = q.snapshots().listen(controller.add);
+      }
+    });
+
+    controller.onCancel = () async {
+      await playersSub?.cancel();
+      await teamSub?.cancel();
+    };
+
+    return controller.stream;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _playersStream(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        // 🔹 Si no hay jugadores aún, muestra la cancha vacía
+        final docs = snapshot.data?.docs ?? const [];
+        if (docs.isEmpty) {
+          return _buildEmptyPitch(context);
+        }
+
+        final playerData = docs.map((doc) {
+          final data = doc.data();
+          return {
+            'uid': doc.id,
+            'name': (data['name'] ?? '').toString(),
+            'rank': (data['rank'] ?? '').toString(),
+            // Acepta 'avatar' o 'photoUrl' si alguno viniera
+            'avatar': (data['avatar'] ?? data['photoUrl'] ?? '').toString(),
+            'x': (data['x'] ?? 0.5).toDouble(),
+            'y': (data['y'] ?? 0.5).toDouble(),
+          };
+        }).toList();
+
+        return LayoutBuilder(builder: (context, constraints) {
+          final fieldW = constraints.maxWidth;
+          final fieldH = fieldW * 0.65;
+
+          final density = playerData.length.clamp(5, 11);
+          final scale = _lerp(1.45, 0.78, (density - 3.5) / 6.0);
+          final avatarSize = 35.0 * scale;
+
+          return Center(
+            child: Container(
+              width: fieldW,
+              height: fieldH,
+              decoration: BoxDecoration(
+                color: const Color(0xFF0E0E0E),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white12, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: widget.teamColor.withOpacity(0.7),
+                    blurRadius: 9,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                children: [
+                  CustomPaint(
+                    size: Size(fieldW, fieldH),
+                    painter: _PitchPainter(),
+                  ),
+                  if (widget.enableLighting)
+                    Positioned.fill(
+                      child:
+                          _DynamicLightingOverlay(teamColor: widget.teamColor),
+                    ),
+                  for (int i = 0; i < playerData.length; i++)
+                    _AnimatedPlayerEditable(
+                      index: i,
+                      player: playerData[i],
+                      teamColor: widget.teamColor,
+                      fieldW: fieldW,
+                      fieldH: fieldH,
+                      avatarSize: avatarSize,
+                      roomId: widget.roomId,
+                      fieldPadding: _kFieldPadding,
+                      onResetRequested: () {
+                        final base =
+                            _generateBalancedFormation(playerData.length);
+                        final uid = playerData[i]['uid'];
+                        FirebaseFirestore.instance
+                            .collection('rooms')
+                            .doc(widget.roomId)
+                            .collection('players')
+                            .doc(uid)
+                            .set({
+                          'x': base[i]['x'],
+                          'y': base[i]['y'],
+                          'updatedAt': FieldValue.serverTimestamp(),
+                        }, SetOptions(merge: true));
+                      },
+                    ),
+                ],
+              ),
+            ),
+          );
+        });
+      },
+    );
+  }
+
+  /// Muestra la cancha vacía si aún no hay jugadores creados (o en ese equipo).
+  Widget _buildEmptyPitch(BuildContext context) {
+    final msg = (widget.teamId != null && widget.teamId!.isNotEmpty)
+        ? "Aún no hay jugadores en este equipo"
+        : "Aún no hay jugadores en esta sala";
+    return Container(
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0E0E0E),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white12, width: 2),
+      ),
+      child: Center(
+        child: Text(
+          msg,
+          style: const TextStyle(color: Colors.white54),
+        ),
+      ),
+    );
+  }
 }
 
-// ===================================================================
-// Avatar redondo con sombra + fallback (inicial o #)
-// ===================================================================
+/// ===============================================================
+/// 🧩 _AnimatedPlayerEditable — Jugador movible + persistencia
+/// ===============================================================
+class _AnimatedPlayerEditable extends StatefulWidget {
+  final int index;
+  final Map<String, dynamic> player;
+  final Color teamColor;
+  final double fieldW, fieldH, avatarSize;
+  final String roomId;
+  final double fieldPadding;
+  final VoidCallback onResetRequested;
+
+  const _AnimatedPlayerEditable({
+    required this.index,
+    required this.player,
+    required this.teamColor,
+    required this.fieldW,
+    required this.fieldH,
+    required this.avatarSize,
+    required this.roomId,
+    required this.fieldPadding,
+    required this.onResetRequested,
+  });
+
+  @override
+  State<_AnimatedPlayerEditable> createState() =>
+      _AnimatedPlayerEditableState();
+}
+
+class _AnimatedPlayerEditableState extends State<_AnimatedPlayerEditable>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 900))
+    ..forward();
+  late final Animation<double> _scale =
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack);
+  late final Animation<double> _opacity =
+      CurvedAnimation(parent: _controller, curve: Curves.easeIn);
+
+  late double _xPx;
+  late double _yPx;
+
+  @override
+  void initState() {
+    super.initState();
+    final nx = (widget.player['x'] ?? 0.5).toDouble();
+    final ny = (widget.player['y'] ?? 0.5).toDouble();
+    _xPx = nx * widget.fieldW;
+    _yPx = ny * widget.fieldH;
+  }
+
+  (double, double) _clampToField(double x, double y) {
+    final half = widget.avatarSize / 2;
+    final minX = widget.fieldPadding + half;
+    final maxX = widget.fieldW - widget.fieldPadding - half;
+    final minY = widget.fieldPadding + half;
+    final maxY = widget.fieldH - widget.fieldPadding - half;
+    return (x.clamp(minX, maxX), y.clamp(minY, maxY));
+  }
+
+  Future<void> _savePosition(double x, double y) async {
+    final uid = widget.player['uid'];
+    if (uid == null) return;
+    try {
+      await FirebaseFirestore.instance
+          .collection('rooms')
+          .doc(widget.roomId)
+          .collection('players')
+          .doc(uid)
+          .set(
+        {'x': x, 'y': y, 'updatedAt': FieldValue.serverTimestamp()},
+        SetOptions(merge: true),
+      );
+    } catch (e) {
+      debugPrint("❌ Error al guardar posición: $e");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = widget.player['name'] ?? '';
+    final rank = widget.player['rank'] ?? '';
+    final avatar = widget.player['avatar'] ?? '';
+    final half = widget.avatarSize / 2;
+
+    return Positioned(
+      left: _xPx - half,
+      top: _yPx - half,
+      child: GestureDetector(
+        onPanUpdate: (details) {
+          final nx = _xPx + details.delta.dx;
+          final ny = _yPx + details.delta.dy;
+          final (cx, cy) = _clampToField(nx, ny);
+          setState(() {
+            _xPx = cx;
+            _yPx = cy;
+          });
+        },
+        onPanEnd: (_) {
+          final normX = _xPx / widget.fieldW;
+          final normY = _yPx / widget.fieldH;
+          _savePosition(normX, normY);
+        },
+        onLongPress: widget.onResetRequested,
+        child: FadeTransition(
+          opacity: _opacity,
+          child: ScaleTransition(
+            scale: _scale,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Container(
+                      width: widget.avatarSize + 12,
+                      height: widget.avatarSize + 12,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: widget.teamColor.withOpacity(0.35),
+                            blurRadius: 18,
+                            spreadRadius: 3,
+                          ),
+                        ],
+                      ),
+                    ),
+                    _AvatarBubble(
+                      size: widget.avatarSize,
+                      teamColor: widget.teamColor,
+                      avatar: avatar,
+                      name: name,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  name.isEmpty ? 'Jugador' : name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (rank.isNotEmpty)
+                  Text(
+                    rank,
+                    style: TextStyle(
+                      color: widget.teamColor.withOpacity(0.9),
+                      fontSize: 10,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ===============================================================
+/// 🧍 AvatarBubble — Avatar o inicial
+/// ===============================================================
 class _AvatarBubble extends StatelessWidget {
   final double size;
   final Color teamColor;
   final String avatar;
-  final int number;
   final String name;
 
   const _AvatarBubble({
     required this.size,
     required this.teamColor,
     required this.avatar,
-    required this.number,
     required this.name,
   });
 
   @override
   Widget build(BuildContext context) {
+    final bool invalid = avatar.isEmpty || !avatar.startsWith('http');
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
-          colors: [teamColor.withOpacity(0.9), Colors.black.withOpacity(0.35)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          colors: [teamColor.withOpacity(0.9), Colors.black.withOpacity(0.4)],
         ),
         border: Border.all(color: Colors.white24, width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: teamColor.withOpacity(0.45),
-            blurRadius: 10,
-            spreadRadius: 1,
-          ),
-        ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: avatar.isNotEmpty
-          ? Image.network(
+      child: invalid
+          ? _fallback(name)
+          : Image.network(
               avatar,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _fallback(),
-            )
-          : _fallback(),
+              errorBuilder: (_, __, ___) => _fallback(name),
+            ),
     );
   }
 
-  Widget _fallback() {
-    final initial = name.isNotEmpty
-        ? name.characters.first.toUpperCase()
-        : number.toString();
-    return Container(
-      color: teamColor.withOpacity(0.9),
-      alignment: Alignment.center,
+  Widget _fallback(String name) {
+    final letter = name.isNotEmpty ? name.characters.first.toUpperCase() : '?';
+    return Center(
       child: Text(
-        initial,
+        letter,
         style: const TextStyle(
           color: Colors.white,
+          fontSize: 20,
           fontWeight: FontWeight.bold,
-          fontSize: 18,
         ),
       ),
     );
   }
 }
 
-// ===================================================================
-// Etiqueta vertical (Nombre + Rango) con estilo limpio
-// ===================================================================
-class _VerticalNameTag extends StatelessWidget {
-  final String name;
-  final String rank;
-  final Color color;
-  final double fontScale; // para acompañar el tamaño del avatar
+/// ===============================================================
+/// ✨ Iluminación dinámica del campo
+/// ===============================================================
+class _DynamicLightingOverlay extends StatefulWidget {
+  final Color teamColor;
+  const _DynamicLightingOverlay({required this.teamColor});
 
-  const _VerticalNameTag({
-    required this.name,
-    required this.rank,
-    required this.color,
-    required this.fontScale,
-  });
+  @override
+  State<_DynamicLightingOverlay> createState() =>
+      _DynamicLightingOverlayState();
+}
+
+class _DynamicLightingOverlayState extends State<_DynamicLightingOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller =
+      AnimationController(vsync: this, duration: const Duration(seconds: 8))
+        ..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final nameStyle = TextStyle(
-      color: Colors.white,
-      fontSize: 12 * fontScale,
-      fontWeight: FontWeight.w700,
-      letterSpacing: 0.5,
-      height: 1.0,
-    );
-    final rankStyle = TextStyle(
-      color: color.withOpacity(0.95),
-      fontSize: 10 * fontScale,
-      fontWeight: FontWeight.w600,
-      height: 1.0,
-    );
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Nombre
-        SizedBox(
-          height: 48 * fontScale,
-          child: FittedBox(
-            fit: BoxFit.contain,
-            child: Text(name.isEmpty ? 'Jugador' : name, style: nameStyle),
-          ),
-        ),
-        const SizedBox(height: 6),
-        // Rango
-        if (rank.isNotEmpty)
-          SizedBox(
-            height: 28 * fontScale,
-            child: FittedBox(
-              fit: BoxFit.contain,
-              child: Text(rank, style: rankStyle),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (_, __) {
+        final offset = (_controller.value - 0.5) * 2;
+        return Container(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment(0.3 * offset, -0.2),
+              radius: 1.0,
+              colors: [
+                widget.teamColor.withOpacity(0.1),
+                Colors.transparent,
+              ],
             ),
           ),
-      ],
+        );
+      },
     );
   }
 }
 
-/// ====================================================================
-/// 🎨 _PitchPainter — Cancha profesional con trazos suaves
-/// ====================================================================
+/// ===============================================================
+/// 🟩 _PitchPainter — Líneas del campo
+/// ===============================================================
 class _PitchPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -329,29 +533,18 @@ class _PitchPainter extends CustomPainter {
       ..color = Colors.white10
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
+    const pad = 8.0;
 
     final w = size.width;
     final h = size.height;
 
-    // Contorno
-    final fieldRect = Rect.fromLTWH(8, 8, w - 16, h - 16);
+    final rect = Rect.fromLTWH(pad, pad, w - pad * 2, h - pad * 2);
     canvas.drawRRect(
-      RRect.fromRectAndRadius(fieldRect, const Radius.circular(16)),
-      paint,
-    );
-
-    // Línea central y círculo
-    canvas.drawLine(Offset(w / 2, 8), Offset(w / 2, h - 8), paint);
+        RRect.fromRectAndRadius(rect, const Radius.circular(16)), paint);
+    canvas.drawLine(Offset(w / 2, pad), Offset(w / 2, h - pad), paint);
     canvas.drawCircle(Offset(w / 2, h / 2), h * 0.15, paint);
-
-    // Áreas pequeñas
-    canvas.drawRect(Rect.fromLTWH(8, h * 0.3, w * 0.08, h * 0.4), paint);
-    canvas.drawRect(
-      Rect.fromLTWH(w - w * 0.08 - 8, h * 0.3, w * 0.08, h * 0.4),
-      paint,
-    );
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }

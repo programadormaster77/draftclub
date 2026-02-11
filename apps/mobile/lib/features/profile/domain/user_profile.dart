@@ -1,11 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// ===============================================================
-/// 🧠 UserProfile — Modelo de perfil de usuario
+/// 🧠 UserProfile — Modelo de perfil de usuario (versión extendida con roles)
 /// ===============================================================
 /// Mantiene coherencia con Firestore:
-/// - Nombres camelCase (createdAt, updatedAt, vipFlag)
-/// - Evita guardar `uid` dentro del documento (ya es el ID del doc)
+/// - Campos camelCase (createdAt, updatedAt, vipFlag, role)
+/// - No guarda el `uid` dentro del documento (ya es el ID del doc)
+/// - Retrocompatible con perfiles antiguos sin campo `role`
 /// ===============================================================
 class UserProfile {
   final String uid;
@@ -17,15 +18,13 @@ class UserProfile {
   final String? position; // Ej: 'Delantero', 'Mediocampista'
   final String? preferredFoot; // 'Derecho', 'Izquierdo', 'Ambos'
   final String? city; // Ciudad del jugador
-  final String sex; // 🔹 Nuevo campo obligatorio (Masculino / Femenino)
-  final String rank; // 'Bronce' por defecto
-  final int xp; // 0 por defecto
-  final bool vipFlag; // false por defecto
-  final double reputation; // 🌟 0.0 a 5.0
-  final List<String> badges; // 🏅 ['Puntual', 'MVP', etc.]
-  final int matchesPlayed; // ⚽ Partidos jugados
-  final int matchesWon; // 🏆 Partidos ganados
-  final int matchesDraw; // 🤝 Partidos empatados
+  final String sex; // Masculino / Femenino
+  final String rank; // Bronce, Plata, Oro, etc.
+  final int xp; // Experiencia
+  final int matches; // 🆕 partidos jugados
+  final int wins;    // 🆕 victorias
+  final bool vipFlag; // Usuario VIP
+  final String role; // 👑 user | admin | moderator
   final DateTime createdAt;
 
   final DateTime updatedAt;
@@ -33,7 +32,7 @@ class UserProfile {
   UserProfile({
     required this.uid,
     required this.email,
-    required this.sex, // ✅ requerido
+    required this.sex,
     this.name,
     this.nickname,
     this.photoUrl,
@@ -43,18 +42,18 @@ class UserProfile {
     this.city,
     this.rank = 'Bronce',
     this.xp = 0,
+    this.matches = 0,
+    this.wins = 0,
     this.vipFlag = false,
-    this.reputation = 5.0, // Empezamos con 5 estrellas de confianza
-    this.badges = const [],
-    this.matchesPlayed = 0,
-    this.matchesWon = 0,
-    this.matchesDraw = 0,
+    this.role = 'user', // 👈 valor por defecto
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
 
-  /// 🔄 Convierte el modelo a un mapa listo para Firestore
+  /// ===============================================================
+  /// 🔄 Conversión a mapa para Firestore
+  /// ===============================================================
   Map<String, dynamic> toMap() {
     return {
       'email': email,
@@ -65,22 +64,25 @@ class UserProfile {
       'position': position,
       'preferredFoot': preferredFoot,
       'city': city,
-      'sex': sex, // ✅ Nuevo campo
+      'sex': sex,
       'rank': rank,
       'xp': xp,
+      
+      'matches': matches,
+      'wins': wins,
       'vipFlag': vipFlag,
-      'reputation': reputation,
-      'badges': badges,
-      'matchesPlayed': matchesPlayed,
-      'matchesWon': matchesWon,
-      'matchesDraw': matchesDraw,
+      'role': role, // 👑 Nuevo campo
       'createdAt': Timestamp.fromDate(createdAt),
 
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
   }
 
-  /// 🧩 Crea una instancia desde Firestore
+
+
+  /// ===============================================================
+  /// 🧩 Construcción desde Firestore (retrocompatible)
+  /// ===============================================================
   factory UserProfile.fromMap(Map<String, dynamic> map, {String? uid}) {
     return UserProfile(
       uid: uid ?? (map['uid'] as String? ?? ''),
@@ -96,22 +98,25 @@ class UserProfile {
       position: map['position'] as String?,
       preferredFoot: map['preferredFoot'] as String?,
       city: map['city'] as String?,
-      sex: map['sex'] as String? ??
-          'Masculino', // ✅ Valor por defecto si no existía
+      sex: map['sex'] as String? ?? 'Masculino',
       rank: map['rank'] as String? ?? 'Bronce',
       xp: (map['xp'] is int)
           ? map['xp'] as int
           : (map['xp'] is double)
               ? (map['xp'] as double).toInt()
               : 0,
+      matches: (map['matches'] is int)
+          ? map['matches'] as int
+          : (map['matches'] is double)
+              ? (map['matches'] as double).toInt()
+              : 0,
+      wins: (map['wins'] is int)
+          ? map['wins'] as int
+          : (map['wins'] is double)
+              ? (map['wins'] as double).toInt()
+              : 0,
       vipFlag: map['vipFlag'] as bool? ?? false,
-      reputation: (map['reputation'] is int)
-          ? (map['reputation'] as int).toDouble()
-          : map['reputation'] as double? ?? 5.0,
-      badges: List<String>.from(map['badges'] ?? []),
-      matchesPlayed: map['matchesPlayed'] as int? ?? 0,
-      matchesWon: map['matchesWon'] as int? ?? 0,
-      matchesDraw: map['matchesDraw'] as int? ?? 0,
+      role: map['role'] as String? ?? 'user',
       createdAt: (map['createdAt'] is Timestamp)
           ? (map['createdAt'] as Timestamp).toDate()
           : DateTime.now(),
@@ -121,3 +126,4 @@ class UserProfile {
     );
   }
 }
+

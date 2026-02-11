@@ -1,30 +1,89 @@
-// lib/features/rooms/data/room_service.dart
+import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../models/room_model.dart';
-import '../models/match_model.dart'; // Importamos el nuevo modelo
-import '../models/team_model.dart'; // 🆕 Importante para stats
-import 'package:uuid/uuid.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:uuid/uuid.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+
+import '../models/room_model.dart';
 import 'team_service.dart';
-import 'dart:math' as math;
+
+// ✅ Helpers centralizados (manténlos si existen)
+import '../../../core/utils/string_utils.dart'
+    show normalizeText, toIso2OrGuess;
 
 /// ====================================================================
 /// ⚙️ RoomService — Gestión central de salas en Firestore (GLOBAL)
 /// ====================================================================
-/// 🔹 Compatible con cualquier país y nombre de ciudad.
-/// 🔹 Normaliza códigos de país a formato ISO-2 universal.
-/// 🔹 Soporta ubicación, filtrado avanzado y equipos automáticos.
-/// 🔹 Resiliente ante perfiles incompletos o geolocalización fallida.
-/// ====================================================================
 class RoomService {
-  final _firestore = FirebaseFirestore.instance;
-  final _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore;
+  final FirebaseAuth _auth;
 
-  /// ================================================================
-  /// 🏗️ Crear una nueva sala + equipos automáticos
-  /// ================================================================
+  RoomService({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+        _auth = auth ?? FirebaseAuth.instance;
+
+  // ===================================================================
+  // 🧩 Encapsulados de colecciones / docs
+  // ===================================================================
+  CollectionReference<Map<String, dynamic>> get _roomsCol =>
+      _firestore.collection('rooms');
+
+  DocumentReference<Map<String, dynamic>> _roomRef(String roomId) =>
+      _roomsCol.doc(roomId);
+
+  /// ============================================================
+  /// 🧩 Sincronizar cantidad de equipos tras editar la sala
+  /// ============================================================
+  Future<void> syncTeamsCount({
+    required String roomId,
+    required int newTeams,
+  }) async {
+    final col = _firestore.collection('rooms').doc(roomId).collection('teams');
+
+    // Traemos los equipos actuales
+    final snap = await col.orderBy('index', descending: false).get();
+    final existing = snap.docs;
+    final currentCount = existing.length;
+
+    // 👉 Si el número no cambió, no hacemos nada
+    if (currentCount == newTeams) return;
+
+    // 🟩 CASO 1: necesitamos MÁS equipos (añadir)
+    if (newTeams > currentCount) {
+      for (int i = currentCount + 1; i <= newTeams; i++) {
+        await col.add({
+          'name': 'Equipo $i',
+          'index': i,
+          'createdAt': FieldValue.serverTimestamp(),
+          // si ya usas players en tus docs, dejamos la lista vacía
+          'players': <String>[],
+        });
+      }
+      return;
+    }
+
+    // 🟥 CASO 2: hay equipos de MÁS (opcional: eliminar los últimos vacíos)
+    if (newTeams < currentCount) {
+      // Ordenamos por index y borramos solo los que estén "sobrando" y sin jugadores
+      for (final doc in existing.reversed) {
+        final data = doc.data();
+        final idx = (data['index'] ?? 0) as int;
+        final players = (data['players'] as List?) ?? const [];
+
+        if (idx > newTeams && players.isEmpty) {
+          await doc.reference.delete();
+        }
+      }
+    }
+  }
+
+  // ===================================================================
+  // 🏗️ Crear una nueva sala + equipos automáticos
+  // ===================================================================
   Future<String> createRoom({
     required String name,
     required int teams,
@@ -47,22 +106,30 @@ class RoomService {
 
     final roomId = const Uuid().v4();
 
+    // Ciudad base
     String city = (manualCity ?? '').trim();
     if (city.contains(',')) city = city.split(',').first.trim();
     if (city.isEmpty) city = 'Desconocido';
 
+    // Coordenadas base
     double? finalLat = lat ?? cityLat;
     double? finalLng = lng ?? cityLng;
+
+    // País ISO-2
     String? country = _toIsoFromName(countryCode);
+
+    // Sexo
     String finalSex = (sex ?? '').trim().toLowerCase();
     if (finalSex.isEmpty) finalSex = 'mixto';
 
+    // 1️⃣ Enriquecer con perfil del usuario
     try {
       final userDoc = await _firestore.collection('users').doc(uid).get();
       if (userDoc.exists) {
         final data = userDoc.data()!;
         finalSex = (data['sex'] ?? finalSex).toString().toLowerCase();
 
+        // Si no viene ciudad manual, usa la del perfil
         if (manualCity == null || manualCity.isEmpty) {
           final userCity = data['city'] ?? data['ciudad'];
           if (userCity != null && userCity.toString().isNotEmpty) {
@@ -76,31 +143,37 @@ class RoomService {
       }
     } catch (_) {}
 
+    // 2️⃣ Si faltan datos, intenta geolocalizar
     if ((manualCity == null || manualCity.isEmpty) ||
         (finalLat == null || finalLng == null)) {
       try {
-        bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        final serviceEnabled = await Geolocator.isLocationServiceEnabled();
         if (serviceEnabled) {
-          LocationPermission permission = await Geolocator.checkPermission();
+          var permission = await Geolocator.checkPermission();
           if (permission == LocationPermission.denied) {
             permission = await Geolocator.requestPermission();
           }
           if (permission == LocationPermission.always ||
               permission == LocationPermission.whileInUse) {
             final pos = await Geolocator.getCurrentPosition(
-                desiredAccuracy: LocationAccuracy.low);
+              desiredAccuracy: LocationAccuracy.low,
+            );
             final placemarks =
                 await placemarkFromCoordinates(pos.latitude, pos.longitude);
-            final p = placemarks.first;
-            city = p.locality ?? city;
-            finalLat = pos.latitude;
-            finalLng = pos.longitude;
-            country ??= _toIsoFromName(p.isoCountryCode);
+            if (placemarks.isNotEmpty) {
+              final p = placemarks.first;
+              city = (p.locality ?? city).toString();
+              country ??= _toIsoFromName(p.isoCountryCode);
+            }
+            finalLat ??= pos.latitude;
+            finalLng ??= pos.longitude;
           }
         }
       } catch (_) {}
     }
 
+    // 3️⃣ Construir modelo
+    final now = DateTime.now();
     final room = Room(
       id: roomId,
       name: name.trim(),
@@ -110,7 +183,8 @@ class RoomService {
       isPublic: isPublic,
       creatorId: uid,
       city: city,
-      createdAt: DateTime.now(),
+      createdAt: now,
+      updatedAt: now,
       eventAt: eventAt,
       cityLat: cityLat ?? finalLat,
       cityLng: cityLng ?? finalLng,
@@ -119,14 +193,13 @@ class RoomService {
       countryCode: country,
       exactAddress: exactAddress,
       sex: finalSex,
-      matchType: matchType,
-      phase: 'recruitment',
+      players: const [],
     );
 
-    await _firestore.collection('rooms').doc(roomId).set({
+    // 4️⃣ Persistir sala y crear equipos base
+    await _roomsCol.doc(roomId).set({
       ...room.toMap(),
       'players': [uid],
-      'updatedAt': Timestamp.now(),
       if (eventAt != null) 'eventAt': Timestamp.fromDate(eventAt),
       if (exactAddress != null && exactAddress.isNotEmpty)
         'exactAddress': exactAddress,
@@ -142,6 +215,7 @@ class RoomService {
       'phase': 'recruitment',
     });
 
+    // 5️⃣ Crear equipos
     final teamService = TeamService();
     await teamService.initDefaultTeams(
       roomId: roomId,
@@ -152,12 +226,12 @@ class RoomService {
     return roomId;
   }
 
-  /// ================================================================
-  /// 🔁 Cambiar visibilidad de una sala
-  /// ================================================================
+  // ===================================================================
+  // 🔁 Cambiar visibilidad
+  // ===================================================================
   Future<void> toggleVisibility(String roomId, bool isPublic) async {
     try {
-      await _firestore.collection('rooms').doc(roomId).update({
+      await _roomRef(roomId).update({
         'isPublic': isPublic,
         'updatedAt': Timestamp.now(),
       });
@@ -166,9 +240,9 @@ class RoomService {
     }
   }
 
-  // ================================================================
-  // 🔧 Asegurar ciudad/país/coords del usuario
-  // ================================================================
+  // ===================================================================
+  // 🔧 Asegurar ciudad/país/coords del usuario (perfil geo)
+  // ===================================================================
   Future<
       ({
         String? city,
@@ -209,21 +283,19 @@ class RoomService {
           if (perm == LocationPermission.always ||
               perm == LocationPermission.whileInUse) {
             final pos = await Geolocator.getCurrentPosition(
-                desiredAccuracy: LocationAccuracy.low);
+              desiredAccuracy: LocationAccuracy.low,
+            );
             lat = pos.latitude;
             lng = pos.longitude;
+
             try {
               final ps = await placemarkFromCoordinates(lat!, lng!);
-              final p = ps.first;
-              city ??= p.locality;
-              country ??= _toIsoFromName(p.isoCountryCode);
+              if (ps.isNotEmpty) {
+                final p = ps.first;
+                city ??= p.locality;
+                country ??= _toIsoFromName(p.isoCountryCode);
+              }
             } catch (_) {}
-            await _firestore.collection('users').doc(uid).update({
-              if (city != null) 'city': city,
-              if (country != null) 'countryCode': country,
-              'lat': lat,
-              'lng': lng,
-            });
           }
         }
       } catch (_) {}
@@ -232,18 +304,20 @@ class RoomService {
     return (city: city, countryCode: country, lat: lat, lng: lng, sex: sex);
   }
 
-  /// ================================================================
-  /// 📍 Obtener salas públicas filtradas automáticamente
-  /// ================================================================
+  // ===================================================================
+  // 📍 Listado automático de salas cerca del usuario
+  // ===================================================================
   Future<List<Room>> getFilteredPublicRoomsAuto({
     double radiusKm = 40,
     DateTime? targetDate,
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Usuario no autenticado');
+
     try {
       final profile = await _ensureUserGeoProfile();
       if (profile.lat == null || profile.lng == null) return [];
+
       final rooms = await getFilteredPublicRooms(
         cityName: profile.city,
         userLat: profile.lat,
@@ -253,26 +327,38 @@ class RoomService {
         radiusKm: radiusKm,
         targetDate: targetDate,
       );
+
+      // Orden por distancia y fecha
       rooms.sort((a, b) {
-        final da = _distanceKm(profile.lat!, profile.lng!,
-            a.lat ?? a.cityLat ?? 0, a.lng ?? a.cityLng ?? 0);
-        final db = _distanceKm(profile.lat!, profile.lng!,
-            b.lat ?? b.cityLat ?? 0, b.lng ?? b.cityLng ?? 0);
+        final da = _distanceKm(
+          profile.lat!,
+          profile.lng!,
+          (a.lat ?? a.cityLat ?? 0),
+          (a.lng ?? a.cityLng ?? 0),
+        );
+        final db = _distanceKm(
+          profile.lat!,
+          profile.lng!,
+          (b.lat ?? b.cityLat ?? 0),
+          (b.lng ?? b.cityLng ?? 0),
+        );
         if (da != db) return da.compareTo(db);
         if (a.eventAt != null && b.eventAt != null) {
-          return a.eventAt!.compareTo(b.eventAt!);
+          final cmp = a.eventAt!.compareTo(b.eventAt!);
+          if (cmp != 0) return cmp;
         }
         return b.createdAt.compareTo(a.createdAt);
       });
+
       return rooms;
     } catch (_) {
       return [];
     }
   }
 
-  /// ================================================================
-  /// 📍 Obtener salas públicas filtradas (GLOBAL + Estricto)
-  /// ================================================================
+  // ===================================================================
+  // 📍 Filtro global (país/ciudad/radio)
+  // ===================================================================
   Future<List<Room>> getFilteredPublicRooms({
     String? cityName,
     double? cityLat,
@@ -286,17 +372,15 @@ class RoomService {
     String? cityCountryCode,
   }) async {
     try {
-      final snap = await _firestore
-          .collection('rooms')
+      final snap = await _roomsCol
           .where('isPublic', isEqualTo: true)
           .orderBy('createdAt', descending: true)
           .limit(200)
           .get();
+        List<Room> rooms = snap.docs.map((doc) => Room.fromDoc(doc)).toList();
 
-      List<Room> rooms =
-          snap.docs.map((doc) => Room.fromMap(doc.data())).toList();
 
-      // 📅 Filtrar por fecha
+      // 1️⃣ Filtro por fecha
       if (targetDate != null) {
         final start =
             DateTime(targetDate.year, targetDate.month, targetDate.day);
@@ -309,7 +393,7 @@ class RoomService {
             .toList();
       }
 
-      // 🌍 Filtrar país (por ciudad seleccionada o usuario)
+      // 2️⃣ Filtro por país
       String? isoForFilter;
       if ((cityName != null && cityName.trim().isNotEmpty) &&
           (cityCountryCode != null && cityCountryCode.isNotEmpty)) {
@@ -327,25 +411,24 @@ class RoomService {
         }).toList();
       }
 
-      // 🏙️ Ciudad + cercanía (modo estricto)
+      // 3️⃣ Filtro por ciudad / radio
       if (cityName != null && cityName.trim().isNotEmpty) {
-        final wanted = _norm(cityName.split(',').first);
+        final wanted = normalizeText(cityName.split(',').first);
         rooms = rooms.where((r) {
-          final roomCity = _norm(r.city.split(',').first);
+          final roomCity = normalizeText(r.city.split(',').first);
           final sameCity = roomCity == wanted;
 
           final hasCoords = (r.cityLat != null &&
               r.cityLng != null &&
               cityLat != null &&
               cityLng != null);
-
           final nearby = hasCoords
               ? _distanceKm(cityLat!, cityLng!, r.cityLat!, r.cityLng!) <=
                   radiusKm
               : false;
 
           final sameCountry = (cityCountryCode != null && r.countryCode != null)
-              ? r.countryCode!.toUpperCase() == cityCountryCode!.toUpperCase()
+              ? (r.countryCode!.toUpperCase() == cityCountryCode.toUpperCase())
               : true;
 
           return sameCountry && (sameCity || nearby);
@@ -359,7 +442,7 @@ class RoomService {
         }).toList();
       }
 
-      // 🚻 Filtrar por sexo
+      // 4️⃣ Sexo
       if (userSex != null && userSex.isNotEmpty) {
         final u = userSex.toLowerCase();
         rooms = rooms.where((r) {
@@ -368,13 +451,21 @@ class RoomService {
         }).toList();
       }
 
-      // 🧭 Ordenar resultados
+      // 5️⃣ Orden
       if (userLat != null && userLng != null) {
         rooms.sort((a, b) {
-          final da = _distanceKm(userLat, userLng, a.lat ?? a.cityLat ?? 0,
-              a.lng ?? a.cityLng ?? 0);
-          final db = _distanceKm(userLat, userLng, b.lat ?? b.cityLat ?? 0,
-              b.lng ?? b.cityLng ?? 0);
+          final da = _distanceKm(
+            userLat,
+            userLng,
+            (a.lat ?? a.cityLat ?? 0),
+            (a.lng ?? a.cityLng ?? 0),
+          );
+          final db = _distanceKm(
+            userLat,
+            userLng,
+            (b.lat ?? b.cityLat ?? 0),
+            (b.lng ?? b.cityLng ?? 0),
+          );
           if (da != db) return da.compareTo(db);
           return b.createdAt.compareTo(a.createdAt);
         });
@@ -388,43 +479,35 @@ class RoomService {
     }
   }
 
-  // ================================================================
-  // 🧮 Utilidades de distancia
-  // ================================================================
-  double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
-    const R = 6371.0;
-    final dLat = _deg2rad(lat2 - lat1);
-    final dLon = _deg2rad(lon2 - lon1);
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(_deg2rad(lat1)) *
-            math.cos(_deg2rad(lat2)) *
-            math.sin(dLon / 2) *
-            math.sin(dLon / 2);
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-  }
-
-  double _deg2rad(double deg) => deg * (math.pi / 180);
-
-  // ================================================================
-  // 👥 Unirse / salir / editar / eliminar sala
-  // ================================================================
+  // ===================================================================
+  // 👥 Unirse / salir
+  // ===================================================================
   Future<String> joinRoom(String roomId) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Usuario no autenticado');
-    final ref = _firestore.collection('rooms').doc(roomId);
+
+    final ref = _roomRef(roomId);
+
     return _firestore.runTransaction((tx) async {
       final doc = await tx.get(ref);
       if (!doc.exists) throw Exception('La sala no existe');
+
       final data = doc.data()!;
-      final players = List<String>.from(data['players'] ?? []);
-      final teams = data['teams'] ?? 0;
-      final playersPerTeam = data['playersPerTeam'] ?? 0;
-      final substitutes = data['substitutes'] ?? 0;
+      final players = List<String>.from(data['players'] ?? <String>[]);
+      final teams = (data['teams'] ?? 0) as int;
+      final playersPerTeam = (data['playersPerTeam'] ?? 0) as int;
+      final substitutes = (data['substitutes'] ?? 0) as int;
       final maxPlayers = (teams * playersPerTeam) + substitutes;
+
       if (players.contains(uid)) return 'Ya estás en esta sala.';
       if (players.length >= maxPlayers) return 'La sala ya está llena.';
+
       players.add(uid);
-      tx.update(ref, {'players': players, 'updatedAt': Timestamp.now()});
+      tx.update(ref, {
+        'players': players,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
       return 'Te uniste correctamente.';
     });
   }
@@ -432,24 +515,52 @@ class RoomService {
   Future<String> leaveRoom(String roomId) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Usuario no autenticado');
-    final ref = _firestore.collection('rooms').doc(roomId);
+
+    final ref = _roomRef(roomId);
+
     return _firestore.runTransaction((tx) async {
       final doc = await tx.get(ref);
       if (!doc.exists) throw Exception('La sala no existe');
+
       final data = doc.data()!;
-      final players = List<String>.from(data['players'] ?? []);
+      final players = List<String>.from(data['players'] ?? <String>[]);
+
       if (!players.contains(uid)) return 'No estás en esta sala.';
+
       players.remove(uid);
-      tx.update(ref, {'players': players, 'updatedAt': Timestamp.now()});
+      tx.update(ref, {
+        'players': players,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
       return 'Saliste correctamente de la sala.';
     });
   }
 
+  // ===================================================================
+  // ✏️ Actualizar / eliminar / obtener
+  // ===================================================================
   Future<void> updateRoom(String roomId, Map<String, dynamic> updates) async {
-    await _firestore
-        .collection('rooms')
-        .doc(roomId)
-        .update({...updates, 'updatedAt': Timestamp.now()});
+    final sanitized = Map<String, dynamic>.from(updates)
+      ..remove('id')
+      ..remove('creatorId');
+
+    if (sanitized.containsKey('city')) {
+      final v = sanitized['city'];
+      if (v is String && v.contains(',')) {
+        sanitized['city'] = v.split(',').first.trim();
+      }
+    }
+    if (sanitized.containsKey('sex')) {
+      sanitized['sex'] =
+          (sanitized['sex']?.toString().toLowerCase() ?? 'mixto');
+    }
+    if (sanitized.containsKey('eventAt') && sanitized['eventAt'] is DateTime) {
+      sanitized['eventAt'] = Timestamp.fromDate(sanitized['eventAt']);
+    }
+
+    sanitized['updatedAt'] = FieldValue.serverTimestamp();
+    await _roomRef(roomId).update(sanitized);
   }
 
   /// 🚦 Avanzar o retroceder de fase
@@ -478,29 +589,208 @@ class RoomService {
   }
 
   Future<Room?> getRoomById(String roomId) async {
-    final doc = await _firestore.collection('rooms').doc(roomId).get();
-    return doc.exists ? Room.fromMap(doc.data()!) : null;
+    final doc = await _roomRef(roomId).get();
+    if (!doc.exists) return null;
+    return Room.fromMap(doc.data()!);
   }
 
   Future<void> deleteRoom(String roomId) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Usuario no autenticado');
-    final doc = await _firestore.collection('rooms').doc(roomId).get();
-    if (!doc.exists) throw Exception('La sala no existe');
-    final data = doc.data()!;
+
+    final d = await _roomRef(roomId).get();
+    if (!d.exists) throw Exception('La sala no existe');
+
+    final data = d.data()!;
     if (data['creatorId'] != uid) {
       throw Exception('Solo el creador puede eliminar la sala.');
     }
-    await _firestore.collection('rooms').doc(roomId).delete();
+
+    final batch = _firestore.batch();
+    final teamsCol = _roomRef(roomId).collection('teams');
+    final logsCol = _roomRef(roomId).collection('system_logs');
+
+    try {
+      final teams = await teamsCol.get();
+      for (final t in teams.docs) {
+        batch.delete(t.reference);
+      }
+    } catch (_) {}
+
+    try {
+      final logs = await logsCol.get();
+      for (final l in logs.docs) {
+        batch.delete(l.reference);
+      }
+    } catch (_) {}
+
+    batch.delete(_roomRef(roomId));
+    await batch.commit();
   }
 
-  // ================================================================
-  // 🌎 Normalizadores universales
-  // ================================================================
+  // ===================================================================
+  // 🏁 Cerrar partido + crear notificaciones de resultado por jugador
+  // ===================================================================
+  Future<void> closeMatchAndCreateResultNotifications({
+    required String roomId,
+    required String winnerTeamId,
+    required String winnerTeamName,
+  }) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw Exception('Usuario no autenticado');
+
+    // 1️⃣ Traer la sala
+    final roomSnap = await _roomRef(roomId).get();
+    if (!roomSnap.exists) {
+      throw Exception('La sala no existe');
+    }
+
+    final room = Room.fromMap(roomSnap.data()!);
+
+    // 2️⃣ Validar permisos (solo creador por ahora)
+    if (room.creatorId != uid) {
+      throw Exception('Solo el creador de la sala puede cerrarla.');
+    }
+
+    // 3️⃣ Evitar doble cierre
+    if (room.isClosed) {
+      throw Exception('Esta sala ya está cerrada.');
+    }
+
+    // 4️⃣ Cargar equipos y jugadores de la sala
+    final teamsSnap = await _roomRef(roomId).collection('teams').get();
+
+    if (teamsSnap.docs.isEmpty) {
+      throw Exception('No hay equipos registrados en esta sala.');
+    }
+
+    final Set<String> winnerPlayerIds = {};
+    final Set<String> loserPlayerIds = {};
+
+    for (final doc in teamsSnap.docs) {
+      final data = doc.data();
+      final teamId = doc.id;
+      final players = List<String>.from(data['players'] ?? const <String>[]);
+
+      if (teamId == winnerTeamId) {
+        winnerPlayerIds.addAll(players);
+      } else {
+        loserPlayerIds.addAll(players);
+      }
+    }
+
+    // Por seguridad, no queremos jugadores duplicados en ambas listas
+    loserPlayerIds.removeWhere(winnerPlayerIds.contains);
+
+    // 5️⃣ Mensajes de resultado
+    const String winnerTitle = 'Victoria absoluta ⚽';
+    final String winnerBody =
+        'Tu equipo $winnerTeamName dominó la cancha en "${room.name}". '
+        '¡Sigue así, crack, esto apenas comienza!';
+
+    const String loserTitle = 'No se dio esta vez... 💔';
+    final String loserBody =
+        'La victoria no llegó hoy en "${room.name}", pero el fútbol siempre da revancha. '
+        'No bajes la cabeza, sigan luchando.';
+
+    // 6️⃣ Escribir todo en un batch:
+    //     - sala cerrada
+    //     - notificaciones de resultado por usuario
+    final batch = _firestore.batch();
+    final serverNow = FieldValue.serverTimestamp();
+
+    // ✅ Actualizar sala como cerrada
+    batch.update(_roomRef(roomId), {
+      'isClosed': true,
+      'winnerTeamId': winnerTeamId,
+      'winnerTeamName': winnerTeamName,
+      'closedAt': serverNow,
+    });
+
+    // ✅ Notificaciones para GANADORES
+    for (final playerId in winnerPlayerIds) {
+      final notifRef = _firestore
+          .collection('users')
+          .doc(playerId)
+          .collection('matchResults')
+          .doc(roomId); // usamos roomId como id único
+
+      batch.set(notifRef, {
+        'roomId': roomId,
+        'winnerTeamId': winnerTeamId,
+        'winnerTeamName': winnerTeamName,
+        'isWinner': true,
+        'title': winnerTitle,
+        'body': winnerBody,
+        'type': 'match_result',
+        'createdAt': serverNow,
+        'seen': false,
+      });
+    }
+
+    // ✅ Notificaciones para PERDEDORES
+    for (final playerId in loserPlayerIds) {
+      final notifRef = _firestore
+          .collection('users')
+          .doc(playerId)
+          .collection('matchResults')
+          .doc(roomId); // mismo id: el resultado es el mismo partido
+
+      batch.set(notifRef, {
+        'roomId': roomId,
+        'winnerTeamId': winnerTeamId,
+        'winnerTeamName': winnerTeamName,
+        'isWinner': false,
+        'title': loserTitle,
+        'body': loserBody,
+        'type': 'match_result',
+        'createdAt': serverNow,
+        'seen': false,
+      });
+    }
+
+    await batch.commit();
+
+   // 7️⃣ Actualizar estadísticas de usuarios (partidos + wins + XP + rank)
+try {
+  if (winnerPlayerIds.isEmpty && loserPlayerIds.isEmpty) {
+    print("⚠️ No hay jugadores para actualizar stats.");
+    return;
+  }
+
+  final function = FirebaseFunctions.instance.httpsCallable(
+    'updateUserStats',
+    options: HttpsCallableOptions(timeout: Duration(seconds: 20)),
+  );
+
+await function.call({
+  'roomId': roomId,
+  'winnerUserIds': winnerPlayerIds.toList(),
+  'loserUserIds': loserPlayerIds.toList(),
+  'xpWinner': 120,
+  'xpLoser': 60,
+});
+
+
+  print("✓ Stats actualizadas (match+xp+wins+rank) para sala $roomId.");
+} catch (e) {
+  print("❌ Error llamando función updateUserStats: $e");
+}
+
+
+  }
+
+  // ===================================================================
+  // 🌎 Normalizador
+  // ===================================================================
   String? _toIsoFromName(String? name) {
     if (name == null) return null;
-    final n = _norm(name);
+    final n = normalizeText(name);
     if (n.length == 2) return n.toUpperCase();
+    final viaHelper = toIso2OrGuess(name);
+    if (viaHelper != null && viaHelper.trim().isNotEmpty) {
+      return viaHelper.toUpperCase();
+    }
 
     const map = {
       'colom': 'CO',
@@ -543,168 +833,21 @@ class RoomService {
     return name.toUpperCase();
   }
 
-  // ---------------------------------------------------------------
-  // 🔠 Normalizador de texto: elimina tildes, minúsculas y ñ → n
-  // ---------------------------------------------------------------
-  String _norm(String s) {
-    const repl = {
-      'á': 'a',
-      'à': 'a',
-      'ä': 'a',
-      'â': 'a',
-      'é': 'e',
-      'è': 'e',
-      'ë': 'e',
-      'ê': 'e',
-      'í': 'i',
-      'ì': 'i',
-      'ï': 'i',
-      'î': 'i',
-      'ó': 'o',
-      'ò': 'o',
-      'ö': 'o',
-      'ô': 'o',
-      'ú': 'u',
-      'ù': 'u',
-      'ü': 'u',
-      'û': 'u',
-      'ñ': 'n',
-    };
-    final sb = StringBuffer();
-    for (final ch in s.trim().toLowerCase().runes) {
-      final c = String.fromCharCode(ch);
-      sb.write(repl[c] ?? c);
-    }
-    return sb.toString();
+  // ===============================================================
+  // 🧮 Cálculo de distancia Haversine (seguro)
+  // ===============================================================
+  double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
+    const R = 6371.0;
+    final dLat = _deg2rad(lat2 - lat1);
+    final dLon = _deg2rad(lon2 - lon1);
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_deg2rad(lat1)) *
+            math.cos(_deg2rad(lat2)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return R * c;
   }
 
-  // ================================================================
-  // ⚽ Gestión de Partidos (Matches)
-  // ================================================================
-  /// Obtiene los partidos de una sala, ordenados por fecha
-  Stream<List<Match>> getMatches(String roomId) {
-    return _firestore
-        .collection('rooms')
-        .doc(roomId)
-        .collection('matches')
-        .orderBy('dateTime', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => Match.fromMap(doc.data(), doc.id))
-            .toList());
-  }
-
-  /// Crea un nuevo partido en la sala (Útil para pruebas o futuras features)
-  Future<void> createMatch(Match match) async {
-    await _firestore
-        .collection('rooms')
-        .doc(match.roomId)
-        .collection('matches')
-        .doc(match.id)
-        .set(match.toMap());
-  }
-
-  /// 🏆 Finalizar partido y guardar resultados
-  /// Si es competitivo, actualiza las estadísticas de los jugadores.
-  Future<void> finishMatch({
-    required String roomId,
-    required int scoreTeamA,
-    required int scoreTeamB,
-    String? mvpPlayerId,
-  }) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) throw Exception('Usuario no autenticado');
-
-    // 1. Obtener la sala para verificar tipo de partido
-    final roomDoc = _firestore.collection('rooms').doc(roomId);
-    final roomSnap = await roomDoc.get();
-    if (!roomSnap.exists) throw Exception('Sala no encontrada');
-    final room = Room.fromMap(roomSnap.data()!);
-
-    // 2. Si es competitivo, actualizar estadísticas
-    if (room.matchType == 'competitive') {
-      await _updateCompetitiveStats(
-        roomId: roomId,
-        scoreTeamA: scoreTeamA,
-        scoreTeamB: scoreTeamB,
-      );
-    }
-
-    // 3. Actualizamos sala con resultados y cambiamos fase
-    await roomDoc.update({
-      'phase': 'finished',
-      'scoreTeamA': scoreTeamA,
-      'scoreTeamB': scoreTeamB,
-      'mvpPlayerId': mvpPlayerId,
-      'updatedAt': Timestamp.now(),
-    });
-  }
-
-  /// 📈 Lógica interna para actualizar estadísticas en partidos competitivos
-  Future<void> _updateCompetitiveStats({
-    required String roomId,
-    required int scoreTeamA,
-    required int scoreTeamB,
-  }) async {
-    // A. Obtener equipos ordenados por creación (Team 1 = A, Team 2 = B)
-    final teamsSnap = await _firestore
-        .collection('rooms')
-        .doc(roomId)
-        .collection('teams')
-        .orderBy('createdAt', descending: false)
-        .limit(2)
-        .get();
-
-    if (teamsSnap.docs.length < 2) return; // No hay suficientes equipos
-
-    final teamA = Team.fromMap(teamsSnap.docs[0].data());
-    final teamB = Team.fromMap(teamsSnap.docs[1].data());
-
-    // B. Determinar ganador
-    List<String> winners = [];
-    List<String> losers = [];
-    bool isDraw = scoreTeamA == scoreTeamB;
-
-    if (scoreTeamA > scoreTeamB) {
-      winners = teamA.players;
-      losers = teamB.players;
-    } else if (scoreTeamB > scoreTeamA) {
-      winners = teamB.players;
-      losers = teamA.players;
-    } else {
-      // Empate: Todos son "empate"
-      winners = [...teamA.players, ...teamB.players]; // Usamos lista combinada
-    }
-
-    final batch = _firestore.batch();
-
-    // C. Actualizar Ganadores
-    if (!isDraw) {
-      for (final userId in winners) {
-        final userRef = _firestore.collection('users').doc(userId);
-        batch.update(userRef, {
-          'matchesPlayed': FieldValue.increment(1),
-          'matchesWon': FieldValue.increment(1),
-        });
-      }
-      // D. Actualizar Perdedores
-      for (final userId in losers) {
-        final userRef = _firestore.collection('users').doc(userId);
-        batch.update(userRef, {
-          'matchesPlayed': FieldValue.increment(1),
-        });
-      }
-    } else {
-      // E. Actualizar Empates
-      for (final userId in winners) {
-        final userRef = _firestore.collection('users').doc(userId);
-        batch.update(userRef, {
-          'matchesPlayed': FieldValue.increment(1),
-          'matchesDraw': FieldValue.increment(1),
-        });
-      }
-    }
-
-    await batch.commit();
-  }
+  double _deg2rad(double deg) => deg * (math.pi / 180.0);
 }

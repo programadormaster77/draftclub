@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:audioplayers/audioplayers.dart'; // 👈 NECESARIO PARA DURACIÓN DE AUDIO
 import '../models/message_model.dart';
 
 /// ====================================================================
@@ -44,7 +45,6 @@ class ChatService {
     final user = _auth.currentUser;
     if (user == null) throw Exception('Usuario no autenticado');
 
-    // 🔹 Obtener avatar y rango del usuario
     final userDoc = await _db.collection('users').doc(user.uid).get();
     final userData = userDoc.data() ?? {};
     final avatarUrl = userData['photoUrl'] ?? user.photoURL ?? '';
@@ -96,7 +96,6 @@ class ChatService {
     final user = _auth.currentUser;
     if (user == null) throw Exception('Usuario no autenticado');
 
-    // 🔹 Obtener avatar y rango del usuario
     final userDoc = await _db.collection('users').doc(user.uid).get();
     final userData = userDoc.data() ?? {};
     final avatarUrl = userData['photoUrl'] ?? user.photoURL ?? '';
@@ -136,13 +135,11 @@ class ChatService {
     final user = _auth.currentUser;
     if (user == null) throw Exception('Usuario no autenticado');
 
-    // Subir imagen
     final ref = _storage.ref().child(
         'chat_media/${user.uid}/${DateTime.now().millisecondsSinceEpoch}.jpg');
     final uploadTask = await ref.putFile(file);
     final imageUrl = await uploadTask.ref.getDownloadURL();
 
-    // Datos del usuario
     final userDoc = await _db.collection('users').doc(user.uid).get();
     final data = userDoc.data() ?? {};
     final avatarUrl = data['photoUrl'] ?? user.photoURL ?? '';
@@ -176,13 +173,11 @@ class ChatService {
     final user = _auth.currentUser;
     if (user == null) throw Exception('Usuario no autenticado');
 
-    // Subir imagen
     final ref = _storage.ref().child(
         'chat_media/${user.uid}/${DateTime.now().millisecondsSinceEpoch}.jpg');
     final uploadTask = await ref.putFile(file);
     final imageUrl = await uploadTask.ref.getDownloadURL();
 
-    // Datos del usuario
     final userDoc = await _db.collection('users').doc(user.uid).get();
     final data = userDoc.data() ?? {};
     final avatarUrl = data['photoUrl'] ?? user.photoURL ?? '';
@@ -213,7 +208,7 @@ class ChatService {
   }
 
   // ================================================================
-  // 🎙️ ENVIAR AUDIO — SALA
+  // 🎙️ ENVIAR AUDIO — SALA (CON DURACIÓN REAL)
   // ================================================================
   Future<void> sendRoomAudio({
     required String roomId,
@@ -222,16 +217,25 @@ class ChatService {
     final user = _auth.currentUser;
     if (user == null) throw Exception('Usuario no autenticado');
 
+    // 1️⃣ Obtener duración real del audio
+    final audioPlayer = AudioPlayer();
+    await audioPlayer.setSourceDeviceFile(file.path);
+    final audioDuration = await audioPlayer.getDuration();
+    final durationSeconds = audioDuration?.inSeconds ?? 0;
+
+    // 2️⃣ Subir archivo
     final ref = _storage.ref().child(
         'chat_audio/${user.uid}/${DateTime.now().millisecondsSinceEpoch}.m4a');
     final uploadTask = await ref.putFile(file);
     final audioUrl = await uploadTask.ref.getDownloadURL();
 
+    // 3️⃣ Datos del usuario
     final userDoc = await _db.collection('users').doc(user.uid).get();
     final data = userDoc.data() ?? {};
     final avatarUrl = data['photoUrl'] ?? user.photoURL ?? '';
     final rank = data['rank'] ?? 'Bronce';
 
+    // 4️⃣ Guardar en Firestore con duración incluida
     final docRef = _db.collection('rooms').doc(roomId).collection('chat').doc();
 
     final msg = Message(
@@ -244,13 +248,14 @@ class ChatService {
       avatarUrl: avatarUrl,
       rank: rank,
       timestamp: Timestamp.now(),
+      duration: durationSeconds, // 👈 AÑADIDO
     );
 
     await docRef.set(msg.toMap());
   }
 
   // ================================================================
-  // 🎙️ ENVIAR AUDIO — EQUIPO
+  // 🎙️ ENVIAR AUDIO — EQUIPO (CON DURACIÓN REAL)
   // ================================================================
   Future<void> sendTeamAudio({
     required String roomId,
@@ -259,6 +264,11 @@ class ChatService {
   }) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception('Usuario no autenticado');
+
+    final audioPlayer = AudioPlayer();
+    await audioPlayer.setSourceDeviceFile(file.path);
+    final audioDuration = await audioPlayer.getDuration();
+    final durationSeconds = audioDuration?.inSeconds ?? 0;
 
     final ref = _storage.ref().child(
         'chat_audio/${user.uid}/${DateTime.now().millisecondsSinceEpoch}.m4a');
@@ -289,6 +299,7 @@ class ChatService {
       avatarUrl: avatarUrl,
       rank: rank,
       timestamp: Timestamp.now(),
+      duration: durationSeconds, // 👈 AÑADIDO
     );
 
     await docRef.set(msg.toMap());

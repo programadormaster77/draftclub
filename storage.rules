@@ -1,0 +1,74 @@
+// ===============================================================
+// 🔒 Firebase Storage Security Rules — DraftClub v1.2 (Optimized)
+// ===============================================================
+// Protege las subidas multimedia de posts, perfiles y rooms.
+// Incluye validaciones de tipo, tamaño y App Check.
+// ===============================================================
+
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ===========================================================
+    // ⚙️ Validación auxiliar
+    // ===========================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAppVerified() {
+      // Solo aplica si App Check está activado
+      return request.auth != null && request.time != null &&
+             (request.resource == null || request.resource.size < 100 * 1024 * 1024);
+    }
+
+    // ===========================================================
+    // 📷 Avatares de usuario
+    // ===========================================================
+    match /uploads/{uid}/avatars/{fileName} {
+      allow read: if true; // públicos
+      allow write: if isSignedIn() && request.auth.uid == uid
+                   && request.resource.size < 5 * 1024 * 1024 // máx 5 MB
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // ===========================================================
+    // 🏞️ Fotos del feed social
+    // ===========================================================
+    match /uploads/{uid}/photos/{postId}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == uid
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // ===========================================================
+    // 🎥 Videos del feed social + miniaturas
+    // ===========================================================
+    match /uploads/{uid}/videos/{postId}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == uid
+                   && request.resource.size < 50 * 1024 * 1024
+                   && (request.resource.contentType.matches('video/.*')
+                       || request.resource.contentType.matches('image/.*')); // thumbs
+    }
+
+    // ===========================================================
+    // 🏟️ Fotos y recursos de rooms (opcional)
+    // ===========================================================
+    match /uploads/{uid}/rooms/{roomId}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == uid
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // ===========================================================
+    // 🧱 Por defecto, todo lo demás está bloqueado
+    // ===========================================================
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,54 @@
+name: Build iOS IPA (Unsigned)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - name: 🧩 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🍎 Select Xcode 16.x
+        run: |
+          ls -1 /Applications | grep Xcode || true
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer || sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
+          xcode-select -p
+
+      - name: 🧰 Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.4"
+          channel: stable
+          cache: true
+
+      - name: 📦 Get Flutter packages
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: 🧹 Install CocoaPods (brew, estable)
+        run: brew install cocoapods
+
+      - name: ⚙️ Install Pods
+        working-directory: apps/mobile/ios
+        run: pod install --repo-update
+
+      - name: 🚀 Build iOS app (Release, no codesign)
+        working-directory: apps/mobile
+        run: flutter build ios --release --no-codesign
+
+      - name: 📦 Package Unsigned IPA
+        working-directory: apps/mobile
+        run: |
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -r unsigned.ipa Payload
+
+      - name: 📦 Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: draftclub-ios-unsigned-ipa
+          path: apps/mobile/unsigned.ipa

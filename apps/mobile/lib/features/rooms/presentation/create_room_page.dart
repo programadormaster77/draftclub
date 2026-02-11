@@ -4,12 +4,16 @@ import 'package:draftclub_mobile/core/location/place_service.dart';
 import '../data/room_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:geolocator/geolocator.dart'; // 🆕 Ubicación
-import 'package:geocoding/geocoding.dart'; // 🆕 Geocodificación inversa
-import 'widgets/match_type_selector.dart'; // 🆕 Selector visual
+import 'package:draftclub_mobile/features/profile/domain/xp_tracker.dart';
 
 /// ====================================================================
 /// ⚽ CreateRoomPage — Crear y compartir nuevas salas
+/// ====================================================================
+/// 🔹 Compatible para crear o editar salas.
+/// 🔹 Evita errores de Dropdown (género duplicado o no coincidente).
+/// 🔹 Compatible con cualquier país (ciudad, país, coordenadas).
+/// 🔹 Corrige el bug cuando `sex` está vacío o con espacios.
+/// 🔹 Otorga XP al crear una sala.
 /// ====================================================================
 class CreateRoomPage extends StatefulWidget {
   final Map<String, dynamic>? existingRoom;
@@ -33,9 +37,7 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
   bool _loading = false;
   bool _searchingCity = false;
   bool _searchingAddress = false;
-  bool _locatingUser = false; // 🆕 Estado de carga de ubicación
-  String? _sex;
-  String _matchType = 'friendly';
+  String? _sex; // puede ser null hasta cargar
   String? _lastCreatedRoomId;
 
   Map<String, dynamic>? _selectedCityData;
@@ -48,12 +50,42 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
   }
 
   // ===========================================================
+  // 🌍 Extrae y normaliza el código ISO de país desde el texto
+  // ===========================================================
+  String _extractCountryCode(String description) {
+    final lower = description.toLowerCase();
+
+    if (lower.contains('colom')) return 'CO';
+    if (lower.contains('mex')) return 'MX';
+    if (lower.contains('arg')) return 'AR';
+    if (lower.contains('esp') || lower.contains('espa')) return 'ES';
+    if (lower.contains('chi')) return 'CL';
+    if (lower.contains('per')) return 'PE';
+    if (lower.contains('ecuad')) return 'EC';
+    if (lower.contains('bra')) return 'BR';
+    if (lower.contains('venez')) return 'VE';
+    if (lower.contains('us') || lower.contains('eeuu')) return 'US';
+    if (lower.contains('fran')) return 'FR';
+    if (lower.contains('ita')) return 'IT';
+    if (lower.contains('ale')) return 'DE';
+    if (lower.contains('jap')) return 'JP';
+    if (lower.contains('canad')) return 'CA';
+    if (lower.contains('por')) return 'PT';
+    if (lower.contains('turq')) return 'TR';
+    if (lower.contains('rusi')) return 'RU';
+    if (lower.contains('india')) return 'IN';
+    if (lower.contains('corea')) return 'KR';
+    if (lower.contains('chin')) return 'CN';
+    if (lower.contains('austral')) return 'AU';
+    return 'XX';
+  }
+
+  // ===========================================================
   // 🔄 Inicializar datos
   // ===========================================================
   Future<void> _initializeForm() async {
     final r = widget.existingRoom;
     if (r != null) {
-      // 📝 Editando
       _nameCtrl.text = r['name'] ?? '';
       _cityCtrl.text = r['city'] ?? '';
       _addressCtrl.text = r['exactAddress'] ?? '';
@@ -67,7 +99,6 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
       _sex = _normalizeSex(r['sex']);
       _matchType = r['matchType'] ?? 'friendly';
     } else {
-      // 🆕 Nuevo -> Prellenar y detectar ubicación
       await _prefillSexFromProfile();
       _detectUserLocation(); // 🚀 Auto-detectar ciudad
     }
@@ -177,6 +208,7 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
       };
 
       String roomId;
+
       if (widget.existingRoom != null) {
         roomId = widget.existingRoom!['id'];
         await service.updateRoom(roomId, payload);
@@ -196,6 +228,9 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
           sex: payload['sex'],
           matchType: payload['matchType'],
         );
+
+        // 🎯 Asignar experiencia al crear una nueva sala
+        await RoomXPTracker.onRoomCreated(roomId);
       }
 
       if (!mounted) return;
@@ -274,42 +309,34 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
             setSheet(() => suggestions = []);
             return;
           }
-          setSheet(() => _searchingCity = true);
-          final results = await PlaceService.fetchCitySuggestions(query);
-          setSheet(() {
-            suggestions = results
-                .map((r) => {'name': r.description, 'placeId': r.placeId})
-                .toList();
-            _searchingCity = false;
-          });
-        }
 
-        return _placeSheetUI(
-          title: 'Buscar ciudad',
-          searchCtrl: searchCtrl,
-          searching: _searchingCity,
-          suggestions: suggestions,
-          onSearch: search,
-          onSelect: (s) async {
-            // ... Logic to get details
-            final details = await PlaceService.getCityDetails(s['placeId']);
-            final data = details != null
-                ? {
-                    'cityName': details.description.split(',').first.trim(),
-                    'lat': details.lat,
-                    'lng': details.lng,
-                    'countryCode': details.countryCode,
-                  }
-                : {'cityName': s['name']};
-            if (!mounted) return;
-            setState(() {
-              _selectedCityData = data;
-              _cityCtrl.text = data['cityName'] ?? '';
-            });
-          },
-          labelField: 'name',
-        );
-      }),
+          return _placeSheetUI(
+            title: 'Buscar ciudad o país',
+            searchCtrl: searchCtrl,
+            searching: _searchingCity,
+            suggestions: suggestions,
+            onSearch: search,
+            onSelect: (s) async {
+              final details = await PlaceService.getCityDetails(s['placeId']);
+              final data = details != null
+                  ? {
+                      'cityName': details.description.split(',').first.trim(),
+                      'lat': details.lat,
+                      'lng': details.lng,
+                      'countryCode': _extractCountryCode(details.description),
+                    }
+                  : {'cityName': s['name']};
+
+              if (!mounted) return;
+              setState(() {
+                _selectedCityData = data;
+                _cityCtrl.text = data['cityName'] ?? '';
+              });
+            },
+            labelField: 'name',
+          );
+        });
+      },
     );
   }
 

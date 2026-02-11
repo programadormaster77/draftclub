@@ -11,28 +11,51 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # Estado y navegación
-  flutter_riverpod: ^3.0.0-dev.3
-  go_router: ^14.2.0
+  google_maps_flutter: ^2.14.0
+  url_launcher: ^6.3.0
+
+  visibility_detector: ^0.4.0
+
+  # 🎧 Audio
+  audioplayers: ^5.2.1
+ 
+
+  # ============================================================
+  # 🌐 Estado y navegación
+  # ============================================================
+  flutter_riverpod: ^2.5.1
+  go_router: 17.0.0
   provider: ^6.1.2
 
-  # Networking
-  http: ^1.5.0
+  # ============================================================
+  # 🌍 Networking y APIs
+  # ============================================================
+  http: ^1.2.2
   dio: ^5.7.0
 
-  # Firebase Core
-  firebase_core: ^3.5.0
-  firebase_auth: ^5.3.0
-  cloud_firestore: ^5.4.4
-  firebase_storage: ^12.3.1
-  firebase_messaging: ^15.0.3
-  firebase_crashlytics: ^4.1.0
-  firebase_analytics: ^11.1.0
-  firebase_app_check: ^0.3.0
-  cloud_functions: ^5.1.0
+  # ============================================================
+  # 🔥 Firebase Suite — versiones compatibles
+  # ============================================================
+  firebase_core: ^3.4.0
+  firebase_auth: ^5.2.0
+  cloud_firestore: ^5.3.0
+  firebase_storage: ^12.3.0
+  firebase_messaging: ^15.1.3
+  firebase_crashlytics: ^4.1.3
+  firebase_analytics: ^11.3.2
+  firebase_app_check: ^0.3.2+1
+  cloud_functions: ^5.1.3
 
-  # UI / Multimedia
-  cached_network_image: ^3.4.0
+  # ============================================================
+  # 🟦 Autenticación Social
+  # ============================================================
+  flutter_facebook_auth: ^7.0.1
+  google_sign_in: ^6.2.1
+
+  # ============================================================
+  # 🎨 UI / Multimedia / Animaciones
+  # ============================================================
+  cached_network_image: ^3.4.1
   video_player: ^2.9.2
   chewie: ^1.7.5
   lottie: ^3.1.0
@@ -40,32 +63,49 @@ dependencies:
   google_fonts: ^6.2.1
   flutter_animate: ^4.5.2
 
-  # 📸 Captura, grabación y archivos (solo Android/iOS)
-  image_picker: ^1.2.0
+  # ============================================================
+  # 📸 Captura, grabación y archivos
+  # ============================================================
+  image_picker: ^1.1.2
   record: ^6.1.2
   path_provider: ^2.1.4
   video_thumbnail: ^0.5.3
   path: ^1.9.0
 
-  # 🌍 Geolocalización y utilidades
-  geolocator: ^12.0.0
-  geocoding: ^3.0.0
-  intl: ^0.19.0
-  share_plus: ^12.0.1
-  add_2_calendar: ^3.0.1
-  screenshot: ^3.0.0
+  # ============================================================
+  # 🗺️ Geolocalización
+  # ============================================================
+  geolocator: ^13.0.2
+  geocoding: ^4.0.0
+  intl: ^0.20.2
+  uuid: ^4.5.0
+  share_plus: ^10.0.2
 
-  # 💰 Compras dentro de la app (VIP)
+  # ============================================================
+  # 💰 Compras dentro de la app
+  # ============================================================
   in_app_purchase: ^3.1.11
 
-  # 🔗 Sistema de enlaces profundos (Deep Links)
-  app_links: ^3.4.2
+  # ============================================================
+  # 🔗 Enlaces profundos
+  # ============================================================
+  app_links: ^6.4.1
 
-  # ⚙️ Dependencias base del fork local
+  # ============================================================
+  # 🔔 Notificaciones
+  # ============================================================
+  flutter_local_notifications: ^17.1.2
+  permission_handler: ^11.3.1
+
+  # ============================================================
+  # ⚙️ Utilidades
+  # ============================================================
   plugin_platform_interface: ^2.1.4
   flutter_launcher_icons: ^0.14.4
 
-  # 🧩 Core y Features locales (módulos)
+  # ============================================================
+  # 🧩 Módulos locales del proyecto
+  # ============================================================
   core:
     path: ../../packages/core
   auth:
@@ -91,21 +131,29 @@ dependencies:
   flutter_local_notifications: ^17.0.0
   timezone: ^0.9.0
 
-# ✅ Solo un bloque de overrides (sin duplicar)
 dependency_overrides:
   record_platform_interface: ^1.4.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
+  flutter_lints: ^3.0.2
 
 flutter:
   uses-material-design: true
+
   assets:
     - assets/icons/
     - assets/images/
     - assets/lottie/
+    - assets/audio/
+    - assets/audio/referee_whistle.wav
+    - assets/audio/referee_whistle2.wav
+    - assets/audio/referee_whistle.caf
+    - assets/audio/referee_whistle2.caf
+    - assets/icons/google_logo.png
+    - assets/icons/facebook_logo.png
+    - assets/backgrounds/login_bg.png 
 
 flutter_icons:
   android: true
@@ -113,3 +161,4 @@ flutter_icons:
   image_path: "assets/icons/draftclub_logo.png"
   adaptive_icon_background: "#000000"
   adaptive_icon_foreground: "assets/icons/draftclub_logo.png"
+  remove_alpha_ios: true

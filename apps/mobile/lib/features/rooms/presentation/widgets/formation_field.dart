@@ -2,11 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:draftclub_mobile/core/ui/ui_theme.dart';
 
 /// ===============================================================
-/// 🏟️ FormationField — Cancha visual para ubicar jugadores
-/// ===============================================================
-/// Muestra una cancha con posiciones dinámicas según el tipo
-/// de sala (Fútbol 5, 7, 9 o 11). Admite portero, defensa,
-/// medio y delanteros, más suplentes.
+/// 🏟️ FormationField — Cancha visual con animaciones de entrada
 /// ===============================================================
 class FormationField extends StatelessWidget {
   final int playersPerTeam;
@@ -24,20 +20,17 @@ class FormationField extends StatelessWidget {
     this.onTapPlayer,
   });
 
-  /// =======================
-  /// 🎯 Distribución base
-  /// =======================
+  /// 🎯 Distribución base según número de jugadores
   List<Offset> _getFormationPositions() {
     switch (playersPerTeam) {
-      case 5: // Portero + 2 defensas + 2 delanteros
+      case 5:
         return const [
-          Offset(0.5, 0.1), // Portero
-          Offset(0.3, 0.4), // Defensa izq
-          Offset(0.7, 0.4), // Defensa der
-          Offset(0.35, 0.7), // Delantero izq
-          Offset(0.65, 0.7), // Delantero der
+          Offset(0.5, 0.1),
+          Offset(0.3, 0.4),
+          Offset(0.7, 0.4),
+          Offset(0.35, 0.7),
+          Offset(0.65, 0.7),
         ];
-
       case 7:
         return const [
           Offset(0.5, 0.1),
@@ -48,7 +41,6 @@ class FormationField extends StatelessWidget {
           Offset(0.3, 0.75),
           Offset(0.7, 0.75),
         ];
-
       case 9:
         return const [
           Offset(0.5, 0.1),
@@ -61,11 +53,10 @@ class FormationField extends StatelessWidget {
           Offset(0.7, 0.7),
           Offset(0.5, 0.85),
         ];
-
       case 11:
       default:
         return const [
-          Offset(0.5, 0.08), // Portero
+          Offset(0.5, 0.08),
           Offset(0.2, 0.25),
           Offset(0.4, 0.25),
           Offset(0.6, 0.25),
@@ -86,7 +77,7 @@ class FormationField extends StatelessWidget {
 
     return Stack(
       children: [
-        // Fondo de la cancha
+        // Fondo del campo
         Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -109,22 +100,31 @@ class FormationField extends StatelessWidget {
           size: Size.infinite,
         ),
 
-        // Jugadores en sus posiciones
+        // Jugadores con animación
         ...List.generate(players.length, (i) {
           final p = players[i];
           final pos = positions[i % positions.length];
-          return Positioned(
-            left: pos.dx * MediaQuery.of(context).size.width * 0.9 - 30,
-            top: pos.dy * 400 - 30,
-            child: _PlayerSlot(
-              player: p,
-              isMyTeam: isMyTeam,
-              onTap: onTapPlayer,
+          final screenWidth = MediaQuery.of(context).size.width;
+          final fieldHeight = 400.0;
+
+          return AnimatedPositioned(
+            duration: Duration(milliseconds: 600 + (i * 100)),
+            curve: Curves.easeOutBack,
+            left: pos.dx * screenWidth * 0.9 - 30,
+            top: pos.dy * fieldHeight - 30,
+            child: AnimatedOpacity(
+              opacity: 1,
+              duration: const Duration(milliseconds: 800),
+              child: _PlayerSlot(
+                player: p,
+                isMyTeam: isMyTeam,
+                onTap: onTapPlayer,
+              ),
             ),
           );
         }),
 
-        // Suplentes
+        // Suplentes (sin animación)
         if (substitutes.isNotEmpty)
           Positioned(
             right: 4,
@@ -150,9 +150,9 @@ class FormationField extends StatelessWidget {
 }
 
 /// ===============================================================
-/// 🧍 _PlayerSlot — Tarjeta visual del jugador
+/// 🧍 _PlayerSlot — Jugador con glow, nombre lateral y animación
 /// ===============================================================
-class _PlayerSlot extends StatelessWidget {
+class _PlayerSlot extends StatefulWidget {
   final PlayerSlotData player;
   final bool isMyTeam;
   final VoidCallback? onTap;
@@ -166,57 +166,144 @@ class _PlayerSlot extends StatelessWidget {
   });
 
   @override
+  State<_PlayerSlot> createState() => _PlayerSlotState();
+}
+
+class _PlayerSlotState extends State<_PlayerSlot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _scale = CurvedAnimation(parent: _controller, curve: Curves.elasticOut);
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Color _rankColor(String rank) {
+    switch (rank.toLowerCase()) {
+      case 'oro':
+        return const Color(0xFFFFD700);
+      case 'plata':
+        return const Color(0xFFC0C0C0);
+      case 'platino':
+        return const Color(0xFF00C5D8);
+      case 'diamante':
+        return const Color(0xFF7DF9FF);
+      default:
+        return const Color(0xFFCD7F32); // Bronce
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final avatarSize = small ? 40.0 : 56.0;
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        children: [
-          CircleAvatar(
-            radius: avatarSize / 2,
-            backgroundColor:
-                isMyTeam ? AppColors.accentBlue : AppColors.accentRed,
-            backgroundImage:
-                player.photoUrl != null ? NetworkImage(player.photoUrl!) : null,
-            child: player.photoUrl == null
-                ? Text(
-                    player.name.isNotEmpty ? player.name[0].toUpperCase() : '?',
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold),
-                  )
-                : null,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            player.name,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: small ? 10 : 12,
-              fontWeight: FontWeight.bold,
-              shadows: const [
-                Shadow(
-                    offset: Offset(0.5, 0.5),
-                    blurRadius: 1,
-                    color: Colors.black54)
-              ],
+    final player = widget.player;
+    final avatarSize = widget.small ? 40.0 : 56.0;
+    final rankColor =
+        player.rank != null ? _rankColor(player.rank!) : Colors.white;
+    final teamColor =
+        widget.isMyTeam ? AppColors.accentBlue : AppColors.accentRed;
+
+    return ScaleTransition(
+      scale: _scale,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Column(
+          children: [
+            // Círculo con glow y foto
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: teamColor.withOpacity(0.6),
+                    blurRadius: 18,
+                    spreadRadius: 3,
+                  ),
+                ],
+              ),
+              child: CircleAvatar(
+                radius: avatarSize / 2,
+                backgroundColor: teamColor,
+                backgroundImage:
+                    (player.photoUrl != null && player.photoUrl!.isNotEmpty)
+                        ? NetworkImage(player.photoUrl!)
+                        : null,
+                onBackgroundImageError: (_, __) {},
+                child: (player.photoUrl == null || player.photoUrl!.isEmpty)
+                    ? Text(
+                        player.name.isNotEmpty
+                            ? player.name[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      )
+                    : null,
+              ),
             ),
-          ),
-          if (player.position != null)
-            Text(
-              player.position!,
-              style: const TextStyle(
-                  color: Colors.white70,
+
+            const SizedBox(height: 6),
+
+            // Nombre horizontal centrado
+            SizedBox(
+              width: 80,
+              child: Text(
+                player.name,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: widget.small ? 10 : 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.4,
+                  shadows: const [
+                    Shadow(
+                      offset: Offset(0.5, 0.5),
+                      blurRadius: 1,
+                      color: Colors.black54,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 2),
+
+            // Rango
+            if (player.rank != null && player.rank!.isNotEmpty)
+              Text(
+                player.rank!,
+                style: TextStyle(
+                  color: rankColor,
                   fontSize: 10,
-                  fontStyle: FontStyle.italic),
-            ),
-        ],
+                  fontStyle: FontStyle.italic,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 }
 
 /// ===============================================================
-/// 🟩 FieldLinesPainter — Dibuja las líneas de la cancha
+/// 🟩 FieldLinesPainter — Líneas del campo
 /// ===============================================================
 class _FieldLinesPainter extends CustomPainter {
   @override
@@ -231,11 +318,17 @@ class _FieldLinesPainter extends CustomPainter {
 
     // Círculo central
     canvas.drawCircle(
-        Offset(size.width / 2, size.height / 2), size.width * 0.12, paint);
+      Offset(size.width / 2, size.height / 2),
+      size.width * 0.12,
+      paint,
+    );
 
     // Línea central
-    canvas.drawLine(Offset(size.width / 2, 10),
-        Offset(size.width / 2, size.height - 10), paint);
+    canvas.drawLine(
+      Offset(size.width / 2, 10),
+      Offset(size.width / 2, size.height - 10),
+      paint,
+    );
   }
 
   @override
@@ -243,16 +336,18 @@ class _FieldLinesPainter extends CustomPainter {
 }
 
 /// ===============================================================
-/// 🧠 Modelo del jugador (solo para renderizar)
+/// 🧠 Modelo del jugador
 /// ===============================================================
 class PlayerSlotData {
   final String name;
   final String? photoUrl;
   final String? position;
+  final String? rank;
 
   const PlayerSlotData({
     required this.name,
     this.photoUrl,
     this.position,
+    this.rank,
   });
 }

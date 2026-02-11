@@ -169,7 +169,9 @@ class _MessageInputState extends State<MessageInput> {
     }
   }
 
-  // ======================= INTERFAZ =======================
+  // ... arriba tu mismo código sin cambios
+
+// ======================= INTERFAZ =======================
   @override
   Widget build(BuildContext context) {
     final micColor = _recording ? Colors.redAccent : Colors.blueAccent;
@@ -248,45 +250,52 @@ class _MessageInputState extends State<MessageInput> {
               tooltip: _recording ? "Detener y enviar" : "Grabar nota de voz",
             ),
 
+            // 🔴 INDICADOR "GRABANDO..."
+            if (_recording)
+              const Padding(
+                padding: EdgeInsets.only(left: 4, right: 4, bottom: 10),
+                child: Text(
+                  "● Grabando...",
+                  style: TextStyle(
+                    color: Colors.redAccent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+
             const SizedBox(width: 6),
 
-            // 🚀 Botón ENVIAR
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              transitionBuilder: (child, anim) =>
-                  ScaleTransition(scale: anim, child: child),
-              child: _sending
-                  ? const Padding(
-                      key: ValueKey('loading'),
-                      padding: EdgeInsets.all(8),
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.blueAccent,
+            // 🚀 Botón ENVIAR — solo visible cuando NO se está grabando
+            if (!_recording)
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                transitionBuilder: (child, anim) =>
+                    ScaleTransition(scale: anim, child: child),
+                child: _sending
+                    ? const Padding(
+                        key: ValueKey('loading'),
+                        padding: EdgeInsets.all(8),
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.blueAccent,
+                          ),
                         ),
+                      )
+                    : IconButton(
+                        key: const ValueKey('send'),
+                        onPressed: _sendText,
+                        icon: const Icon(Icons.send_rounded,
+                            color: Colors.blueAccent, size: 26),
+                        tooltip: "Enviar mensaje",
                       ),
-                    )
-                  : IconButton(
-                      key: const ValueKey('send'),
-                      onPressed: _sendText,
-                      icon: const Icon(Icons.send_rounded,
-                          color: Colors.blueAccent, size: 26),
-                      tooltip: "Enviar mensaje",
-                    ),
-            ),
+              ),
           ],
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    _focus.dispose();
-    _recorder.dispose();
-    super.dispose();
   }
 }

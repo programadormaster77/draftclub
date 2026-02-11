@@ -15,7 +15,8 @@ import 'widgets/room_card.dart';
 import 'create_room_page.dart';
 import 'room_detail_page.dart';
 import 'find_room_page.dart';
-import 'widgets/match_history_tab.dart'; // 🆕 Historial global
+import 'pitches_map_page.dart';
+
 
 import 'package:draftclub_mobile/core/location/place_service.dart';
 
@@ -382,151 +383,201 @@ class _RoomsPageState extends State<RoomsPage>
   }
 
   // ----------------- UI -----------------
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0E0E0E),
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: const Text('Salas'),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.blueAccent,
-          labelColor: Colors.white,
-          tabs: const [
-            Tab(text: 'Públicas'),
-            Tab(text: 'Mis salas'),
-            Tab(text: 'Buscar'),
-            Tab(text: 'Historial'), // 🆕
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon:
-                const Icon(Icons.add_circle_outline, color: Colors.blueAccent),
-            tooltip: 'Crear nueva sala',
-            onPressed: () async {
-              final created = await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const CreateRoomPage()),
-              );
-              if (created == true && mounted) {
-                setState(() => _roomsFuture = _fetchRooms());
-              }
-            },
-          ),
-        ],
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildPublicTab(),
-          _buildMyRoomsTab(),
-          const FindRoomPage(),
-          const MatchHistoryTab(), // 🆕
-        ],
-      ),
-    );
-  }
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: const Color(0xFF0E0E0E),
 
-  Widget _buildPublicTab() {
-    if (_bootstrapping) {
-      return const Center(
-          child: CircularProgressIndicator(color: Colors.blueAccent));
-    }
-
-    return Column(
+    // 👇 Eliminamos el AppBar local, porque el Dashboard ya muestra "Salas"
+    // y mantenemos la TabBar dentro del cuerpo.
+    body: Column(
       children: [
-        const SizedBox(height: 10),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: _FiltersCard(
-            useNearby: _useNearby,
-            onToggleNearby: (v) {
-              setState(() {
-                _useNearby = v;
-                _roomsFuture = _fetchRooms();
-              });
-            },
-            currentCityLabel: _filters.cityName ?? _myCity ?? 'Seleccionar…',
-            onPickCity: _pickCity,
-            onClearCity: _clearCity,
-            dateLabel: _filters.date == null
-                ? 'Fecha (opcional)'
-                : '${_filters.date!.day.toString().padLeft(2, '0')}/${_filters.date!.month.toString().padLeft(2, '0')}/${_filters.date!.year}',
-            onPickDate: _pickDate,
-            onClearDate: _clearDate,
+        // =======================================================
+        // 🔹 TabBar superior (antes estaba dentro del AppBar)
+        // =======================================================
+        Container(
+          color: Colors.black,
+          child: TabBar(
+            controller: _tabController,
+            indicatorColor: Colors.blueAccent,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            tabs: const [
+              Tab(text: 'Públicas'),
+              Tab(text: 'Mis salas'),
+              Tab(text: 'Buscar'),
+            ],
           ),
         ),
-        const SizedBox(height: 6),
-        Expanded(
-          child: RefreshIndicator(
-            color: Colors.blueAccent,
-            onRefresh: _onRefresh,
-            child: FutureBuilder<List<Room>>(
-              future: _roomsFuture,
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: Colors.blueAccent),
-                  );
-                }
-                if (snap.hasError) {
-                  return Center(
-                    child: Text(
-                      'Error: ${snap.error}',
-                      style: const TextStyle(color: Colors.redAccent),
+
+        // =======================================================
+        // 🔹 Acciones superiores: Mapa de canchas + Crear sala
+        // =======================================================
+        Container(
+          color: const Color(0xFF0E0E0E),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          child: Row(
+            children: [
+              // ✅ Botón estético: Ver mapa de canchas
+              Expanded(
+                child: SizedBox(
+                  height: 44,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF111111),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(color: Colors.white24),
+                      ),
                     ),
-                  );
-                }
-                final rooms = snap.data ?? const <Room>[];
-
-                if (rooms.isEmpty) {
-                  return _EmptyState(
-                    title: 'No hay salas públicas según tus filtros',
-                    message:
-                        'Prueba otra fecha, cambia la ciudad o crea tu propia sala.',
-                    actionText: 'Crear una sala',
-                    onAction: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const CreateRoomPage()),
+                    icon: const Icon(Icons.map_outlined,
+                        color: Colors.blueAccent, size: 20),
+                    label: const Text(
+                      'Ver mapa de canchas',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    onPressed: () async {
+                      // TODO: Crear PitchesMapPage y apuntar aquí
+                     Navigator.push(
+                       context,
+                     MaterialPageRoute(builder: (_) => const PitchesMapPage()),
                       );
-                    },
-                  );
-                }
 
-                return ListView.builder(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
-                  itemCount: rooms.length,
-                  itemBuilder: (_, i) {
-                    final r = rooms[i];
-                    return RoomCard(
-                      room: r,
-                      userLat: _filters.userLat,
-                      userLng: _filters.userLng,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => RoomDetailPage(room: r),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                );
-              },
-            ),
+                    },
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              // ✅ Botón para crear sala (se mantiene igual)
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline,
+                    color: Colors.blueAccent, size: 28),
+                tooltip: 'Crear nueva sala',
+                onPressed: () async {
+                  final created = await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CreateRoomPage()),
+                  );
+                  if (created == true && mounted) {
+                    setState(() => _roomsFuture = _fetchRooms());
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+
+
+
+        // =======================================================
+        // 🔹 Contenido principal con las pestañas
+        // =======================================================
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildPublicRoomsTab(), // ✅ Públicas reales
+              _buildMyRoomsTab(), // ✅ Mis salas
+              const FindRoomPage(), // Buscar por ID (por ahora)
+            ],
           ),
         ),
       ],
+    ),
+  );
+}
+
+
+  // ✅ NUEVO: Tab de salas públicas (discovery)
+  Widget _buildPublicRoomsTab() {
+    // Mientras carga contexto (ubicación/sexo/ciudad)
+    if (_bootstrapping) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.blueAccent),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      color: Colors.blueAccent,
+      child: FutureBuilder<List<Room>>(
+        future: _roomsFuture,
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(color: Colors.blueAccent),
+            );
+          }
+
+          if (snap.hasError) {
+            return Center(
+              child: Text(
+                'Error cargando salas públicas: ${snap.error}',
+                style: const TextStyle(color: Colors.redAccent),
+                textAlign: TextAlign.center,
+              ),
+            );
+          }
+
+          final rooms = (snap.data ?? []).where((r) => r.isPublic).toList();
+
+          if (rooms.isEmpty) {
+            // ✅ Empty state SOLO para Públicas
+            return _EmptyState(
+              title: 'No hay salas públicas cerca de ti',
+              message:
+                  'En este momento no encontramos salas públicas dentro del rango. '
+                  'Puedes crear la primera sala y otros usuarios la verán aquí.',
+              actionText: 'Crear sala',
+              onAction: () async {
+                final created = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CreateRoomPage()),
+                );
+                if (created == true && mounted) {
+                  setState(() {
+                    _roomsFuture = _fetchRooms();
+                  });
+                }
+              },
+            );
+          }
+
+          return ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            itemCount: rooms.length,
+            itemBuilder: (_, i) {
+              final r = rooms[i];
+              return RoomCard(
+                room: r,
+                userLat: _filters.userLat,
+                userLng: _filters.userLng,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => RoomDetailPage(room: r)),
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
   Widget _buildMyRoomsTab() {
+
     final uid = _auth.currentUser?.uid;
     if (uid == null) {
       return const Center(

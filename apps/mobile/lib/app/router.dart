@@ -1,72 +1,130 @@
+// lib/app/router.dart
+
+// 📦 Importaciones principales
 import 'package:go_router/go_router.dart';
-import 'package:flutter/material.dart';
 
-// 🧩 Features principales
-import '../features/auth/presentation/login_page.dart';
-import '../features/profile/presentation/profile_gate.dart';
-import '../features/feed/presentation/feed_page.dart';
+// ============ AUTH ============
+import 'package:draftclub_mobile/features/auth/presentation/auth_page.dart';
 
-// 🧩 Nuevo módulo social
-import '../features/social/social_routes.dart';
+// ============ PROFILE ============
+import 'package:draftclub_mobile/features/profile/presentation/profile_page.dart';
+import 'package:draftclub_mobile/features/profile/presentation/edit_profile_page.dart';
+
+// ============ SOCIAL ============
+import 'package:draftclub_mobile/features/social/domain/entities/post.dart';
+import 'package:draftclub_mobile/features/social/presentation/page/social_feed_page.dart';
+import 'package:draftclub_mobile/features/social/presentation/page/chat_list_page.dart';
+import 'package:draftclub_mobile/features/social/presentation/page/chat_page.dart';
+import 'package:draftclub_mobile/features/social/presentation/page/follow_list_page.dart';
+import 'package:draftclub_mobile/features/social/presentation/page/post_detail_page.dart';
+
+// ============ NOTIFICACIONES ============
+
+// ============ LOCKER ============
+// ⚠️ IMPORTANTE: ajusta estas rutas según la ubicación REAL de tus archivos.
+// Abre `locker_page.dart` en VSCode, haz clic derecho en el nombre del archivo
+// → "Copy Relative Path" y úsalo aquí si es diferente.
 
 /// ===============================================================
-/// 🚦 Router global de DraftClub
+/// 🌐 Configuración global de GoRouter
 /// ===============================================================
-///
-/// Controla toda la navegación de la app:
-/// - Redirige según autenticación.
-/// - Mantiene consistencia entre módulos (feed / social / rooms).
-/// - Evita rutas huérfanas tras logout.
-///
-/// Usa go_router v14+
-/// ===============================================================
+
 final GoRouter router = GoRouter(
-  initialLocation: '/',
-  routes: [
-    // 🔹 Pantalla de inicio de sesión
-    GoRoute(
-      path: '/',
-      name: 'login',
-      builder: (context, state) => const LoginPage(),
-    ),
-
-    // 🔹 Controlador de flujo de perfil
-    GoRoute(
-      path: '/profile-gate',
-      name: 'profile-gate',
-      builder: (context, state) => const ProfileGate(),
-    ),
-
-    // 🔹 Feed actual (versión MVP)
-    GoRoute(
-      path: '/feed',
-      name: 'feed',
-      builder: (context, state) => const FeedPage(),
-    ),
-
-    // 🔹 Rutas del módulo social (feed, perfil público, crear post, etc.)
-    ...socialRoutes,
-  ],
-
-  // 🚧 Redirección condicional (versión simple, ampliable)
-  redirect: (context, state) {
-    // Aquí puedes añadir lógica si integras FirebaseAuth:
-    // final user = FirebaseAuth.instance.currentUser;
-    // final loggingIn = state.matchedLocation == '/';
-    // if (user == null && !loggingIn) return '/';
-    // if (user != null && loggingIn) return '/profile-gate';
-    return null;
-  },
-
-  // 🧠 Depuración
   debugLogDiagnostics: true,
-  errorBuilder: (context, state) => Scaffold(
-    body: Center(
-      child: Text(
-        'Ruta no encontrada:\n${state.uri.toString()}',
-        textAlign: TextAlign.center,
-        style: const TextStyle(color: Colors.white70),
-      ),
+  // 👇 Pantalla inicial de la app:
+  initialLocation: '/social',
+  routes: [
+    // ===================== AUTH =====================
+    GoRoute(
+      path: '/auth',
+      name: 'auth',
+      builder: (context, state) => const AuthPage(),
     ),
-  ),
+
+    // ===================== HOME / SOCIAL FEED =====================
+    GoRoute(
+      path: '/social',
+      name: 'social_feed',
+      builder: (context, state) => const SocialFeedPage(),
+    ),
+
+    // ===================== PERFIL =====================
+    GoRoute(
+      path: '/profile/:uid',
+      name: 'profile',
+      builder: (context, state) {
+        final uid = state.pathParameters['uid'];
+        return ProfilePage(userId: uid);
+      },
+    ),
+
+    // Editar perfil (usa el usuario actual)
+    GoRoute(
+      path: '/profile/edit',
+      name: 'edit_profile',
+      builder: (context, state) => const EditProfilePage(),
+    ),
+
+    // ===================== SEGUIDORES / SIGUIENDO =====================
+    GoRoute(
+      path: '/follow/:uid/:mode',
+      name: 'follow_list',
+      builder: (context, state) {
+        final uid = state.pathParameters['uid']!;
+        final mode = state.pathParameters['mode'] ?? 'followers';
+        final showFollowers = mode == 'followers';
+
+        return FollowListPage(
+          userId: uid,
+          showFollowers: showFollowers,
+        );
+      },
+    ),
+
+    // ===================== DETALLE DEL POST =====================
+    GoRoute(
+      path: '/post/:id',
+      name: 'post_detail',
+      builder: (context, state) {
+        // 👇 Aquí usamos el Post que pasas en state.extra
+        final post = state.extra as Post;
+        return PostDetailPage(post: post);
+      },
+    ),
+
+    // ===================== MENSAJES (LISTA DE CHATS) =====================
+    GoRoute(
+      path: '/chat',
+      name: 'chat_list',
+      builder: (context, state) => const ChatListPage(),
+    ),
+
+    // ===================== CHAT INDIVIDUAL =====================
+    GoRoute(
+      path: '/chat/:chatId',
+      name: 'chat',
+      builder: (context, state) {
+        final chatId = state.pathParameters['chatId']!;
+
+        // Extra opcional con info del otro usuario
+        String otherUserId = '';
+        String otherName = 'Jugador';
+        String otherPhoto = '';
+
+        final extra = state.extra;
+        if (extra is Map) {
+          otherUserId = (extra['otherUserId'] ?? '') as String;
+          otherName = (extra['otherName'] ?? 'Jugador') as String;
+          otherPhoto = (extra['otherPhoto'] ?? '') as String;
+        }
+
+        return ChatPage(
+          chatId: chatId,
+          otherUserId: otherUserId,
+          otherName: otherName,
+          otherPhoto: otherPhoto,
+        );
+      },
+    ),
+  ],
 );

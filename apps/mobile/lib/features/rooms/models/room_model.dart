@@ -6,8 +6,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// 🔹 Compatible con Firestore.
 /// 🔹 Incluye ubicación completa (ciudad, país, coordenadas, dirección exacta).
 /// 🔹 Añadido campo `sex` (Masculino / Femenino / Mixto).
-/// 🔹 Ahora incluye soporte para `lat/lng` exactos y `updatedAt`.
-/// 🔹 Ideal para integración con RoomService, CreateRoomPage y RoomDetailPage.
+/// 🔹 Ahora incluye soporte para cierre de partido y ganador.
+/// 🔹 TOTALMENTE compatible con tu base de datos actual.
 /// ====================================================================
 class Room {
   final String id;
@@ -23,31 +23,23 @@ class Room {
   final double? cityLat;
   final double? cityLng;
 
-  // 📍 Coordenadas exactas (nueva compatibilidad)
+  // 📍 Coordenadas exactas
   final double? lat;
   final double? lng;
 
-  final String? countryCode; // 🇨🇴 Código ISO del país
-  final String? exactAddress; // 📍 Dirección exacta del partido
-  final String? sex; // 🚻 Tipo de partido (Masculino / Femenino / Mixto)
+  final String? countryCode;
+  final String? exactAddress;
+  final String? sex;
   final DateTime createdAt;
-  final DateTime? updatedAt; // 🕒 Nueva marca opcional
-  final DateTime? eventAt; // 📅 Fecha/hora del partido
-  final List<String> players; // 👥 Lista de jugadores
-  final Map<String, String>
-      playerPositions; // 🆕 userId -> Posición (GK, DEF, MID, FWD)
-  final Map<String, String>
-      playerStatus; // 🆕 userId -> Estado (on_way, arrived, late)
+  final DateTime? updatedAt;
+  final DateTime? eventAt;
+  final List<String> players;
 
-  // 🚦 Gestión del Flujo
-  final String
-      phase; // recruitment, scheduling, venue, validation, ready, finished
-  final String matchType; // friendly, competitive
-
-  // 🏆 Resultados del Partido
-  final int? scoreTeamA;
-  final int? scoreTeamB;
-  final String? mvpPlayerId;
+  // 🆕 NUEVOS CAMPOS (para sistema de cierre y resultados)
+  final bool isClosed; // partido ya cerrado
+  final String? winnerTeamId; // id del equipo ganador
+  final String? winnerTeamName; // nombre visible del equipo ganador
+  final DateTime? closedAt; // fecha/hora de cierre
 
   Room({
     required this.id,
@@ -69,13 +61,10 @@ class Room {
     this.eventAt,
     this.updatedAt,
     this.players = const [],
-    this.playerPositions = const {}, // 🆕
-    this.playerStatus = const {}, // 🆕
-    this.phase = 'recruitment',
-    this.matchType = 'friendly',
-    this.scoreTeamA,
-    this.scoreTeamB,
-    this.mvpPlayerId,
+    this.isClosed = false, // por defecto NO está cerrada
+    this.winnerTeamId,
+    this.winnerTeamName,
+    this.closedAt,
   });
 
   // ================================================================
@@ -103,13 +92,12 @@ class Room {
       if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
       if (eventAt != null) 'eventAt': Timestamp.fromDate(eventAt!),
       'players': players,
-      'playerPositions': playerPositions, // 🆕
-      'playerStatus': playerStatus, // 🆕
-      'phase': phase,
-      'matchType': matchType,
-      if (scoreTeamA != null) 'scoreTeamA': scoreTeamA,
-      if (scoreTeamB != null) 'scoreTeamB': scoreTeamB,
-      if (mvpPlayerId != null) 'mvpPlayerId': mvpPlayerId,
+
+      // 🆕 NUEVOS CAMPOS
+      'isClosed': isClosed,
+      if (winnerTeamId != null) 'winnerTeamId': winnerTeamId,
+      if (winnerTeamName != null) 'winnerTeamName': winnerTeamName,
+      if (closedAt != null) 'closedAt': Timestamp.fromDate(closedAt!),
     };
   }
 
@@ -143,6 +131,14 @@ class Room {
       eventAt = DateTime.tryParse(eventField);
     }
 
+    DateTime? closedAt;
+    final closedField = map['closedAt'];
+    if (closedField is Timestamp) {
+      closedAt = closedField.toDate();
+    } else if (closedField is String) {
+      closedAt = DateTime.tryParse(closedField);
+    }
+
     int parseInt(dynamic value, [int defaultValue = 0]) {
       if (value is int) return value;
       if (value is double) return value.toInt();
@@ -159,7 +155,7 @@ class Room {
     }
 
     return Room(
-      id: map['id'] ?? '',
+      id: (map['id'] ?? '').toString(),
       name: map['name'] ?? '',
       teams: parseInt(map['teams']),
       playersPerTeam: parseInt(map['playersPerTeam']),
@@ -171,27 +167,33 @@ class Room {
       cityLng: parseDouble(map['cityLng']),
       lat: parseDouble(map['lat']),
       lng: parseDouble(map['lng']),
-      countryCode: map['countryCode'] ?? map['country'] ?? '',
+      countryCode: (map['countryCode'] ?? map['country'])?.toString(),
       exactAddress: map['exactAddress'],
-      sex: map['sex'] ?? 'Mixto',
+      sex: (map['sex'] ?? 'Mixto').toString(),
       createdAt: createdAt,
       updatedAt: updatedAt,
       eventAt: eventAt,
       players: List<String>.from(map['players'] ?? []),
-      playerPositions:
-          Map<String, String>.from(map['playerPositions'] ?? {}), // 🆕
-      playerStatus: Map<String, String>.from(map['playerStatus'] ?? {}), // 🆕
-      phase: map['phase'] ?? 'recruitment',
-      matchType: map['matchType'] ?? 'friendly',
-      scoreTeamA: parseInt(map['scoreTeamA'], -1) == -1
-          ? null
-          : parseInt(map['scoreTeamA']),
-      scoreTeamB: parseInt(map['scoreTeamB'], -1) == -1
-          ? null
-          : parseInt(map['scoreTeamB']),
-      mvpPlayerId: map['mvpPlayerId'],
+
+      // 🆕 NUEVOS CAMPOS
+      isClosed: map['isClosed'] ?? false,
+      winnerTeamId: map['winnerTeamId'],
+      winnerTeamName: map['winnerTeamName'],
+      closedAt: closedAt,
     );
   }
+
+    /// ================================================================
+  /// 📌 Factory seguro: usa doc.id como id real del documento
+  /// ================================================================
+  factory Room.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? <String, dynamic>{};
+    return Room.fromMap({
+      ...data,
+      'id': doc.id,
+    });
+  }
+
 
   // ================================================================
   // 🧾 Copiar instancia con valores modificados
@@ -216,13 +218,12 @@ class Room {
     DateTime? updatedAt,
     DateTime? eventAt,
     List<String>? players,
-    Map<String, String>? playerPositions, // 🆕
-    Map<String, String>? playerStatus, // 🆕
-    String? phase,
-    String? matchType,
-    int? scoreTeamA,
-    int? scoreTeamB,
-    String? mvpPlayerId,
+
+    // nuevos
+    bool? isClosed,
+    String? winnerTeamId,
+    String? winnerTeamName,
+    DateTime? closedAt,
   }) {
     return Room(
       id: id ?? this.id,
@@ -244,35 +245,34 @@ class Room {
       updatedAt: updatedAt ?? this.updatedAt,
       eventAt: eventAt ?? this.eventAt,
       players: players ?? this.players,
-      playerPositions: playerPositions ?? this.playerPositions, // 🆕
-      playerStatus: playerStatus ?? this.playerStatus, // 🆕
-      phase: phase ?? this.phase,
-      matchType: matchType ?? this.matchType,
-      scoreTeamA: scoreTeamA ?? this.scoreTeamA,
-      scoreTeamB: scoreTeamB ?? this.scoreTeamB,
-      mvpPlayerId: mvpPlayerId ?? this.mvpPlayerId,
+
+      // nuevos
+      isClosed: isClosed ?? this.isClosed,
+      winnerTeamId: winnerTeamId ?? this.winnerTeamId,
+      winnerTeamName: winnerTeamName ?? this.winnerTeamName,
+      closedAt: closedAt ?? this.closedAt,
     );
   }
 
   // ================================================================
-  // 🧩 Métodos utilitarios (para UI y lógica)
+  // 🧩 Métodos utilitarios
   // ================================================================
   int get maxPlayers => (teams * playersPerTeam) + substitutes;
   bool get isFull => players.length >= maxPlayers;
   bool containsPlayer(String userId) => players.contains(userId);
 
-  /// Devuelve una versión amigable de la fecha del partido
+  bool get hasResult => isClosed && winnerTeamId != null;
+
   String get formattedEventDate {
     if (eventAt == null) return 'Sin fecha';
     final e = eventAt!;
     return '${e.day.toString().padLeft(2, '0')}/${e.month.toString().padLeft(2, '0')}/${e.year}';
   }
 
-  /// Retorna `true` si tiene coordenadas válidas
   bool get hasLocation =>
       (lat != null && lng != null) || (cityLat != null && cityLng != null);
 
   @override
   String toString() =>
-      'Room($name, ciudad: $city, sexo: $sex, pública: $isPublic)';
+      'Room($name, ciudad: $city, sexo: $sex, pública: $isPublic, cerrada: $isClosed)';
 }

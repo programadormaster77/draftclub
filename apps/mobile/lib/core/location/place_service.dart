@@ -4,6 +4,8 @@
 // y país ISO-2 (p. ej. "CO", "ES", "US"), para que DraftClub
 // funcione correctamente en TODO EL MUNDO.
 //
+// ✅ Extensión: búsqueda de CANCHAS cerca del usuario (Nearby Search)
+//
 // ⚙️ Requisitos:
 // 1️⃣ Habilitar "Places API" en Google Cloud.
 // 2️⃣ Crear una API Key y reemplazarla en [_apiKey].
@@ -44,6 +46,47 @@ class CityDetails {
   });
 }
 
+/// ✅ Resultado mínimo para “Canchas cerca”
+class PitchPlace {
+  final String placeId;
+  final String name;
+  final double lat;
+  final double lng;
+
+  /// Puede venir como `vicinity` (legacy) o `formatted_address`
+  final String? address;
+
+  final double? rating;
+  final int? userRatingsTotal;
+
+  PitchPlace({
+    required this.placeId,
+    required this.name,
+    required this.lat,
+    required this.lng,
+    this.address,
+    this.rating,
+    this.userRatingsTotal,
+  });
+}
+
+/// ✅ Detalles de contacto (solo cuando el usuario toca una cancha)
+class PlaceContactDetails {
+  final String placeId;
+  final String? phone; // formatted_phone_number
+  final String? internationalPhone; // international_phone_number
+  final String? website;
+  final bool? openNow;
+
+  PlaceContactDetails({
+    required this.placeId,
+    this.phone,
+    this.internationalPhone,
+    this.website,
+    this.openNow,
+  });
+}
+
 /// ===============================================================
 /// 🧠 Clase principal
 /// ===============================================================
@@ -58,7 +101,8 @@ class PlaceService {
     if (query.trim().isEmpty) return [];
 
     final uri = Uri.parse(
-        '$_baseUrl/autocomplete/json?input=$query&types=(cities)&language=$_language&key=$_apiKey');
+      '$_baseUrl/autocomplete/json?input=$query&types=(cities)&language=$_language&key=$_apiKey',
+    );
 
     try {
       final res = await http.get(uri);
@@ -86,7 +130,8 @@ class PlaceService {
     if (placeId.trim().isEmpty) return null;
 
     final uri = Uri.parse(
-        '$_baseUrl/details/json?place_id=$placeId&fields=address_component,geometry/location,formatted_address&language=$_language&key=$_apiKey');
+      '$_baseUrl/details/json?place_id=$placeId&fields=address_component,geometry/location,formatted_address&language=$_language&key=$_apiKey',
+    );
 
     try {
       final res = await http.get(uri);
@@ -135,7 +180,8 @@ class PlaceService {
     if (query.trim().isEmpty) return [];
 
     final uri = Uri.parse(
-        '$_baseUrl/autocomplete/json?input=$query&types=geocode&language=$_language&key=$_apiKey');
+      '$_baseUrl/autocomplete/json?input=$query&types=geocode&language=$_language&key=$_apiKey',
+    );
 
     try {
       final res = await http.get(uri);
@@ -168,7 +214,8 @@ class PlaceService {
     if (placeId.trim().isEmpty) return null;
 
     final uri = Uri.parse(
-        '$_baseUrl/details/json?place_id=$placeId&fields=geometry/location,formatted_address&language=$_language&key=$_apiKey');
+      '$_baseUrl/details/json?place_id=$placeId&fields=geometry/location,formatted_address&language=$_language&key=$_apiKey',
+    );
 
     try {
       final res = await http.get(uri);
@@ -186,6 +233,128 @@ class PlaceService {
       return {'address': address, 'lat': lat, 'lng': lng};
     } catch (e) {
       print('⚠️ Error en getAddressDetails: $e');
+      return null;
+    }
+  }
+
+  // ===============================================================
+  // ⚽ 6️⃣ CANCHAS CERCA (Nearby Search - legacy)
+  // ===============================================================
+  /// Busca canchas cerca de una ubicación.
+  ///
+  /// - radiusMeters: radio en metros (Places legacy permite hasta 50,000)
+  /// - keyword: por defecto usamos una combinación para mejor recall
+  static Future<List<PitchPlace>> fetchNearbySoccerPitches({
+    required double lat,
+    required double lng,
+    double radiusMeters = 4000,
+    String keyword = 'cancha de futbol OR cancha sintética OR soccer field',
+  }) async {
+    // Guardrails
+    if (radiusMeters < 500) radiusMeters = 500;
+    if (radiusMeters > 50000) radiusMeters = 50000;
+
+    final encodedKeyword = Uri.encodeComponent(keyword);
+
+    final uri = Uri.parse(
+      '$_baseUrl/nearbysearch/json'
+      '?location=$lat,$lng'
+      '&radius=${radiusMeters.toInt()}'
+      '&keyword=$encodedKeyword'
+      '&language=$_language'
+      '&key=$_apiKey',
+    );
+
+    try {
+      final res = await http.get(uri);
+      if (res.statusCode != 200) return [];
+
+      final data = json.decode(res.body) as Map<String, dynamic>;
+      final status = (data['status'] ?? '').toString();
+
+      // OK | ZERO_RESULTS | OVER_QUERY_LIMIT | REQUEST_DENIED | INVALID_REQUEST
+      if (status != 'OK' && status != 'ZERO_RESULTS') {
+        print('⚠️ NearbySearch status=$status, error=${data['error_message']}');
+        return [];
+      }
+
+      final results = (data['results'] as List? ?? []).cast<Map<String, dynamic>>();
+
+      final pitches = <PitchPlace>[];
+      for (final r in results) {
+        final pid = (r['place_id'] ?? '').toString();
+        final name = (r['name'] ?? '').toString();
+
+        final loc = (r['geometry']?['location']) as Map<String, dynamic>?;
+        final rlat = (loc?['lat'] as num?)?.toDouble();
+        final rlng = (loc?['lng'] as num?)?.toDouble();
+
+        if (pid.isEmpty || name.isEmpty || rlat == null || rlng == null) continue;
+
+        final address = (r['vicinity'] ?? r['formatted_address'])?.toString();
+        final rating = (r['rating'] as num?)?.toDouble();
+        final userRatingsTotal = (r['user_ratings_total'] as num?)?.toInt();
+
+        pitches.add(PitchPlace(
+          placeId: pid,
+          name: name,
+          lat: rlat,
+          lng: rlng,
+          address: address,
+          rating: rating,
+          userRatingsTotal: userRatingsTotal,
+        ));
+      }
+
+      return pitches;
+    } catch (e) {
+      print('⚠️ Error en fetchNearbySoccerPitches: $e');
+      return [];
+    }
+  }
+
+  // ===============================================================
+  // 📞 7️⃣ Detalles de contacto (solo al tocar una cancha)
+  // ===============================================================
+  static Future<PlaceContactDetails?> getPlaceContactDetails(String placeId) async {
+    if (placeId.trim().isEmpty) return null;
+
+    final uri = Uri.parse(
+      '$_baseUrl/details/json'
+      '?place_id=$placeId'
+      '&fields=formatted_phone_number,international_phone_number,website,opening_hours/open_now'
+      '&language=$_language'
+      '&key=$_apiKey',
+    );
+
+    try {
+      final res = await http.get(uri);
+      if (res.statusCode != 200) return null;
+
+      final data = json.decode(res.body) as Map<String, dynamic>;
+      final status = (data['status'] ?? '').toString();
+      if (status != 'OK') {
+        print('⚠️ PlaceDetails status=$status, error=${data['error_message']}');
+        return null;
+      }
+
+      final result = (data['result'] as Map<String, dynamic>?);
+      if (result == null) return null;
+
+      final phone = result['formatted_phone_number']?.toString();
+      final intlPhone = result['international_phone_number']?.toString();
+      final website = result['website']?.toString();
+      final openNow = (result['opening_hours']?['open_now'] as bool?);
+
+      return PlaceContactDetails(
+        placeId: placeId,
+        phone: phone,
+        internationalPhone: intlPhone,
+        website: website,
+        openNow: openNow,
+      );
+    } catch (e) {
+      print('⚠️ Error en getPlaceContactDetails: $e');
       return null;
     }
   }

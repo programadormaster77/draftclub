@@ -7,7 +7,8 @@
       "name": "feed",
       "version": "0.0.0",
       "dependencies": [
-        "flutter"
+        "flutter",
+        "go_router"
       ],
       "devDependencies": []
     },
@@ -53,6 +54,29 @@
     {
       "name": "characters",
       "version": "1.4.0",
+      "dependencies": []
+    },
+    {
+      "name": "go_router",
+      "version": "17.1.0",
+      "dependencies": [
+        "collection",
+        "flutter",
+        "flutter_web_plugins",
+        "logging",
+        "meta"
+      ]
+    },
+    {
+      "name": "flutter_web_plugins",
+      "version": "0.0.0",
+      "dependencies": [
+        "flutter"
+      ]
+    },
+    {
+      "name": "logging",
+      "version": "1.3.0",
       "dependencies": []
     }
   ],
