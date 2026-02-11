@@ -15,6 +15,7 @@ import 'widgets/room_card.dart';
 import 'create_room_page.dart';
 import 'room_detail_page.dart';
 import 'find_room_page.dart';
+import 'widgets/match_history_tab.dart'; // 🆕 Historial global
 
 import 'package:draftclub_mobile/core/location/place_service.dart';
 
@@ -52,7 +53,7 @@ class _RoomsPageState extends State<RoomsPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _roomsFuture = _bootstrapAndFetch();
   }
 
@@ -396,6 +397,7 @@ class _RoomsPageState extends State<RoomsPage>
             Tab(text: 'Públicas'),
             Tab(text: 'Mis salas'),
             Tab(text: 'Buscar'),
+            Tab(text: 'Historial'), // 🆕
           ],
         ),
         actions: [
@@ -421,6 +423,7 @@ class _RoomsPageState extends State<RoomsPage>
           _buildPublicTab(),
           _buildMyRoomsTab(),
           const FindRoomPage(),
+          const MatchHistoryTab(), // 🆕
         ],
       ),
     );
@@ -576,6 +579,7 @@ class _RoomsPageState extends State<RoomsPage>
               room: r,
               userLat: _filters.userLat,
               userLng: _filters.userLng,
+              showCountdown: true, // 🆕 Enabled for My Rooms
               onTap: () {
                 Navigator.push(
                   context,

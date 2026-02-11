@@ -51,8 +51,9 @@ dependencies:
   geolocator: ^12.0.0
   geocoding: ^3.0.0
   intl: ^0.19.0
-  uuid: ^4.5.0
   share_plus: ^12.0.1
+  add_2_calendar: ^3.0.1
+  screenshot: ^3.0.0
 
   # 💰 Compras dentro de la app (VIP)
   in_app_purchase: ^3.1.11
@@ -87,6 +88,8 @@ dependencies:
     path: ../../packages/features/notifications
   settings:
     path: ../../packages/features/settings
+  flutter_local_notifications: ^17.0.0
+  timezone: ^0.9.0
 
 # ✅ Solo un bloque de overrides (sin duplicar)
 dependency_overrides:

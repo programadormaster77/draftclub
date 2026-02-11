@@ -2,6 +2,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/room_model.dart';
+import '../models/match_model.dart'; // Importamos el nuevo modelo
+import '../models/team_model.dart'; // 🆕 Importante para stats
 import 'package:uuid/uuid.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
@@ -38,6 +40,7 @@ class RoomService {
     DateTime? eventAt,
     String? exactAddress,
     String? sex,
+    String matchType = 'friendly',
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Usuario no autenticado');
@@ -116,6 +119,8 @@ class RoomService {
       countryCode: country,
       exactAddress: exactAddress,
       sex: finalSex,
+      matchType: matchType,
+      phase: 'recruitment',
     );
 
     await _firestore.collection('rooms').doc(roomId).set({
@@ -133,6 +138,8 @@ class RoomService {
       },
       if (country != null && country.isNotEmpty) 'countryCode': country,
       'sex': finalSex,
+      'matchType': matchType,
+      'phase': 'recruitment',
     });
 
     final teamService = TeamService();
@@ -445,6 +452,31 @@ class RoomService {
         .update({...updates, 'updatedAt': Timestamp.now()});
   }
 
+  /// 🚦 Avanzar o retroceder de fase
+  Future<void> updatePhase(String roomId, String newPhase) async {
+    await updateRoom(roomId, {'phase': newPhase});
+  }
+
+  /// ⚽ Actualizar posición del jugador (GK, DEF, MID, FWD)
+  Future<void> updatePlayerPosition(String roomId, String position) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw Exception('Usuario no autenticado');
+    await _firestore.collection('rooms').doc(roomId).update({
+      'playerPositions.$uid': position,
+      'updatedAt': Timestamp.now(),
+    });
+  }
+
+  /// 🚦 Actualizar estado de llegada del jugador (on_way, arrived, late)
+  Future<void> updatePlayerStatus(String roomId, String status) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw Exception('Usuario no autenticado');
+    await _firestore.collection('rooms').doc(roomId).update({
+      'playerStatus.$uid': status,
+      'updatedAt': Timestamp.now(),
+    });
+  }
+
   Future<Room?> getRoomById(String roomId) async {
     final doc = await _firestore.collection('rooms').doc(roomId).get();
     return doc.exists ? Room.fromMap(doc.data()!) : null;
@@ -544,5 +576,135 @@ class RoomService {
       sb.write(repl[c] ?? c);
     }
     return sb.toString();
+  }
+
+  // ================================================================
+  // ⚽ Gestión de Partidos (Matches)
+  // ================================================================
+  /// Obtiene los partidos de una sala, ordenados por fecha
+  Stream<List<Match>> getMatches(String roomId) {
+    return _firestore
+        .collection('rooms')
+        .doc(roomId)
+        .collection('matches')
+        .orderBy('dateTime', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => Match.fromMap(doc.data(), doc.id))
+            .toList());
+  }
+
+  /// Crea un nuevo partido en la sala (Útil para pruebas o futuras features)
+  Future<void> createMatch(Match match) async {
+    await _firestore
+        .collection('rooms')
+        .doc(match.roomId)
+        .collection('matches')
+        .doc(match.id)
+        .set(match.toMap());
+  }
+
+  /// 🏆 Finalizar partido y guardar resultados
+  /// Si es competitivo, actualiza las estadísticas de los jugadores.
+  Future<void> finishMatch({
+    required String roomId,
+    required int scoreTeamA,
+    required int scoreTeamB,
+    String? mvpPlayerId,
+  }) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw Exception('Usuario no autenticado');
+
+    // 1. Obtener la sala para verificar tipo de partido
+    final roomDoc = _firestore.collection('rooms').doc(roomId);
+    final roomSnap = await roomDoc.get();
+    if (!roomSnap.exists) throw Exception('Sala no encontrada');
+    final room = Room.fromMap(roomSnap.data()!);
+
+    // 2. Si es competitivo, actualizar estadísticas
+    if (room.matchType == 'competitive') {
+      await _updateCompetitiveStats(
+        roomId: roomId,
+        scoreTeamA: scoreTeamA,
+        scoreTeamB: scoreTeamB,
+      );
+    }
+
+    // 3. Actualizamos sala con resultados y cambiamos fase
+    await roomDoc.update({
+      'phase': 'finished',
+      'scoreTeamA': scoreTeamA,
+      'scoreTeamB': scoreTeamB,
+      'mvpPlayerId': mvpPlayerId,
+      'updatedAt': Timestamp.now(),
+    });
+  }
+
+  /// 📈 Lógica interna para actualizar estadísticas en partidos competitivos
+  Future<void> _updateCompetitiveStats({
+    required String roomId,
+    required int scoreTeamA,
+    required int scoreTeamB,
+  }) async {
+    // A. Obtener equipos ordenados por creación (Team 1 = A, Team 2 = B)
+    final teamsSnap = await _firestore
+        .collection('rooms')
+        .doc(roomId)
+        .collection('teams')
+        .orderBy('createdAt', descending: false)
+        .limit(2)
+        .get();
+
+    if (teamsSnap.docs.length < 2) return; // No hay suficientes equipos
+
+    final teamA = Team.fromMap(teamsSnap.docs[0].data());
+    final teamB = Team.fromMap(teamsSnap.docs[1].data());
+
+    // B. Determinar ganador
+    List<String> winners = [];
+    List<String> losers = [];
+    bool isDraw = scoreTeamA == scoreTeamB;
+
+    if (scoreTeamA > scoreTeamB) {
+      winners = teamA.players;
+      losers = teamB.players;
+    } else if (scoreTeamB > scoreTeamA) {
+      winners = teamB.players;
+      losers = teamA.players;
+    } else {
+      // Empate: Todos son "empate"
+      winners = [...teamA.players, ...teamB.players]; // Usamos lista combinada
+    }
+
+    final batch = _firestore.batch();
+
+    // C. Actualizar Ganadores
+    if (!isDraw) {
+      for (final userId in winners) {
+        final userRef = _firestore.collection('users').doc(userId);
+        batch.update(userRef, {
+          'matchesPlayed': FieldValue.increment(1),
+          'matchesWon': FieldValue.increment(1),
+        });
+      }
+      // D. Actualizar Perdedores
+      for (final userId in losers) {
+        final userRef = _firestore.collection('users').doc(userId);
+        batch.update(userRef, {
+          'matchesPlayed': FieldValue.increment(1),
+        });
+      }
+    } else {
+      // E. Actualizar Empates
+      for (final userId in winners) {
+        final userRef = _firestore.collection('users').doc(userId);
+        batch.update(userRef, {
+          'matchesPlayed': FieldValue.increment(1),
+          'matchesDraw': FieldValue.increment(1),
+        });
+      }
+    }
+
+    await batch.commit();
   }
 }

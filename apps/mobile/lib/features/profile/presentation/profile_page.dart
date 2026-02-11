@@ -91,6 +91,11 @@ class ProfilePage extends StatelessWidget {
           final empates = (data['draws'] ?? 0).toString();
           final derrotas = (data['losses'] ?? 0).toString();
 
+          final reputation = (data['reputation'] is int)
+              ? (data['reputation'] as int).toDouble()
+              : data['reputation'] as double? ?? 5.0;
+          final badges = List<String>.from(data['badges'] ?? []);
+
           // ===================== RANGOS DISPONIBLES =====================
           final rangos = {
             'Bronce': 0,
@@ -186,6 +191,79 @@ class ProfilePage extends StatelessWidget {
                         'XP: $xp / ${siguienteNivel.value} (${siguienteNivel.key})',
                         style: const TextStyle(color: Colors.white54),
                       ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 30),
+
+                // 🌟 REPUTACIÓN Y INSIGNIAS
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A1A),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text('Reputación',
+                          style:
+                              TextStyle(color: Colors.white70, fontSize: 14)),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(reputation.toStringAsFixed(1),
+                              style: const TextStyle(
+                                  color: Colors.amber,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 8),
+                          Row(
+                            children: List.generate(5, (index) {
+                              return Icon(
+                                index < reputation.round()
+                                    ? Icons.star
+                                    : Icons.star_border,
+                                color: Colors.amber,
+                                size: 20,
+                              );
+                            }),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      if (badges.isNotEmpty) ...[
+                        const Text('Insignias',
+                            style:
+                                TextStyle(color: Colors.white70, fontSize: 12)),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          alignment: WrapAlignment.center,
+                          children: badges.map((badge) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.blueAccent.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                    color: Colors.blueAccent.withOpacity(0.3)),
+                              ),
+                              child: Text(badge,
+                                  style: const TextStyle(
+                                      color: Colors.blueAccent, fontSize: 12)),
+                            );
+                          }).toList(),
+                        ),
+                      ] else
+                        const Text('Aún no tienes insignias.',
+                            style:
+                                TextStyle(color: Colors.white38, fontSize: 12)),
                     ],
                   ),
                 ),

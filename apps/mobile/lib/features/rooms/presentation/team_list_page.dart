@@ -294,7 +294,9 @@ class _TeamListPageState extends State<TeamListPage> {
                           Expanded(
                             flex: 3,
                             child: ElevatedButton.icon(
-                              onPressed: (uid == null || (isFull && !isMine))
+                              onPressed: (uid == null ||
+                                      (isFull && !isMine) ||
+                                      room.phase == 'finished')
                                   ? null
                                   : () => _join(t),
                               icon: Icon(
@@ -351,5 +353,96 @@ class _TeamListPageState extends State<TeamListPage> {
         },
       ),
     );
+  }
+
+  // ================================================================
+  // 🏆 Widget de Resultado en la Tarjeta
+  // ================================================================
+  Widget _buildMatchResult(Room room, int index, Team team) {
+    // Asumimos index 0 = Team A, index 1 = Team B
+    final scoreA = room.scoreTeamA ?? 0;
+    final scoreB = room.scoreTeamB ?? 0;
+
+    int myScore = 0;
+    int opponentScore = 0;
+    bool isWinner = false;
+    bool isDraw = scoreA == scoreB;
+
+    if (index == 0) {
+      myScore = scoreA;
+      opponentScore = scoreB;
+      isWinner = scoreA > scoreB;
+    } else {
+      myScore = scoreB;
+      opponentScore = scoreA;
+      isWinner = scoreB > scoreA;
+    }
+
+    if (isDraw) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.white10,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.handshake, color: Colors.white70, size: 16),
+            const SizedBox(width: 8),
+            Text(
+              'EMPATE ($myScore - $opponentScore)',
+              style: const TextStyle(
+                  color: Colors.white70, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isWinner) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.amber.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.amber),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.emoji_events, color: Colors.amber, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              'GANADOR ($myScore - $opponentScore)',
+              style: const TextStyle(
+                  color: Colors.amber, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      );
+    } else {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.thumb_down_off_alt,
+                color: Colors.white38, size: 16),
+            const SizedBox(width: 8),
+            Text(
+              'PERDEDOR ($myScore - $opponentScore)',
+              style: const TextStyle(
+                  color: Colors.white38, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      );
+    }
   }
 }

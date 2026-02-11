@@ -1,0 +1,36 @@
+Running Gradle task 'assembleDebug'...                          
+lib/core/notifications/notification_service.dart:33:42: Error: Too many positional arguments: 0 allowed, but 1 found.
+Try removing the extra positional arguments.
+    await _notificationsPlugin.initialize(
+                                         ^
+lib/core/notifications/notification_service.dart:88:13: Error: The getter 'UILocalNotificationDateInterpretation' isn't defined for the type 'NotificationService'.
+ - 'NotificationService' is from 'package:draftclub_mobile/core/notifications/notification_service.dart' ('lib/core/notifications/notification_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'UILocalNotificationDateInterpretation'.
+            UILocalNotificationDateInterpretation.absoluteTime,
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+lib/core/notifications/notification_service.dart:72:47: Error: Too many positional arguments: 0 allowed, but 5 found.
+Try removing the extra positional arguments.
+      await _notificationsPlugin.zonedSchedule(
+                                              ^
+lib/core/notifications/notification_service.dart:98:38: Error: Too many positional arguments: 0 allowed, but 1 found.
+Try removing the extra positional arguments.
+    await _notificationsPlugin.cancel(id);
+                                     ^
+Target kernel_snapshot_program failed: Exception
+
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileFlutterBuildDebug'.
+> Process 'command 'C:\Users\famil\flutter\bin\flutter.bat'' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 29s
+Running Gradle task 'assembleDebug'...                             30.0s
+Gradle task assembleDebug failed with exit code 1

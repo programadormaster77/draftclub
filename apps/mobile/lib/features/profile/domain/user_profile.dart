@@ -21,7 +21,13 @@ class UserProfile {
   final String rank; // 'Bronce' por defecto
   final int xp; // 0 por defecto
   final bool vipFlag; // false por defecto
+  final double reputation; // 🌟 0.0 a 5.0
+  final List<String> badges; // 🏅 ['Puntual', 'MVP', etc.]
+  final int matchesPlayed; // ⚽ Partidos jugados
+  final int matchesWon; // 🏆 Partidos ganados
+  final int matchesDraw; // 🤝 Partidos empatados
   final DateTime createdAt;
+
   final DateTime updatedAt;
 
   UserProfile({
@@ -38,6 +44,11 @@ class UserProfile {
     this.rank = 'Bronce',
     this.xp = 0,
     this.vipFlag = false,
+    this.reputation = 5.0, // Empezamos con 5 estrellas de confianza
+    this.badges = const [],
+    this.matchesPlayed = 0,
+    this.matchesWon = 0,
+    this.matchesDraw = 0,
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : createdAt = createdAt ?? DateTime.now(),
@@ -58,7 +69,13 @@ class UserProfile {
       'rank': rank,
       'xp': xp,
       'vipFlag': vipFlag,
+      'reputation': reputation,
+      'badges': badges,
+      'matchesPlayed': matchesPlayed,
+      'matchesWon': matchesWon,
+      'matchesDraw': matchesDraw,
       'createdAt': Timestamp.fromDate(createdAt),
+
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
   }
@@ -88,6 +105,13 @@ class UserProfile {
               ? (map['xp'] as double).toInt()
               : 0,
       vipFlag: map['vipFlag'] as bool? ?? false,
+      reputation: (map['reputation'] is int)
+          ? (map['reputation'] as int).toDouble()
+          : map['reputation'] as double? ?? 5.0,
+      badges: List<String>.from(map['badges'] ?? []),
+      matchesPlayed: map['matchesPlayed'] as int? ?? 0,
+      matchesWon: map['matchesWon'] as int? ?? 0,
+      matchesDraw: map['matchesDraw'] as int? ?? 0,
       createdAt: (map['createdAt'] is Timestamp)
           ? (map['createdAt'] as Timestamp).toDate()
           : DateTime.now(),

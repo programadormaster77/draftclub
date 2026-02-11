@@ -34,6 +34,20 @@ class Room {
   final DateTime? updatedAt; // 🕒 Nueva marca opcional
   final DateTime? eventAt; // 📅 Fecha/hora del partido
   final List<String> players; // 👥 Lista de jugadores
+  final Map<String, String>
+      playerPositions; // 🆕 userId -> Posición (GK, DEF, MID, FWD)
+  final Map<String, String>
+      playerStatus; // 🆕 userId -> Estado (on_way, arrived, late)
+
+  // 🚦 Gestión del Flujo
+  final String
+      phase; // recruitment, scheduling, venue, validation, ready, finished
+  final String matchType; // friendly, competitive
+
+  // 🏆 Resultados del Partido
+  final int? scoreTeamA;
+  final int? scoreTeamB;
+  final String? mvpPlayerId;
 
   Room({
     required this.id,
@@ -55,6 +69,13 @@ class Room {
     this.eventAt,
     this.updatedAt,
     this.players = const [],
+    this.playerPositions = const {}, // 🆕
+    this.playerStatus = const {}, // 🆕
+    this.phase = 'recruitment',
+    this.matchType = 'friendly',
+    this.scoreTeamA,
+    this.scoreTeamB,
+    this.mvpPlayerId,
   });
 
   // ================================================================
@@ -82,6 +103,13 @@ class Room {
       if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
       if (eventAt != null) 'eventAt': Timestamp.fromDate(eventAt!),
       'players': players,
+      'playerPositions': playerPositions, // 🆕
+      'playerStatus': playerStatus, // 🆕
+      'phase': phase,
+      'matchType': matchType,
+      if (scoreTeamA != null) 'scoreTeamA': scoreTeamA,
+      if (scoreTeamB != null) 'scoreTeamB': scoreTeamB,
+      if (mvpPlayerId != null) 'mvpPlayerId': mvpPlayerId,
     };
   }
 
@@ -150,6 +178,18 @@ class Room {
       updatedAt: updatedAt,
       eventAt: eventAt,
       players: List<String>.from(map['players'] ?? []),
+      playerPositions:
+          Map<String, String>.from(map['playerPositions'] ?? {}), // 🆕
+      playerStatus: Map<String, String>.from(map['playerStatus'] ?? {}), // 🆕
+      phase: map['phase'] ?? 'recruitment',
+      matchType: map['matchType'] ?? 'friendly',
+      scoreTeamA: parseInt(map['scoreTeamA'], -1) == -1
+          ? null
+          : parseInt(map['scoreTeamA']),
+      scoreTeamB: parseInt(map['scoreTeamB'], -1) == -1
+          ? null
+          : parseInt(map['scoreTeamB']),
+      mvpPlayerId: map['mvpPlayerId'],
     );
   }
 
@@ -176,6 +216,13 @@ class Room {
     DateTime? updatedAt,
     DateTime? eventAt,
     List<String>? players,
+    Map<String, String>? playerPositions, // 🆕
+    Map<String, String>? playerStatus, // 🆕
+    String? phase,
+    String? matchType,
+    int? scoreTeamA,
+    int? scoreTeamB,
+    String? mvpPlayerId,
   }) {
     return Room(
       id: id ?? this.id,
@@ -197,6 +244,13 @@ class Room {
       updatedAt: updatedAt ?? this.updatedAt,
       eventAt: eventAt ?? this.eventAt,
       players: players ?? this.players,
+      playerPositions: playerPositions ?? this.playerPositions, // 🆕
+      playerStatus: playerStatus ?? this.playerStatus, // 🆕
+      phase: phase ?? this.phase,
+      matchType: matchType ?? this.matchType,
+      scoreTeamA: scoreTeamA ?? this.scoreTeamA,
+      scoreTeamB: scoreTeamB ?? this.scoreTeamB,
+      mvpPlayerId: mvpPlayerId ?? this.mvpPlayerId,
     );
   }
 

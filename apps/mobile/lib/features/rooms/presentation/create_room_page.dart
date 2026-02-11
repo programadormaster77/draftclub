@@ -4,17 +4,15 @@ import 'package:draftclub_mobile/core/location/place_service.dart';
 import '../data/room_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:geolocator/geolocator.dart'; // 🆕 Ubicación
+import 'package:geocoding/geocoding.dart'; // 🆕 Geocodificación inversa
+import 'widgets/match_type_selector.dart'; // 🆕 Selector visual
 
 /// ====================================================================
 /// ⚽ CreateRoomPage — Crear y compartir nuevas salas
 /// ====================================================================
-/// 🔹 Compatible para crear o editar salas.
-/// 🔹 Evita errores de Dropdown (género duplicado o no coincidente).
-/// 🔹 Compatible con cualquier país (ciudad, país, coordenadas).
-/// 🔹 Corrige el bug cuando `sex` está vacío o con espacios.
-/// ====================================================================
 class CreateRoomPage extends StatefulWidget {
-  final Map<String, dynamic>? existingRoom; // 👈 si llega, estamos editando
+  final Map<String, dynamic>? existingRoom;
   const CreateRoomPage({super.key, this.existingRoom});
 
   @override
@@ -26,36 +24,6 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
   final _nameCtrl = TextEditingController();
   final _cityCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
-  // ===========================================================
-// 🌍 Extrae y normaliza el código ISO de país desde el texto
-// ===========================================================
-  String _extractCountryCode(String description) {
-    final lower = description.toLowerCase();
-
-    if (lower.contains('colom')) return 'CO';
-    if (lower.contains('mex')) return 'MX';
-    if (lower.contains('arg')) return 'AR';
-    if (lower.contains('esp') || lower.contains('espa')) return 'ES';
-    if (lower.contains('chi')) return 'CL';
-    if (lower.contains('per')) return 'PE';
-    if (lower.contains('ecuad')) return 'EC';
-    if (lower.contains('bra')) return 'BR';
-    if (lower.contains('venez')) return 'VE';
-    if (lower.contains('us') || lower.contains('eeuu')) return 'US';
-    if (lower.contains('fran')) return 'FR';
-    if (lower.contains('ita')) return 'IT';
-    if (lower.contains('ale')) return 'DE';
-    if (lower.contains('jap')) return 'JP';
-    if (lower.contains('canad')) return 'CA';
-    if (lower.contains('por')) return 'PT';
-    if (lower.contains('turq')) return 'TR';
-    if (lower.contains('rusi')) return 'RU';
-    if (lower.contains('india')) return 'IN';
-    if (lower.contains('corea')) return 'KR';
-    if (lower.contains('chin')) return 'CN';
-    if (lower.contains('austral')) return 'AU';
-    return 'XX'; // fallback universal
-  }
 
   DateTime? _eventAt;
   int _teams = 2;
@@ -65,7 +33,9 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
   bool _loading = false;
   bool _searchingCity = false;
   bool _searchingAddress = false;
-  String? _sex; // ahora puede ser null hasta cargar
+  bool _locatingUser = false; // 🆕 Estado de carga de ubicación
+  String? _sex;
+  String _matchType = 'friendly';
   String? _lastCreatedRoomId;
 
   Map<String, dynamic>? _selectedCityData;
@@ -78,22 +48,12 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
   }
 
   // ===========================================================
-  // 🔧 Normalizador seguro de género
-  // ===========================================================
-  String _normalizeSex(String? sex) {
-    if (sex == null || sex.trim().isEmpty) return 'mixto';
-    final s = sex.trim().toLowerCase();
-    if (['masculino', 'femenino', 'mixto'].contains(s)) return s;
-    return 'mixto';
-  }
-
-  // ===========================================================
-  // 🔄 Inicializar datos (crear o editar)
+  // 🔄 Inicializar datos
   // ===========================================================
   Future<void> _initializeForm() async {
     final r = widget.existingRoom;
     if (r != null) {
-      // 🧠 Editando sala existente
+      // 📝 Editando
       _nameCtrl.text = r['name'] ?? '';
       _cityCtrl.text = r['city'] ?? '';
       _addressCtrl.text = r['exactAddress'] ?? '';
@@ -105,16 +65,75 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
       _subs = (r['substitutes'] ?? 2);
       _isPublic = (r['isPublic'] ?? true);
       _sex = _normalizeSex(r['sex']);
+      _matchType = r['matchType'] ?? 'friendly';
     } else {
-      // 🧠 Nuevo registro → prellenar sexo desde perfil
+      // 🆕 Nuevo -> Prellenar y detectar ubicación
       await _prefillSexFromProfile();
+      _detectUserLocation(); // 🚀 Auto-detectar ciudad
     }
     setState(() {});
   }
 
   // ===========================================================
-  // 👤 Autocompletar “Género del partido” desde el perfil
+  // 📍 Auto-detectar Ubicación
   // ===========================================================
+  Future<void> _detectUserLocation() async {
+    setState(() => _locatingUser = true);
+    try {
+      // 1. Permisos
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          throw 'Permisos de ubicación denegados';
+        }
+      }
+
+      // 2. Coordenadas
+      Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high);
+
+      // 3. Geocodificación inversa (Coords -> Ciudad)
+      List<Placemark> placemarks =
+          await placemarkFromCoordinates(position.latitude, position.longitude);
+
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        // Ej: "Bogotá", "MX", etc.
+        final city = place.locality ?? place.subAdministrativeArea ?? '';
+        final countryCode = place.isoCountryCode ?? 'XX';
+
+        if (city.isNotEmpty) {
+          setState(() {
+            _cityCtrl.text = city;
+            _selectedCityData = {
+              'cityName': city,
+              'lat': position.latitude,
+              'lng': position.longitude,
+              'countryCode': countryCode,
+            };
+          });
+          debugPrint('📍 Ubicación detectada: $city ($countryCode)');
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error detectando ubicación: $e');
+      // No mostramos error UI intrusivo, solo no se llena
+    } finally {
+      if (mounted) setState(() => _locatingUser = false);
+    }
+  }
+
+  // ===========================================================
+  // 🔧 Normalizador seguro de género
+  // ===========================================================
+  String _normalizeSex(String? sex) {
+    if (sex == null || sex.trim().isEmpty) return 'mixto';
+    final s = sex.trim().toLowerCase();
+    if (['masculino', 'femenino', 'mixto'].contains(s)) return s;
+    return 'mixto';
+  }
+
   Future<void> _prefillSexFromProfile() async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -129,7 +148,7 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
   }
 
   // ===========================================================
-  // 🧱 Crear o actualizar sala
+  // 🧱 Guardar Sala
   // ===========================================================
   Future<void> _createOrUpdateRoom() async {
     if (!_formKey.currentState!.validate()) return;
@@ -151,17 +170,17 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
         'eventAt': _eventAt,
         'cityLat': addressData?['lat'] ?? cityData?['lat'],
         'cityLng': addressData?['lng'] ?? cityData?['lng'],
-        'countryCode': cityData?['countryCode'],
+        'countryCode':
+            cityData?['countryCode'] ?? 'XX', // TODO: Extract if manual
         'sex': _normalizeSex(_sex),
+        'matchType': _matchType,
       };
 
       String roomId;
       if (widget.existingRoom != null) {
-        // 🟢 Editar sala existente
         roomId = widget.existingRoom!['id'];
         await service.updateRoom(roomId, payload);
       } else {
-        // 🟢 Crear nueva sala
         roomId = await service.createRoom(
           name: payload['name'],
           teams: payload['teams'],
@@ -175,6 +194,7 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
           cityLng: payload['cityLng'],
           countryCode: payload['countryCode'],
           sex: payload['sex'],
+          matchType: payload['matchType'],
         );
       }
 
@@ -186,7 +206,7 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
         content: Text(
           widget.existingRoom != null
               ? '✅ Sala actualizada correctamente'
-              : '✅ Sala creada correctamente (ID: $roomId)',
+              : '✅ Sala creada (ID: $roomId)',
           style: const TextStyle(color: Colors.black),
         ),
       ));
@@ -200,9 +220,6 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
     }
   }
 
-  // ===========================================================
-  // 📤 Compartir enlace
-  // ===========================================================
   Future<void> _shareRoomLink() async {
     if (_lastCreatedRoomId == null) return;
     final link = 'draftclub://room/$_lastCreatedRoomId';
@@ -213,7 +230,7 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
   }
 
   // ===========================================================
-  // 🗓️ Fecha y hora
+  // 🗓️ Date Picker
   // ===========================================================
   Future<void> _selectDateTime() async {
     final pickedDate = await showDatePicker(
@@ -231,20 +248,16 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
     );
     if (pickedTime == null) return;
     setState(() {
-      _eventAt = DateTime(
-        pickedDate.year,
-        pickedDate.month,
-        pickedDate.day,
-        pickedTime.hour,
-        pickedTime.minute,
-      );
+      _eventAt = DateTime(pickedDate.year, pickedDate.month, pickedDate.day,
+          pickedTime.hour, pickedTime.minute);
     });
   }
 
   // ===========================================================
-  // 📍 Selectores (ciudad / dirección)
+  // 📍 Location Pickers
   // ===========================================================
   Future<void> _openCityPicker() async {
+    // ... (Keeping logic similar but using your PlaceService)
     TextEditingController searchCtrl = TextEditingController();
     List<Map<String, dynamic>> suggestions = [];
 
@@ -255,51 +268,48 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       context: context,
-      builder: (context) {
-        return StatefulBuilder(builder: (context, setSheet) {
-          Future<void> search(String query) async {
-            if (query.isEmpty) {
-              setSheet(() => suggestions = []);
-              return;
-            }
-            setSheet(() => _searchingCity = true);
-            final results = await PlaceService.fetchCitySuggestions(query);
-            setSheet(() {
-              suggestions = results
-                  .map((r) => {'name': r.description, 'placeId': r.placeId})
-                  .toList();
-              _searchingCity = false;
-            });
+      builder: (context) => StatefulBuilder(builder: (context, setSheet) {
+        Future<void> search(String query) async {
+          if (query.isEmpty) {
+            setSheet(() => suggestions = []);
+            return;
           }
+          setSheet(() => _searchingCity = true);
+          final results = await PlaceService.fetchCitySuggestions(query);
+          setSheet(() {
+            suggestions = results
+                .map((r) => {'name': r.description, 'placeId': r.placeId})
+                .toList();
+            _searchingCity = false;
+          });
+        }
 
-          return _placeSheetUI(
-            title: 'Buscar ciudad o país',
-            searchCtrl: searchCtrl,
-            searching: _searchingCity,
-            suggestions: suggestions,
-            onSearch: search,
-            onSelect: (s) async {
-              final details = await PlaceService.getCityDetails(s['placeId']);
-              final data = details != null
-                  ? {
-                      'cityName': details.description.split(',').first.trim(),
-                      'lat': details.lat,
-                      'lng': details.lng,
-                      // 🔹 Normalizar país real
-                      'countryCode': _extractCountryCode(details.description),
-                    }
-                  : {'cityName': s['name']};
-
-              if (!mounted) return;
-              setState(() {
-                _selectedCityData = data;
-                _cityCtrl.text = data['cityName'] ?? '';
-              });
-            },
-            labelField: 'name',
-          );
-        });
-      },
+        return _placeSheetUI(
+          title: 'Buscar ciudad',
+          searchCtrl: searchCtrl,
+          searching: _searchingCity,
+          suggestions: suggestions,
+          onSearch: search,
+          onSelect: (s) async {
+            // ... Logic to get details
+            final details = await PlaceService.getCityDetails(s['placeId']);
+            final data = details != null
+                ? {
+                    'cityName': details.description.split(',').first.trim(),
+                    'lat': details.lat,
+                    'lng': details.lng,
+                    'countryCode': details.countryCode,
+                  }
+                : {'cityName': s['name']};
+            if (!mounted) return;
+            setState(() {
+              _selectedCityData = data;
+              _cityCtrl.text = data['cityName'] ?? '';
+            });
+          },
+          labelField: 'name',
+        );
+      }),
     );
   }
 
@@ -367,6 +377,7 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
     required void Function(Map<String, dynamic>) onSelect,
     required String labelField,
   }) {
+    // ... (Same Place Sheet UI)
     return Padding(
       padding: MediaQuery.of(context).viewInsets,
       child: SafeArea(
@@ -403,11 +414,6 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
                     borderRadius: BorderRadius.circular(12),
                     borderSide:
                         const BorderSide(color: Colors.white24, width: 1),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        const BorderSide(color: Colors.blueAccent, width: 1),
                   ),
                 ),
               ),
@@ -450,14 +456,6 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
     );
   }
 
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _cityCtrl.dispose();
-    _addressCtrl.dispose();
-    super.dispose();
-  }
-
   // ===========================================================
   // 🖥️ UI PRINCIPAL
   // ===========================================================
@@ -470,168 +468,220 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
         title: Text(widget.existingRoom != null ? 'Editar Sala' : 'Crear Sala'),
       ),
       body: _sex == null
-          ? const Center(
-              child: CircularProgressIndicator(color: Colors.blueAccent))
-          : Padding(
-              padding: const EdgeInsets.all(20),
-              child: Form(
-                key: _formKey,
-                child: ListView(
-                  physics: const BouncingScrollPhysics(),
-                  children: [
-                    TextFormField(
-                      controller: _nameCtrl,
+          ? const Center(child: CircularProgressIndicator())
+          : Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                physics: const BouncingScrollPhysics(),
+                children: [
+                  // 1. INFO GENERAL
+                  _buildSectionTitle('Información General'),
+                  TextFormField(
+                    controller: _nameCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _inputDecoration('Nombre de la partida'),
+                    validator: (v) => v!.isEmpty ? 'Requerido' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  MatchTypeSelector(
+                    selectedType: _matchType,
+                    onTypeChanged: (v) => setState(() => _matchType = v),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // 2. CONFIGURACIÓN DEL JUEGO
+                  _buildSectionTitle('Configuración del Juego'),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildDropdown<int>(
+                          label: 'Equipos',
+                          value: _teams,
+                          items: [2, 4, 6, 8],
+                          onChanged: (v) => setState(() => _teams = v!),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildDropdown<int>(
+                          label: 'Jugadores',
+                          value: _players,
+                          items: [5, 6, 7, 8, 9, 10, 11],
+                          onChanged: (v) => setState(() => _players = v!),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildDropdown<int>(
+                          label: 'Suplentes',
+                          value: _subs,
+                          items: [0, 1, 2, 3, 4, 5],
+                          onChanged: (v) => setState(() => _subs = v!),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: _normalizeSex(_sex),
+                          dropdownColor: const Color(0xFF1A1A1A),
+                          decoration: _inputDecoration('Género'),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'masculino', child: Text('Masculino')),
+                            DropdownMenuItem(
+                                value: 'femenino', child: Text('Femenino')),
+                            DropdownMenuItem(
+                                value: 'mixto', child: Text('Mixto')),
+                          ],
+                          onChanged: (v) => setState(() => _sex = v),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // 3. UBICACIÓN Y FECHA
+                  _buildSectionTitle('Ubicación y Fecha'),
+                  GestureDetector(
+                    onTap: _openCityPicker,
+                    child: AbsorbPointer(
+                      child: TextFormField(
+                        controller: _cityCtrl,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: _inputDecoration('Ciudad').copyWith(
+                          prefixIcon: _locatingUser
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(
+                                      width: 10,
+                                      height: 10,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2)),
+                                )
+                              : const Icon(Icons.location_on,
+                                  color: Colors.blueAccent),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.my_location),
+                            onPressed: _detectUserLocation, // 🎯 Manual trigger
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  GestureDetector(
+                    onTap: _openAddressPicker,
+                    child: AbsorbPointer(
+                      child: TextFormField(
+                        controller: _addressCtrl,
+                        style: const TextStyle(color: Colors.white),
+                        decoration:
+                            _inputDecoration('Dirección exacta (Sede/Cancha)'),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      _eventAt == null
+                          ? 'Seleccionar fecha y hora'
+                          : 'Fecha: ${_eventAt!.day}/${_eventAt!.month} - ${_eventAt!.hour}:${_eventAt!.minute.toString().padLeft(2, '0')}',
                       style: const TextStyle(color: Colors.white),
-                      decoration: _inputDecoration('Nombre de la sala'),
-                      validator: (v) => v == null || v.isEmpty
-                          ? 'Por favor, escribe un nombre'
-                          : null,
                     ),
-                    const SizedBox(height: 20),
+                    trailing: const Icon(Icons.calendar_today,
+                        color: Colors.blueAccent),
+                    onTap: _selectDateTime,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(color: Colors.white24)),
+                  ),
 
-                    GestureDetector(
-                      onTap: _openCityPicker,
-                      child: AbsorbPointer(
-                        child: TextFormField(
-                          controller: _cityCtrl,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: _inputDecoration('Ciudad').copyWith(
-                              prefixIcon: const Icon(Icons.location_on,
-                                  color: Colors.blueAccent)),
-                        ),
-                      ),
+                  const SizedBox(height: 24),
+
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Sala Pública',
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold)),
+                    subtitle: const Text('Visible para todos en el feed',
+                        style: TextStyle(color: Colors.white54)),
+                    activeColor: Colors.blueAccent,
+                    value: _isPublic,
+                    onChanged: (v) => setState(() => _isPublic = v),
+                  ),
+
+                  const SizedBox(height: 30),
+
+                  // BOTÓN DE ACCIÓN
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueAccent,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
                     ),
-                    const SizedBox(height: 20),
+                    onPressed: _loading ? null : _createOrUpdateRoom,
+                    child: _loading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : Text(
+                            widget.existingRoom != null
+                                ? 'Guardar Cambios'
+                                : 'Crear Sala',
+                            style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white),
+                          ),
+                  ),
 
-                    GestureDetector(
-                      onTap: _openAddressPicker,
-                      child: AbsorbPointer(
-                        child: TextFormField(
-                          controller: _addressCtrl,
-                          style: const TextStyle(color: Colors.white),
-                          decoration:
-                              _inputDecoration('Dirección exacta (opcional)'),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // ✅ Dropdown universal seguro
-                    DropdownButtonFormField<String>(
-                      value: _normalizeSex(_sex),
-                      dropdownColor: const Color(0xFF1A1A1A),
-                      decoration: _inputDecoration('Género del partido'),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'masculino', child: Text('Masculino')),
-                        DropdownMenuItem(
-                            value: 'femenino', child: Text('Femenino')),
-                        DropdownMenuItem(value: 'mixto', child: Text('Mixto')),
-                      ],
-                      onChanged: (v) => setState(() => _sex = v),
-                      validator: (v) =>
-                          v == null ? 'Selecciona un género' : null,
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        _eventAt == null
-                            ? 'Seleccionar fecha y hora'
-                            : 'Fecha: ${_eventAt!.day}/${_eventAt!.month}/${_eventAt!.year} ${_eventAt!.hour.toString().padLeft(2, '0')}:${_eventAt!.minute.toString().padLeft(2, '0')}',
-                        style: const TextStyle(color: Colors.white70),
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.calendar_today,
-                            color: Colors.blueAccent),
-                        onPressed: _selectDateTime,
-                      ),
-                    ),
-                    const Divider(color: Colors.white12, height: 10),
-
-                    _buildDropdown<int>(
-                        label: 'Número de equipos',
-                        value: _teams,
-                        items: [2, 4, 6, 8, 10],
-                        onChanged: (v) => setState(() => _teams = v!)),
-
-                    _buildDropdown<int>(
-                        label: 'Jugadores por equipo',
-                        value: _players,
-                        items: [5, 7, 9, 11],
-                        onChanged: (v) => setState(() => _players = v!)),
-
-                    _buildDropdown<int>(
-                        label: 'Cambios / Reemplazos',
-                        value: _subs,
-                        items: [0, 1, 2, 3, 5],
-                        onChanged: (v) => setState(() => _subs = v!)),
-
-                    SwitchListTile.adaptive(
-                      title: const Text('Sala pública',
-                          style: TextStyle(color: Colors.white)),
-                      subtitle: const Text('Desactívalo para hacerla privada',
-                          style: TextStyle(color: Colors.white70)),
-                      activeColor: Colors.blueAccent,
-                      value: _isPublic,
-                      onChanged: (v) => setState(() => _isPublic = v),
-                    ),
-
-                    const SizedBox(height: 30),
+                  if (_lastCreatedRoomId != null) ...[
+                    const SizedBox(height: 16),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueAccent,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14))),
-                      onPressed: _loading ? null : _createOrUpdateRoom,
-                      icon:
-                          const Icon(Icons.sports_soccer, color: Colors.white),
-                      label: _loading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2.5, color: Colors.white))
-                          : Text(
-                              widget.existingRoom != null
-                                  ? 'Guardar cambios'
-                                  : 'Crear sala',
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold),
-                            ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    if (_lastCreatedRoomId != null)
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.greenAccent.shade400,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
-                        ),
-                        onPressed: _shareRoomLink,
-                        icon: const Icon(Icons.share, color: Colors.black),
-                        label: const Text(
-                          'Compartir enlace',
-                          style: TextStyle(
-                              color: Colors.black, fontWeight: FontWeight.bold),
-                        ),
+                        backgroundColor: Colors.greenAccent.shade400,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
                       ),
+                      onPressed: _shareRoomLink,
+                      icon: const Icon(Icons.share, color: Colors.black),
+                      label: const Text(
+                        'Compartir enlace',
+                        style: TextStyle(
+                            color: Colors.black, fontWeight: FontWeight.bold),
+                      ),
+                    ),
                   ],
-                ),
+                  const SizedBox(height: 40),
+                ],
               ),
             ),
     );
   }
 
-  // ===========================================================
-  // 🎨 Estilos
-  // ===========================================================
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        title.toUpperCase(),
+        style: const TextStyle(
+          color: Colors.white54,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+  }
+
   InputDecoration _inputDecoration(String label) {
     return InputDecoration(
       labelText: label,
@@ -644,6 +694,8 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
         borderSide: const BorderSide(color: Colors.blueAccent),
         borderRadius: BorderRadius.circular(12),
       ),
+      filled: true,
+      fillColor: const Color(0xFF141414),
     );
   }
 
@@ -653,19 +705,16 @@ class _CreateRoomPageState extends State<CreateRoomPage> {
     required List<T> items,
     required void Function(T?) onChanged,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: DropdownButtonFormField<T>(
-        dropdownColor: const Color(0xFF1C1C1C),
-        value: value,
-        decoration: _inputDecoration(label),
-        items: items
-            .map((n) => DropdownMenuItem(
-                value: n,
-                child: Text('$n', style: const TextStyle(color: Colors.white))))
-            .toList(),
-        onChanged: onChanged,
-      ),
+    return DropdownButtonFormField<T>(
+      dropdownColor: const Color(0xFF1C1C1C),
+      value: value,
+      decoration: _inputDecoration(label),
+      items: items
+          .map((n) => DropdownMenuItem(
+              value: n,
+              child: Text('$n', style: const TextStyle(color: Colors.white))))
+          .toList(),
+      onChanged: onChanged,
     );
   }
 }
